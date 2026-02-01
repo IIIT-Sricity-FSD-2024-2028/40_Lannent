@@ -15,7 +15,7 @@
 ## Domain Context and Terminology
 
 - **How would you describe the overall purpose of this problem statement in your daily work?**
-  - "The core purpose is to eliminate the 'Trust Gap.' Clients often don't trust freelancers to deliver quality, and freelancers don't trust clients to pay. This system uses the Supervisor role and Milestone points to mechanically enforce trust and quality."
+  - "The expert highlighted that for small businesses, the gig economy is a critical tool for maintaining operational agility and budget control. Unlike traditional HR hiring, which involves long-term commitments and annual contracts, utilizing freelancers allows the company to execute short-term projects without inflating wage costs. However, the hiring process remains manual and challenging due to the high volume of applicants. After posting a project brief and deadline, the expert struggles to filter through candidates efficiently, as validation is decentralized; they must leave the platform to manually verify portfolios on external sites like Behance before shortlisting candidates."
 
 - **What are the primary goals or outcomes of this problem statement?**
   1. Standardize workflow through atomic Milestones.
