@@ -9,8 +9,7 @@
 * **Publicly accessible Video link:** [expert_interaction.mp4](https://www.canva.com/design/DAHAE_z2wKc/B0WvmZAnUzyp3MmqsPntvA/watch?utm_content=DAHAE_z2wKc&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h0fecc90a79)
 
 ## Domain Expert Details
-* **Role/ designation:**Senior product designer, 5 years as senior product designer, And 6 months as freelancer.
-* **Experience in the domain:** Over 4 years of experience managing distributed teams and freelance marketplaces. Responsibilities include overseeing platform operations, defining dispute resolution protocols between clients and freelancers, and designing gamified incentive systems for worker retention.
+* **Experience in the domain:** Senior product designer, 5 years as senior product designer, And 6 months as freelancer.
 * **Nature of work:** Operational/Managerial
 
 ## Domain Context and Terminology
@@ -123,3 +122,8 @@ To solve the issue of non-technical clients judging technical work, the expert p
 * **On-Demand Arbitration:** Supervisors do not micromanage every task. They are triggered only when a "Troubleshoot" request is raised by a Client (unhappy with quality) or a Worker (unhappy with requirements).
 * **Domain Expertise:** The system must route disputes to specific experts (e.g., a React dispute goes to a Coding Supervisor, not a Video Editor).
 * **Verdict Power:** The Supervisor has the admin-level authority to override a Client's rejection or a Worker's submission to force a resolution.
+### 3. Unified Platform Integration
+To bridge the gap between a creator's resume and their actual market performance, the expert suggested **API-Level Integration**:
+* **Mechanism:** Workers connect their external profiles (GitHub, Dribbble, YouTube, Instagram) directly to the platform via OAuth or API keys.
+* **Validation:** The system automatically fetches real-time metrics (e.g., commit history, subscriber count, engagement rates) to verify the authenticity of the portfolio, preventing "fake" work submissions.
+* **Gamification:** External achievements (like a "Viral Video" or "Top Contributor" badge) translate into internal "Trust Points," instantly boosting a new worker's ranking without starting from zero.
