@@ -1,10 +1,10 @@
-# 🚀 Gig & Creator Collaboration Platform
+#  Gig & Creator Collaboration Platform
 
 A web-based platform connecting Clients with Gig Workers and Content Creators. This system introduces a unique **Supervisor** layer to ensure quality control across specific domains (UI/UX, Video Editing, etc.) and utilizes a gamified point-based milestone system for payments.
 
 ---
 
-## 🚩 Problem Statement
+##  Problem Statement
 
 In the current gig economy and freelance landscape, several issues persist:
 1.  **Quality Assurance Gap:** Clients often lack the technical expertise to judge the quality of work (e.g., code quality or design principles) until it is too late.
@@ -19,7 +19,7 @@ We propose a structured ecosystem where:
 
 ---
 
-## 👥 Identified Actors
+##  Identified Actors
 
 The system is designed around four primary actors, each with specific roles and privileges:
 
@@ -34,7 +34,7 @@ The system is designed around four primary actors, each with specific roles and 
 
 ## 🛠 Planned Features by Actor
 
-### 1. 👤 Client
+### 1.  Client
 * **Task Management:**
     * Create and post new tasks with detailed descriptions, domain categories, and budget.
     * Break down tasks into specific **Milestones**.
@@ -47,7 +47,7 @@ The system is designed around four primary actors, each with specific roles and 
 * **Support:**
     * Raise "Issue Tickets" for the Supervisor if work is unsatisfactory.
 
-### 2. 🎨 Gig Worker / Content Creator
+### 2.  Gig Worker / Content Creator
 * **Job Discovery:**
     * Browse available tasks filtered by domain (e.g., Web Dev, Video Editing).
     * "Pick" tasks based on eligibility (rating/score requirements).
@@ -59,7 +59,7 @@ The system is designed around four primary actors, each with specific roles and 
     * **Wallet Dashboard:** View current balance, transaction history, and withdraw points (convert to currency).
     * **Profile Building:** Build reputation through accumulated points and client ratings.
 
-### 3. 🕵️ Supervisor (Troubleshooter)
+### 3.  Supervisor (Troubleshooter)
 * **Domain Management:**
     * Supervisors are assigned based on expertise (e.g., a Video Editing Supervisor oversees video tasks).
 * **Quality Control & Troubleshooting:**
@@ -69,7 +69,7 @@ The system is designed around four primary actors, each with specific roles and 
 * **Arbitration:**
     * Resolve conflicts regarding point distribution or scope creep.
 
-### 4. 🔑 Admin
+### 4.  Admin
 * **User Management:**
     * Approve/Ban Clients, Workers, and Supervisors.
     * Verify Supervisor credentials.
@@ -81,7 +81,7 @@ The system is designed around four primary actors, each with specific roles and 
 
 ---
 
-## 🔄 Project Flow Summary
+##  Project Flow Summary
 
 1.  **Post:** Client posts a job and defines milestones.
 2.  **Pick:** Worker accepts the job.
