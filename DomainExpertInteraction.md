@@ -6,7 +6,7 @@
 * **Date of interaction:** 30 JANUARY 2026
 * **Mode of interaction:** ZOOM
 * **Duration (in-minutes):** 46 minnutes
-* **Publicly accessible Video link:** [________________________](https://www.canva.com/design/DAHAE_z2wKc/B0WvmZAnUzyp3MmqsPntvA/watch?utm_content=DAHAE_z2wKc&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h0fecc90a79)
+* **Publicly accessible Video link:** [expert_interaction.mp4](https://www.canva.com/design/DAHAE_z2wKc/B0WvmZAnUzyp3MmqsPntvA/watch?utm_content=DAHAE_z2wKc&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h0fecc90a79)
 
 ## Domain Expert Details
 * **Role/ designation:**Senior product designer, 5 years as senior product designer, And 6 months as freelancer.
