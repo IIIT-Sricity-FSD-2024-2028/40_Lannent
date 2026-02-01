@@ -84,7 +84,7 @@
   - A Worker cannot pick a new task if they have too many "Pending" or "Overdue" milestones (Concurrency limit).
   - Supervisors can only troubleshoot tasks within their tagged domain expertise.
 - **Common exceptions or edge cases:**
-  - **Worker Abandonment:** If a worker picks a task but goes silent for 48 hours, the system should auto-release the task back to the pool.
+  - **Worker Abandonment:** If a worker picks a task but goes silent for 48 hours, auto troubleshoot can be called by the client.
   - **Client Ghosting:** If a client doesn't review a submission within X days, the system may auto-approve it to protect the worker.
 - **Situations where things usually go wrong:**
   - Vague milestone descriptions (e.g., "Make it pop") leading to subjective arguments.
