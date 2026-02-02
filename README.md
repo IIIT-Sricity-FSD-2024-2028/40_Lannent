@@ -25,7 +25,7 @@ The system is designed around four primary actors, each with specific roles and 
 
 1.  **Client:** The entity posting requirements and funding the projects.
 2.  **Gig Worker / Creator:** The skilled professional performing the tasks (e.g., Developers, Editors, Designers).
-3.  **Supervisor:** A domain-specific expert (e.g., a Senior UI/UX Designer or Lead Video Editor) responsible for quality control and dispute resolution.
+3.  **Expert Reviewer:** A domain-specific expert (e.g., a Senior UI/UX Designer or Lead Video Editor) responsible for quality control and dispute resolution.
 4.  **Admin:** The super-user managing the overall platform health, users, and financial flow.
 
 
