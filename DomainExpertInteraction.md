@@ -27,7 +27,7 @@
 | Term | Meaning as explained by the expert |
 |---|---|
 | **Milestone** | A specific, smaller unit of a larger task (e.g., "Design Login Page" vs. "Build Website"). Payments are released only upon completion of these units. |
-| **Domain Supervisor** | A specialized troubleshooter (e.g., UI Expert, Video Lead) who intervenes only when technical validation is needed or a dispute arises. |
+| **Expert Reviewer** | A specialized troubleshooter (e.g., UI Expert, Video Lead) who intervenes only when technical validation is needed or a dispute arises. |
 | **Wallet/Points** | The internal currency system. Workers earn points per milestone which are accumulated in a digital wallet and later converted to real currency. |
 | **Rating Threshold** | A system constraint where workers must have a certain score/rating to be eligible to "pick" high-value tasks. |
 | **Scope Creep** | A situation where the Client asks for work outside the defined milestone description; a common trigger for Supervisor intervention. |
@@ -40,7 +40,7 @@
 |---|---|
 | **Client** | Posts project requirements, defines budget/points, breaks projects into milestones, and approves delivered work to release payments. |
 | **Gig Worker (Creator)** | Browses tasks, accepts jobs based on eligibility, submits proofs of work for milestones, and manages their earnings wallet. |
-| **Supervisor** | Assigned based on domain expertise (Video, UI, Dev). Reviews escalated milestones, resolves disputes, and ensures quality standards are met. |
+| **Expert Reviewer** | Assigned based on domain expertise (Video, UI, Dev). Reviews escalated milestones, resolves disputes, and ensures quality standards are met. |
 | **Admin** | Manages the ecosystem health, verifies Supervisor credentials, handles financial withdrawals/deposits, and bans bad actors. |
 
 ## Core workflows
@@ -117,7 +117,7 @@ Instead of a traditional flat-fee project payment, the expert proposed a granula
 * **Validation:** Points are held in escrow by the system when a task starts and are only released to the worker's "Wallet" upon milestone approval.
 * **Gamification:** These points serve a dual purpose: they are redeemable for currency (Earnings) and they contribute to the worker's "Skill Score," unlocking higher-tier jobs.
 
-### 2. The Supervisor "Troubleshooting" Layer
+### 2. The Expert Reviewer "Troubleshooting" Layer
 To solve the issue of non-technical clients judging technical work, the expert proposed the **Supervisor Role**:
 * **On-Demand Arbitration:** Supervisors do not micromanage every task. They are triggered only when a "Troubleshoot" request is raised by a Client (unhappy with quality) or a Worker (unhappy with requirements).
 * **Domain Expertise:** The system must route disputes to specific experts (e.g., a React dispute goes to a Coding Supervisor, not a Video Editor).
