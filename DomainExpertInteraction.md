@@ -68,8 +68,8 @@
 - **Workflow 3: Troubleshooting/Dispute Resolution**
   - **Trigger/start condition:** Client rejects a milestone OR Worker flags "Unreasonable Request."
   - **Steps involved (in order):**
-    1. User clicks "Request Supervisor."
-    2. System alerts a Supervisor matching the task Domain (e.g., a UI Supervisor).
+    1. User clicks "Request Expert Reviewer."
+    2. System alerts a Expert Reviewer matching the task Domain (e.g., a UI Supervisor).
     3. Supervisor reviews the milestone requirements vs. the submitted work.
     4. Supervisor enters a verdict (e.g., "Worker needs to fix padding" or "Client must release payment").
   - **Outcome / End condition:** Dispute resolved; points are either released or the worker is forced to revise.
