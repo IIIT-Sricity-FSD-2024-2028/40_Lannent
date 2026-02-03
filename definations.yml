@@ -112,5 +112,15 @@ Workroom:
   aliases:
     - Project Hub
     - Collaboration Suite
+Funds:
+  definition:
+    The capital allocated by the Client for a specific project, usually 
+    held in Escrow and released to the Gig Worker upon the successful 
+    completion of milestones or final acceptance.
+  examples:
+    - A $2,000 budget locked in the platforms payment system at the start of the engagement.
+  aliases:
+    - Deliverables
+    - Project Budget
 
 
