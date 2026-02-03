@@ -1,0 +1,148 @@
+# Domain: Creator & Gig Economy
+# Problem Statement: Creator Engagement & Task Management Platform
+# Last Updated: 2026-02-01
+
+Client:
+  definition:
+    The primary stakeholder or entity who initiates work by defining tasks 
+    and projects. They possess the authority to either post opportunities 
+    to a public marketplace or send direct engagement requests to specific 
+    individuals.
+  examples:
+    - A small business owner posting a "Logo Design" project to a public board for open bidding.
+  aliases:
+    - Project Owner
+    - Requester
+
+Gig Worker:
+  definition:
+    An independent professional who evaluates project opportunities and 
+    retains the autonomy to accept or decline direct requests based on 
+    capacity and fit. They are responsible for delivering the scoped work 
+    upon mutual agreement.
+  examples:
+    - A freelance developer receives a direct request for a bug fix and chooses to accept it after reviewing the timeline.
+  aliases:
+    - Creator
+    - Freelance Talent
+
+Expert Reviewer:
+  definition:
+    A subject matter expert responsible for evaluating deliverables against 
+    industry standards and Acceptance Criteria to ensure high-quality 
+    output before final brand approval.
+  examples:
+    - A senior video editor hired to verify that a Creator's raw footage meets the technical colour-grading requirements.
+  aliases:
+    - Quality Auditor
+    - Subject Matter Expert (SME)
+
+Discovery:
+  definition:
+    The process by which brands find creators (and vice versa) using niche filters, performance metrics, and portfolio alignment to determine a potential brand-fit.
+  examples:
+    - A brand manager using the platform to search for "Tech Reviewers" with an engagement rate over 5%.
+  aliases:
+    - Talent Sourcing
+    - Creator Search
+
+Brief:
+  definition:
+    A set of instructions provided to a gig worker or creator that 
+    specifies deliverables, brand voice guidelines, and platform-specific 
+    constraints (e.g., "Must be a 60-second Reel"), and deadlines.
+  examples:
+    - A PDF outlining the key talking points and "no-go" phrases for a sponsored YouTube segment.
+  aliases:
+    - Campaign Instructions
+    - Creative Specs
+
+Proposal:
+  definition:
+    The creators pitch to a brand, detailing their unique creative 
+    angle, specific deliverables offered, and the professional fee 
+    or commission structure for the engagement.
+  examples:
+    - A creator proposing a "3-part Story series with a swipe-up link" in response to a brand's open call.
+  aliases:
+    - Media Kit Pitch
+    - Collaboration Offer
+
+Scope:
+  definition:
+    The specific boundaries of a project, detailing exactly what is 
+    included (and excluded) regarding the number of assets, revisions, 
+    and the duration of the engagement to prevent unauthorised expansion 
+    of work.
+  examples:
+    - A contract stating "one 15-minute video and exactly two rounds of minor edits; additional edits billed at $50/hour."
+  aliases:
+    - Deliverables List
+    - Project Boundaries
+    
+Escrow:
+  definition:
+    A financial arrangement where a third-party (the platform) holds the 
+    project funds securely until the agreed-upon obligations are met, 
+    ensuring the creator is paid, and the brand receives the work.
+  examples:
+    - A brand deposits $500 into the platformís secure vault at the start of a project, released only after video approval.
+  aliases:
+    - Held Funds
+    - Payment Protection
+
+Milestone:
+  definition:
+    A significant stage or "checkpoint" within a projectís timeline 
+    used to track progress, often tied to a percentage of the total 
+    payment or the release of specific deliverables.
+  examples:
+    - "Milestone 1: Script Approval (20% payment release); Milestone 2: Final Video Delivery (80% payment release)."
+  aliases:
+    - Project Phase
+    - Payment Trigger
+
+Escalation:
+  definition:
+    The formal process of raising a dispute or issue to a higher level of 
+    authority (such as platform support or legal mediation) when 
+    deadlines, quality standards, or communication protocols are breached.
+  examples:
+    - A creator filing a ticket when a brand stops responding after receiving the final high-resolution assets.
+  aliases:
+    - Dispute Resolution
+    - Conflict Reporting
+
+Acceptance Criteria:
+  definition:
+    A pre-defined list of technical and aesthetic requirements that a 
+    deliverables must be satisfied before the brand is obligated to approve 
+    It and release payment.
+  examples:
+    - "Video must be in 4K resolution, mention the promo code in the first 30 seconds, and include no music from third parties."
+  aliases:
+    - Approval Standards
+    - Success Metrics
+Technical Audit:
+  definition:
+    A systematic and deep-dive evaluation of a deliverable’s underlying 
+    structure—such as code quality, security vulnerabilities, or 
+    performance benchmarks—to ensure it meets non-functional requirements.
+  examples:
+    - Running an automated security scan and manual code review on a new 
+      payment gateway module before it goes live.
+  aliases:
+    - Code Review
+    - Compliance Check
+Workroom:
+  definition:
+    A dedicated, secure digital space within the platform where the Client 
+    and Gig Workers collaborate on a specific project. It serves as the 
+    centralised hub for messaging, file sharing, progress tracking, and 
+    milestone management.
+  examples:
+    - An active dashboard where a developer uploads code snippets for a 
+      Client to review and provide real-time status updates.
+  aliases:
+    - Project Hub
+    - Collaboration Suite
