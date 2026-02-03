@@ -1,6 +1,6 @@
 # Domain: Creator & Gig Economy platform
 # Problem Statement: Task Project & Engagement Management System.
-# Last Updated: 03-02-2026
+# Last Updated: 2026-02-03
 
 Client:
   definition:
@@ -122,6 +122,7 @@ Funds:
   aliases:
     - Deliverables
     - Points
+
 
 
 
