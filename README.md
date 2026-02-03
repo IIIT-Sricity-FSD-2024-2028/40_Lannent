@@ -59,7 +59,7 @@ The system is designed around four primary actors, each with specific roles and 
     * **Wallet Dashboard:** View current balance, transaction history, and withdraw points (convert to currency).
     * **Profile Building:** Build reputation through accumulated points and client ratings.
 
-### 3.  Supervisor (Troubleshooter)
+### 3.  Expert Reviewer (Troubleshooter)
 * **Domain Management:**
     * Supervisors are assigned based on expertise (e.g., a Video Editing Supervisor oversees video tasks).
 * **Quality Control & Troubleshooting:**
