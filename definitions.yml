@@ -112,7 +112,7 @@ Workroom:
       Client to review and provide real-time status updates.
   aliases:
     - Project Hub
-    - Collaboration Suite
+    - Workspace
 Funds:
   definition:
     The capital allocated by the Client for a specific project, usually 
@@ -123,6 +123,7 @@ Funds:
   aliases:
     - Points
     - Credits
+
 
 
 
