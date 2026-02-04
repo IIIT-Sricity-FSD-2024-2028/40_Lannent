@@ -9,7 +9,7 @@
 * **Publicly accessible Video link:** [expert_interaction.mp4](https://www.canva.com/design/DAHAE_z2wKc/B0WvmZAnUzyp3MmqsPntvA/watch?utm_content=DAHAE_z2wKc&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h0fecc90a79)
 
 ## Domain Expert Details
-* **Experience in the domain:** Senior product designer, 5 years as senior product designer, And 6 months as freelancer.
+* **Experience in the domain:** 5 years as senior product designer, and 6 months as freelancer.
 * **Nature of work:** Operational/Managerial
 
 ## Domain Context and Terminology
