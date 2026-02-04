@@ -7,7 +7,7 @@ Client:
     The primary stakeholder or entity who initiates work by defining tasks
     and projects. They possess the authority to either post opportunities
     to a public marketplace or send direct engagement requests to specific
-    individuals.
+    gig workers.
   examples:
     - A small business owner posting a "Logo Design" project to a public board for open bidding.
   aliases:
@@ -122,6 +122,7 @@ Funds:
   aliases:
     - Points
     - Credits
+
 
 
 
