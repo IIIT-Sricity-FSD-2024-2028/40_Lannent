@@ -24,7 +24,7 @@ Gig Worker:
     - A freelance developer receives a direct request for a bug fix and chooses to accept it after reviewing the timeline.
   aliases:
     - creator
-    - Freelance Talent
+    - Freelancer
 
 Expert Reviewer:
   definition:
@@ -122,6 +122,7 @@ Funds:
   aliases:
     - Points
     - Credits
+
 
 
 
