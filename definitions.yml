@@ -52,7 +52,7 @@ Scope:
     and the duration of the engagement to prevent unauthorised expansion
     of work.
   examples:
-    - A contract stating "one 15-minute video and exactly two rounds of minor edits; additional edits billed at $50/hour."
+    - A contract stating "one 15-minute video and exactly two rounds of minor edits; additional edits billed at Rs2500/hour."
   aliases:
     - Details
     - Requirements
@@ -123,6 +123,7 @@ Funds:
   aliases:
     - Points
     - Credits
+
 
 
 
