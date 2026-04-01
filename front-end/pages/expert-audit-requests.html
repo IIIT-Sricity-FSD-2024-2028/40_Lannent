@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Audit Requests — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    /* ── Audit card grid ── */
+    .audit-grid {
+      display: grid;
+      gap: 16px;
+    }
+    .audit-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      transition: box-shadow 0.2s, transform 0.2s;
+    }
+    .audit-card:hover {
+      box-shadow: 0 8px 28px rgba(0,0,0,0.08);
+      transform: translateY(-1px);
+    }
+
+    /* ── Card top row ── */
+    .audit-card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+    .audit-card-left { flex: 1; min-width: 0; }
+    .audit-card-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .audit-card-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--foreground);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .audit-card-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 13px;
+      color: var(--muted-foreground);
+      flex-wrap: wrap;
+    }
+    .audit-card-meta span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* ── Priority badge ── */
+    .prio-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 9px;
+      border-radius: 9999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border: 1px solid;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .prio-urgent  { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+    .prio-high    { background: #fff7ed; border-color: #fdba74; color: #c2410c; }
+    .prio-normal  { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+    .prio-low     { background: #f3f4f6; border-color: #d1d5db; color: #4b5563; }
+
+    /* ── Status badge ── */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .status-awaiting { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+    .status-in-review { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+    .status-completed { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+
+    /* ── Divider row ── */
+    .audit-card-divider {
+      border-top: 1px solid rgba(0,0,0,0.06);
+      margin: 14px 0;
+      padding-top: 14px;
+    }
+    .audit-milestone {
+      font-size: 13px;
+      color: var(--muted-foreground);
+      margin-bottom: 10px;
+    }
+    .audit-milestone strong {
+      color: var(--foreground);
+      font-weight: 500;
+    }
+
+    /* ── Severity chip ── */
+    .severity-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 8px;
+      border-left: 3px solid;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .severity-critical { background:#fef2f2; border-color:#ef4444; color:#b91c1c; }
+    .severity-major    { background:#fff7ed; border-color:#f59e0b; color:#92400e; }
+    .severity-minor    { background:#fffbeb; border-color:#eab308; color:#854d0e; }
+    .severity-suggestion { background:#eff6ff; border-color:#3b82f6; color:#1d4ed8; }
+
+    /* ── Review button ── */
+    .btn-review {
+      width: 100%;
+      height: 40px;
+      margin-top: 14px;
+      border-radius: 10px;
+      background: linear-gradient(180deg, hsl(0,0%,16%) 0%, hsl(0,0%,10%) 100%);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: none;
+      font-family: inherit;
+      box-shadow: inset -4px -6px 25px 0px rgba(201,201,201,0.08), inset 4px 4px 10px 0px rgba(29,29,29,0.24);
+      transition: transform 0.15s, opacity 0.15s;
+      text-decoration: none;
+    }
+    .btn-review:hover  { transform: scale(1.01); opacity: 0.92; }
+    .btn-review:active { transform: scale(0.99); }
+
+    /* ── Search & filter bar ── */
+    .audit-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .audit-search-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 200px;
+    }
+    .audit-search-wrap svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted-foreground);
+      pointer-events: none;
+    }
+    .audit-search {
+      width: 100%;
+      height: 40px;
+      padding: 0 14px 0 38px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--foreground);
+      outline: none;
+      transition: box-shadow 0.15s;
+    }
+    .audit-search::placeholder { color: var(--muted-foreground); }
+    .audit-search:focus { box-shadow: 0 0 0 2px rgba(99,102,241,0.18); }
+
+    .filter-btn {
+      height: 40px;
+      padding: 0 16px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      color: var(--muted-foreground);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .filter-btn:hover { background: var(--secondary); color: var(--foreground); }
+    .filter-btn.active {
+      background: var(--foreground);
+      color: var(--primary-foreground);
+      border-color: var(--foreground);
+    }
+
+    /* ── Empty state ── */
+    .audit-empty {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 56px 24px;
+      text-align: center;
+      color: var(--muted-foreground);
+    }
+    .audit-empty svg { margin: 0 auto 14px; display: block; }
+    .audit-empty p { font-size: 14px; }
+  </style>
+
+  <script>
+    // Build audit requests from store + static extras
+    const staticAuditRequests = [
+      { id:'s1', milestoneId:'9382', project:'E-commerce Platform Redesign', worker:'Sarah Chen', milestone:'Frontend Development', submitted:'Mar 7, 2026', status:'Awaiting Review', priority:'high', severity:'critical', severityLabel:'Critical Issues' },
+      { id:'s2', milestoneId:'9383', project:'Mobile App Development', worker:'James Wilson', milestone:'Final Testing', submitted:'Mar 6, 2026', status:'In Review', priority:'normal', severity:'minor', severityLabel:'Minor Issues' },
+      { id:'s3', milestoneId:'9384', project:'API Integration & Backend', worker:'Maria Garcia', milestone:'Database Setup', submitted:'Mar 5, 2026', status:'Awaiting Review', priority:'urgent', severity:'major', severityLabel:'Major Issues' },
+      { id:'s4', milestoneId:'9385', project:'SaaS Dashboard Design', worker:'David Kim', milestone:'UI/UX Delivery', submitted:'Mar 4, 2026', status:'Completed', priority:'normal', severity:'suggestion', severityLabel:'Suggestions Only' },
+    ];
+
+    function getAuditRequests() {
+      const storeReqs = Store.getAuditRequests().map(a => ({
+        id: a.id,
+        milestoneId: a.milestoneId,
+        project: a.project,
+        worker: a.worker,
+        milestone: a.milestone,
+        submitted: a.createdAt,
+        status: a.status,
+        priority: a.severity === 'High' ? 'high' : a.severity === 'Low' ? 'low' : 'normal',
+        severity: a.severity === 'High' ? 'major' : 'minor',
+        severityLabel: a.severity + ' Priority',
+        fromStore: true,
+      }));
+      return [...storeReqs, ...staticAuditRequests];
+    }
+
+    let auditRequests = [];
+
+    function acceptAudit(id) {
+      Store.updateAuditRequest(id, { status: 'In Review' });
+      Validate.toast('Audit request accepted. Now In Review.', 'success');
+      auditRequests = getAuditRequests();
+      render();
+    }
+
+    const severityIcon = {
+      critical:   'bug',
+      major:      'alert-circle',
+      minor:      'alert-triangle',
+      suggestion: 'info',
+    };
+
+    const statusClass = {
+      'Awaiting Review': 'status-awaiting',
+      'In Review':       'status-in-review',
+      'Completed':       'status-completed',
+    };
+
+    function buildCards(list) {
+      if (!list.length) return `
+        <div class="audit-empty">
+          <i data-lucide="clipboard-check" style="width:48px;height:48px;opacity:0.35;"></i>
+          <p>No audit requests found matching your filters.</p>
+        </div>`;
+
+      return list.map(a => `
+        <div class="audit-card">
+          <!-- top row -->
+          <div class="audit-card-top">
+            <div class="audit-card-left">
+              <div class="audit-card-title-row">
+                <span class="audit-card-title">${a.project}</span>
+                <span class="prio-badge prio-${a.priority}">${a.priority.toUpperCase()}</span>
+              </div>
+              <div class="audit-card-meta">
+                <span>
+                  <i data-lucide="user" style="width:13px;height:13px;"></i>
+                  ${a.worker}
+                </span>
+                <span>
+                  <i data-lucide="calendar" style="width:13px;height:13px;"></i>
+                  ${a.submitted}
+                </span>
+              </div>
+            </div>
+            <span class="status-badge ${statusClass[a.status]}">${a.status}</span>
+          </div>
+
+          <!-- divider + milestone + severity -->
+          <div class="audit-card-divider">
+            <div class="audit-milestone">Milestone: <strong>${a.milestone}</strong></div>
+            <div class="severity-chip severity-${a.severity}">
+              <i data-lucide="${severityIcon[a.severity]}" style="width:13px;height:13px;flex-shrink:0;"></i>
+              <span>${a.severity.charAt(0).toUpperCase() + a.severity.slice(1)} — ${a.severityLabel}</span>
+            </div>
+          </div>
+
+          <!-- CTA -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${a.status !== 'Completed' ? `<a href="review-deliverable.html?id=${a.milestoneId}&role=expert&auditId=${a.id}" class="btn-review"><i data-lucide="eye" style="width:15px;height:15px;"></i>Review Deliverable</a>` : ''}
+            ${a.status === 'Awaiting Review' && a.fromStore ? `<button onclick="acceptAudit('${a.id}')" class="btn-review" style="background:#ecfdf5;color:#166534;border:1px solid #bbf7d0;"><i data-lucide="check" style="width:15px;height:15px;"></i>Accept</button>` : ''}
+            ${a.status === 'Completed' ? `<a href="expert-report-audit.html?id=${a.id}" class="btn-review" style="background:#f8f9fb;color:var(--foreground);border:1px solid var(--border);"><i data-lucide="file-text" style="width:15px;height:15px;"></i>View Report</a>` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('expert')) return;
+      auditRequests = getAuditRequests();
+      let activeFilter = 'all';
+      let searchQuery  = '';
+
+      function filtered() {
+        return auditRequests.filter(a => {
+          const q  = searchQuery.toLowerCase();
+          const ok = !q || a.project.toLowerCase().includes(q) || a.worker.toLowerCase().includes(q);
+          const sf = activeFilter === 'all' || a.status === activeFilter;
+          return ok && sf;
+        });
+      }
+
+      function render() {
+        const container = document.getElementById('auditGrid');
+        if (container) {
+          container.innerHTML = buildCards(filtered());
+          lucide.createIcons();
+        }
+      }
+
+      const totalRequests = auditRequests.length;
+      const pendingCount  = auditRequests.filter(a => a.status !== 'Completed').length;
+      const inReviewCount = auditRequests.filter(a => a.status === 'In Review').length;
+      const doneCount     = auditRequests.filter(a => a.status === 'Completed').length;
+
+      const content = `
+        <!-- Stats row -->
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px;">
+          <div class="stat-card">
+            <div>
+              <div class="stat-val">${totalRequests}</div>
+              <div class="stat-label">Total Requests</div>
+            </div>
+            <div class="stat-icon-wrap" style="background:#faf5ff;">
+              <i data-lucide="clipboard-list" style="width:20px;height:20px;color:#a855f7;"></i>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="stat-val">${pendingCount}</div>
+              <div class="stat-label">Pending Review</div>
+            </div>
+            <div class="stat-icon-wrap" style="background:#fff7ed;">
+              <i data-lucide="clock" style="width:20px;height:20px;color:#f97316;"></i>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="stat-val">${inReviewCount}</div>
+              <div class="stat-label">In Progress</div>
+            </div>
+            <div class="stat-icon-wrap" style="background:#eff6ff;">
+              <i data-lucide="loader" style="width:20px;height:20px;color:#6366f1;"></i>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="stat-val">${doneCount}</div>
+              <div class="stat-label">Completed</div>
+            </div>
+            <div class="stat-icon-wrap" style="background:#ecfdf5;">
+              <i data-lucide="check-circle-2" style="width:20px;height:20px;color:#10b981;"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="audit-toolbar">
+          <div class="audit-search-wrap">
+            <i data-lucide="search" style="width:15px;height:15px;"></i>
+            <input
+              class="audit-search"
+              type="text"
+              id="auditSearch"
+              placeholder="Search by project or worker..."
+              oninput="handleSearch(this.value)"
+            />
+          </div>
+          <button class="filter-btn active" id="filterAll"       onclick="setFilter('all',this)">All</button>
+          <button class="filter-btn"        id="filterAwaiting"  onclick="setFilter('Awaiting Review',this)">Pending</button>
+          <button class="filter-btn"        id="filterInReview"  onclick="setFilter('In Review',this)">In Review</button>
+          <button class="filter-btn"        id="filterCompleted" onclick="setFilter('Completed',this)">Completed</button>
+        </div>
+
+        <!-- Card grid -->
+        <div class="audit-grid" id="auditGrid">
+          ${buildCards(auditRequests)}
+        </div>
+      `;
+
+      initDashboard({
+        role: 'expert',
+        activePath: 'expert-audit-requests.html',
+        pageTitle: 'Audit Requests',
+        pageSubtitle: 'Review technical deliverables and ensure code quality standards.',
+        content,
+      });
+
+      lucide.createIcons();
+
+      window.setFilter = function(val, btn) {
+        activeFilter = val;
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        render();
+      };
+
+      window.handleSearch = function(val) {
+        searchQuery = val;
+        render();
+      };
+    });
+  </script>
+</head>
+<body></body>
+</html>

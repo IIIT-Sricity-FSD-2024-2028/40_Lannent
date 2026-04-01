@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Expert Settings — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .settings-layout { display: grid; grid-template-columns: 200px 1fr; gap: 24px; }
+    @media (max-width: 768px) { .settings-layout { grid-template-columns: 1fr; } }
+
+    .settings-nav {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 8px; height: fit-content;
+    }
+    .settings-nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-radius: 8px; cursor: pointer;
+      font-size: 13.5px; font-weight: 500; color: var(--muted-foreground);
+      transition: background 0.15s, color 0.15s; text-decoration: none;
+    }
+    .settings-nav-item:hover, .settings-nav-item.active {
+      background: var(--secondary); color: #7c3aed;
+    }
+
+    .settings-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px; margin-bottom: 16px;
+    }
+    .settings-card h3 {
+      font-size: 14px; font-weight: 600; margin-bottom: 16px;
+      padding-bottom: 12px; border-bottom: 1px solid var(--border);
+    }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+    .form-group { margin-bottom: 14px; }
+    .form-group:last-child { margin-bottom: 0; }
+    .form-label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 5px; color: var(--foreground); }
+    .form-hint  { font-size: 11.5px; color: var(--muted-foreground); margin-top: 4px; }
+    .form-input {
+      width: 100%; padding: 9px 12px; font-size: 13.5px; font-family: inherit;
+      border-radius: 8px; border: 1px solid var(--border);
+      background: var(--input-bg); color: var(--foreground); outline: none;
+      transition: border-color 0.15s;
+    }
+    .form-input:focus { border-color: #a855f7; background: #fff; }
+    .form-input[readonly] { opacity: .55; cursor: not-allowed; }
+
+    /* Avatar row */
+    .avatar-row { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+    .avatar-circle {
+      width: 60px; height: 60px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(135deg, #a855f7, #7c3aed);
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 18px; font-weight: 700;
+    }
+    .avatar-info { font-size: 13px; color: var(--muted-foreground); }
+
+    /* Toggle */
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 0; border-bottom: 1px solid var(--border);
+    }
+    .toggle-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .toggle-row:first-child { padding-top: 0; }
+    .toggle-label { font-size: 13.5px; font-weight: 500; }
+    .toggle-sub   { font-size: 12px; color: var(--muted-foreground); margin-top: 2px; }
+    .toggle { position: relative; width: 38px; height: 20px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; cursor: pointer; inset: 0; border-radius: 10px;
+      background: var(--muted); transition: background 0.2s;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute; height: 14px; width: 14px;
+      left: 3px; bottom: 3px; border-radius: 50%; background: white;
+      transition: transform 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,.2);
+    }
+    .toggle input:checked + .toggle-slider { background: #a855f7; }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
+
+    /* Domain cards */
+    .domain-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 18px;
+    }
+    @media (max-width: 560px) { .domain-grid { grid-template-columns: 1fr; } }
+    .domain-card {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 14px; border-radius: 10px; cursor: pointer;
+      border: 1.5px solid var(--border); background: var(--card);
+      transition: all 0.15s; user-select: none; position: relative;
+    }
+    .domain-card.on {
+      border-color: #a855f7; background: #faf5ff;
+    }
+    .domain-card.on .domain-card-icon { background: #ede9fe; color: #7c3aed; }
+    .domain-card.off .domain-card-icon { background: var(--secondary); color: var(--muted-foreground); }
+    .domain-card-icon {
+      width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+    }
+    .domain-card-icon svg { width: 16px; height: 16px; }
+    .domain-card-title { font-size: 13px; font-weight: 600; color: var(--foreground); }
+    .domain-card-sub   { font-size: 11.5px; color: var(--muted-foreground); margin-top: 2px; line-height: 1.4; }
+    .domain-card.on .domain-card-title { color: #7c3aed; }
+    .domain-check {
+      position: absolute; top: 10px; right: 10px;
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 1.5px solid var(--border); background: var(--card);
+      transition: all 0.15s; display: flex; align-items: center; justify-content: center;
+    }
+    .domain-card.on .domain-check {
+      background: #a855f7; border-color: #a855f7;
+    }
+    .domain-check-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: white; opacity: 0; transition: opacity 0.15s;
+    }
+    .domain-card.on .domain-check-dot { opacity: 1; }
+    .domains-summary {
+      font-size: 12.5px; color: var(--muted-foreground); margin-bottom: 14px;
+    }
+    .domains-summary span { color: #7c3aed; font-weight: 600; }
+
+    /* Save button */
+    .btn-save {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 9px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      color: white; background: linear-gradient(135deg, #a855f7, #7c3aed);
+      border: none; cursor: pointer; transition: opacity 0.15s;
+    }
+    .btn-save:hover { opacity: .88; }
+  </style>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('expert')) return;
+
+      const session = Auth.getCurrentUser();
+      const user = session ? Store.getUserById(session.userId) : null;
+      if (!user) return;
+
+      const profile = {
+        name: user.name || '',
+        email: user.email || '',
+        bio: user.bio || '',
+        avatarColor: user.avatarColor || 'linear-gradient(135deg, #a855f7, #7c3aed)'
+      };
+      const nameParts = profile.name.split(' ');
+      const fname = nameParts[0] || 'Ramesh';
+      const lname = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Subramaniam';
+      const initials = (profile.name.substring(0, 2) || 'RS').toUpperCase();
+
+      const availability = user.availability || { status: 'Actively accepting cases', maxCases: '2', type: 'Both — Audits & Disputes' };
+
+      const storedDomains = user.auditDomains || ['frontend', 'backend', 'security'];
+      const domains = [
+        { id: 'frontend',  label: 'Frontend Development', sub: 'React, Vue, Angular, HTML/CSS',  icon: 'monitor' },
+        { id: 'backend',   label: 'Backend Development',  sub: 'Node.js, Python, REST APIs',      icon: 'server' },
+        { id: 'mobile',    label: 'Mobile Apps',          sub: 'iOS, Android, React Native',      icon: 'smartphone' },
+        { id: 'devops',    label: 'DevOps & Cloud',       sub: 'Docker, CI/CD, AWS, GCP',         icon: 'cloud' },
+        { id: 'database',  label: 'Database Architecture',sub: 'SQL, NoSQL, schema design',       icon: 'database' },
+        { id: 'security',  label: 'Security & Auditing',  sub: 'Penetration testing, OWASP',      icon: 'shield' },
+        { id: 'ai',        label: 'AI / ML Systems',      sub: 'Model pipelines, data workflows', icon: 'cpu' },
+        { id: 'sysdesign', label: 'System Design',        sub: 'Architecture, scalability',       icon: 'git-branch' },
+      ].map(d => Object.assign(d, { active: storedDomains.includes(d.id) }));
+
+      const content = `
+        <div class="settings-layout">
+
+          <!-- Side nav -->
+          <nav class="settings-nav">
+            <a href="#" class="settings-nav-item active" onclick="show('profile',this);return false;">
+              <i data-lucide="user" style="width:15px;height:15px;"></i> Profile
+            </a>
+            <a href="#" class="settings-nav-item" onclick="show('availability',this);return false;">
+              <i data-lucide="clock" style="width:15px;height:15px;"></i> Availability
+            </a>
+            <a href="#" class="settings-nav-item" onclick="show('domains',this);return false;">
+              <i data-lucide="layers" style="width:15px;height:15px;"></i> Audit Domains
+            </a>
+          </nav>
+
+          <div>
+
+            <!-- PROFILE -->
+            <div id="sec-profile">
+              <div class="settings-card">
+                <h3>Expert Profile</h3>
+
+                <div class="avatar-row">
+                  <div class="avatar-circle" style="background: ${profile.avatarColor}">${initials}</div>
+                  <div>
+                    <button class="btn-save" style="padding:6px 14px;font-size:12px;" onclick="Validate.toast('Avatar upload feature disabled in demo', 'warning')">Change Photo</button>
+                    <div class="avatar-info" style="margin-top:5px;">JPG or PNG · Max 2 MB</div>
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">First Name</label>
+                    <input type="text" class="form-input" value="${fname}" id="es-fname" />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Last Name</label>
+                    <input type="text" class="form-input" value="${lname}" id="es-lname" />
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Email</label>
+                  <input type="email" class="form-input" value="${profile.email}" id="es-email" />
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Reviewer ID</label>
+                    <input type="text" class="form-input" value="EXP-2024-${user.id.substring(user.id.length-4)}" readonly />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Role</label>
+                    <input type="text" class="form-input" value="Expert Reviewer" readonly />
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Bio</label>
+                  <textarea class="form-input" rows="3" id="es-bio">${profile.bio}</textarea>
+                  <div class="form-hint">Shown to Clients and Gig Workers when assigned to their case.</div>
+                </div>
+
+                <button class="btn-save" onclick="saveExpertProfile()">
+                  <i data-lucide="save" style="width:13px;height:13px;"></i> Save Profile
+                </button>
+              </div>
+            </div>
+
+            <!-- AVAILABILITY -->
+            <div id="sec-availability" style="display:none;">
+              <div class="settings-card">
+                <h3>Availability</h3>
+
+                <div class="form-group">
+                  <label class="form-label">Status</label>
+                  <select class="form-input" id="es-avail-status">
+                    <option ${availability.status==='Actively accepting cases'?'selected':''}>Actively accepting cases</option>
+                    <option ${availability.status==='Available — selective only'?'selected':''}>Available — selective only</option>
+                    <option ${availability.status==='Unavailable'?'selected':''}>Unavailable</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Max Concurrent Cases</label>
+                  <select class="form-input" id="es-avail-max">
+                    <option ${availability.maxCases==='1'?'selected':''}>1</option>
+                    <option ${availability.maxCases==='2'?'selected':''}>2</option>
+                    <option ${availability.maxCases==='3'?'selected':''}>3</option>
+                    <option ${availability.maxCases==='4+'?'selected':''}>4+</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Preferred Case Type</label>
+                  <select class="form-input" id="es-avail-type">
+                    <option ${availability.type==='Both — Audits & Disputes'?'selected':''}>Both — Audits & Disputes</option>
+                    <option ${availability.type==='Technical Audits only'?'selected':''}>Technical Audits only</option>
+                    <option ${availability.type==='Conflict Resolution only'?'selected':''}>Conflict Resolution only</option>
+                  </select>
+                </div>
+
+                <button class="btn-save" onclick="saveAvailability()">
+                  <i data-lucide="save" style="width:13px;height:13px;"></i> Save Availability
+                </button>
+              </div>
+            </div>
+
+            <!-- DOMAINS -->
+            <div id="sec-domains" style="display:none;">
+              <div class="settings-card">
+                <h3>Audit Domains</h3>
+                <p class="domains-summary">
+                  <span id="domain-count">${domains.filter(d=>d.active).length}</span> of ${domains.length} domains selected — you will only receive audit requests matching these.
+                </p>
+                <div class="domain-grid">
+                  ${domains.map(d => `
+                    <div class="domain-card ${d.active ? 'on' : 'off'}" onclick="toggleDomain(this)" data-id="${d.id}">
+                      <div class="domain-card-icon"><i data-lucide="${d.icon}"></i></div>
+                      <div>
+                        <div class="domain-card-title">${d.label}</div>
+                        <div class="domain-card-sub">${d.sub}</div>
+                      </div>
+                      <div class="domain-check"><div class="domain-check-dot"></div></div>
+                    </div>
+                  `).join('')}
+                </div>
+                <button class="btn-save" onclick="saveDomains()">
+                  <i data-lucide="save" style="width:13px;height:13px;"></i> Save Domains
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      `;
+
+      initDashboard({
+        role: 'expert',
+        activePath: 'expert-settings.html',
+        pageTitle: 'Settings',
+        pageSubtitle: 'Manage your reviewer profile and preferences',
+        content
+      });
+      lucide.createIcons();
+
+      const sections = ['profile','availability','domains'];
+
+      window.show = function(sec, el) {
+        sections.forEach(s => {
+          const d = document.getElementById('sec-' + s);
+          if (d) d.style.display = s === sec ? '' : 'none';
+        });
+        document.querySelectorAll('.settings-nav-item').forEach(i => i.classList.remove('active'));
+        if (el) el.classList.add('active');
+      };
+
+      window.toggleDomain = function(el) {
+        const on = el.classList.contains('on');
+        el.classList.toggle('on', !on);
+        el.classList.toggle('off', on);
+        const total = document.querySelectorAll('.domain-card.on').length;
+        const counter = document.getElementById('domain-count');
+        if (counter) counter.textContent = total;
+      };
+    });
+
+    function saveExpertProfile() {
+      const fname = document.getElementById('es-fname')?.value.trim() || '';
+      const lname = document.getElementById('es-lname')?.value.trim() || '';
+      const email = document.getElementById('es-email')?.value.trim() || '';
+      const bio = document.getElementById('es-bio')?.value.trim() || '';
+
+      const { valid } = Validate.form([
+        { fieldId: 'es-fname', value: fname, checks: [v => Validate.required(v, 'First name')] },
+        { fieldId: 'es-lname', value: lname, checks: [v => Validate.required(v, 'Last name')] },
+        { fieldId: 'es-email', value: email, checks: [Validate.email] },
+      ]);
+      if (!valid) return;
+
+      try {
+        const session = typeof Auth !== "undefined" ? Auth.getCurrentUser() : null;
+        if (session) {
+          const name = fname + ' ' + lname;
+          Store.updateUser(session.userId, { name, email, bio });
+          const updated = { ...session, name, email };
+          localStorage.setItem('lannent_session', JSON.stringify(updated));
+        }
+      } catch(e) { console.warn('Store update failed', e); }
+
+      Validate.toast('Profile saved successfully!', 'success');
+      
+      const initials = ((fname.charAt(0) || '') + (lname.charAt(0) || '')).toUpperCase();
+      const circle = document.querySelector('.avatar-circle');
+      if (circle) circle.textContent = initials;
+    }
+
+    function saveAvailability() {
+      const status = document.getElementById('es-avail-status')?.value || '';
+      const maxCases = document.getElementById('es-avail-max')?.value || '';
+      const type = document.getElementById('es-avail-type')?.value || '';
+
+      try {
+        const session = typeof Auth !== "undefined" ? Auth.getCurrentUser() : null;
+        if (session) {
+          Store.updateUser(session.userId, { 
+            availability: { status, maxCases, type }
+          });
+        }
+      } catch(e) { console.warn('Store update failed', e); }
+
+      Validate.toast('Availability preferences saved!', 'success');
+    }
+
+    function saveDomains() {
+      const selectedIds = Array.from(document.querySelectorAll('.domain-card.on')).map(el => el.getAttribute('data-id'));
+      
+      try {
+        const session = typeof Auth !== "undefined" ? Auth.getCurrentUser() : null;
+        if (session) {
+          Store.updateUser(session.userId, { auditDomains: selectedIds });
+        }
+      } catch(e) { console.warn('Store update failed', e); }
+
+      Validate.toast('Audit domains updated successfully!', 'success');
+    }
+  </script>
+</head>
+<body></body>
+</html>

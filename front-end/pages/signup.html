@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign Up — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body>
+  <div class="auth-page">
+    <!-- Background video (fixed height so it doesn't zoom on tall pages) -->
+    <div class="auth-video-wrap" style="position:fixed;inset:0;z-index:0;">
+      <video class="auth-video" autoplay muted loop playsinline>
+        <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260302_085640_276ea93b-d7da-4418-a09b-2aa5b490e838.mp4" type="video/mp4" />
+      </video>
+      <div class="auth-overlay"></div>
+    </div>
+
+    <!-- LEFT — Branding -->
+    <div class="auth-left" style="position:sticky;top:0;height:100vh;">
+      <h1 class="auth-title">Build projects with <span class="serif">confidence</span>.</h1>
+      <p class="auth-sub">Hire skilled gig workers, collaborate in real-time, and release secure escrow payments only when milestones are approved.</p>
+      <div class="auth-features">
+        <div class="auth-feature">
+          <div class="auth-feature-icon"><i data-lucide="lock" style="width:15px;height:15px;"></i></div>
+          <span style="font-size:14px;">Escrow-secured payments</span>
+        </div>
+        <div class="auth-feature">
+          <div class="auth-feature-icon"><i data-lucide="file-check" style="width:15px;height:15px;"></i></div>
+          <span style="font-size:14px;">Expert technical audits</span>
+        </div>
+        <div class="auth-feature">
+          <div class="auth-feature-icon"><i data-lucide="handshake" style="width:15px;height:15px;"></i></div>
+          <span style="font-size:14px;">Milestone-based collaboration</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT — Signup Form -->
+    <div class="auth-right" style="position:relative;z-index:1;align-items:flex-start;padding-top:48px;padding-bottom:48px;">
+      <div class="auth-card">
+        <div class="auth-card-brand">
+          <i data-lucide="shield-check" style="width:20px;height:20px;"></i>
+          <span class="auth-card-brand-name">GigBoard</span>
+        </div>
+        <h2 style="font-size:24px;font-weight:500;letter-spacing:-0.03em;margin-top:24px;margin-bottom:4px;">Create your account</h2>
+        <p style="font-size:14px;color:var(--muted-foreground);margin-bottom:24px;">Get started with your first project</p>
+
+        <form id="signupForm">
+          <div class="form-group">
+            <label class="form-label">Full Name</label>
+            <input type="text" class="form-input" placeholder="John Doe" id="signupName" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-input" placeholder="you@example.com" id="signupEmail" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <div class="form-input-wrap">
+              <input type="password" class="form-input form-input-pr" placeholder="••••••••" id="signupPw" />
+              <button type="button" class="form-input-icon-right" id="togglePw">
+                <i data-lucide="eye" style="width:16px;height:16px;"></i>
+              </button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Confirm Password</label>
+            <div class="form-input-wrap">
+              <input type="password" class="form-input form-input-pr" placeholder="••••••••" id="signupConfirm" />
+              <button type="button" class="form-input-icon-right" id="toggleConfirm">
+                <i data-lucide="eye" style="width:16px;height:16px;"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Role Selection -->
+          <div class="form-group">
+            <label class="form-label">I want to</label>
+            <div class="role-grid">
+              <button type="button" class="role-card" id="roleClient" onclick="selectRole('client')">
+                <div class="role-card-icon"><i data-lucide="clipboard-list" style="width:20px;height:20px;"></i></div>
+                <p class="role-card-title">Client</p>
+                <p class="role-card-desc">Post tasks and hire gig workers</p>
+              </button>
+              <button type="button" class="role-card" id="roleWorker" onclick="selectRole('worker')">
+                <div class="role-card-icon"><i data-lucide="wrench" style="width:20px;height:20px;"></i></div>
+                <p class="role-card-title">Gig Worker</p>
+                <p class="role-card-desc">Find projects and submit deliverables</p>
+              </button>
+            </div>
+          </div>
+
+          <button type="submit" class="btn-submit" style="margin-top:4px;">Create Account</button>
+        </form>
+
+        <p class="auth-footer-text">
+          Already have an account? <a href="login.html">Sign in</a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script>
+    lucide.createIcons();
+
+    // If already logged in, redirect
+    if (Auth.isLoggedIn()) {
+      const u = Auth.getCurrentUser();
+      window.location.href = Auth.getDashboardUrl(u.role);
+    }
+
+    let selectedRole = '';
+
+    function selectRole(role) {
+      selectedRole = role;
+      document.getElementById('roleClient').classList.toggle('active', role === 'client');
+      document.getElementById('roleWorker').classList.toggle('active', role === 'worker');
+      Validate.clearError('roleGroup');
+    }
+
+    // Toggle password
+    let showPw = false, showConfirm = false;
+    document.getElementById('togglePw').addEventListener('click', () => {
+      showPw = !showPw;
+      document.getElementById('signupPw').type = showPw ? 'text' : 'password';
+      document.getElementById('togglePw').innerHTML = showPw
+        ? '<i data-lucide="eye-off" style="width:16px;height:16px;"></i>'
+        : '<i data-lucide="eye" style="width:16px;height:16px;"></i>';
+      lucide.createIcons();
+    });
+    document.getElementById('toggleConfirm').addEventListener('click', () => {
+      showConfirm = !showConfirm;
+      document.getElementById('signupConfirm').type = showConfirm ? 'text' : 'password';
+      document.getElementById('toggleConfirm').innerHTML = showConfirm
+        ? '<i data-lucide="eye-off" style="width:16px;height:16px;"></i>'
+        : '<i data-lucide="eye" style="width:16px;height:16px;"></i>';
+      lucide.createIcons();
+    });
+
+    // Auto-clear errors
+    ['signupName','signupEmail','signupPw','signupConfirm'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', () => Validate.clearError(id));
+    });
+
+    // Signup form submission
+    document.getElementById('signupForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const name = document.getElementById('signupName')?.value.trim() || '';
+      const email = document.getElementById('signupEmail')?.value.trim() || '';
+      const pw = document.getElementById('signupPw')?.value || '';
+      const confirm = document.getElementById('signupConfirm')?.value || '';
+
+      const { valid } = Validate.form([
+        { fieldId: 'signupName', value: name, checks: [v => Validate.required(v, 'Full name'), v => Validate.minLength(v, 2, 'Full name')] },
+        { fieldId: 'signupEmail', value: email, checks: [Validate.email] },
+        { fieldId: 'signupPw', value: pw, checks: [Validate.password] },
+        { fieldId: 'signupConfirm', value: confirm, checks: [v => Validate.passwordMatch(pw, v)] },
+      ]);
+
+      // Role check
+      if (!selectedRole) {
+        const roleGroup = document.getElementById('roleGroup');
+        if (roleGroup) {
+          roleGroup.style.outline = '2px solid #ef4444';
+          roleGroup.style.borderRadius = '12px';
+          let errEl = document.getElementById('roleGroup_err');
+          if (!errEl) {
+            errEl = document.createElement('p');
+            errEl.id = 'roleGroup_err';
+            errEl.style.cssText = 'color:#ef4444;font-size:12px;margin-top:6px;';
+            errEl.textContent = 'Please select a role to continue.';
+            roleGroup.parentNode.insertBefore(errEl, roleGroup.nextSibling);
+          }
+        }
+        if (valid) return; // only stop here if other fields are valid
+      }
+      if (!valid || !selectedRole) return;
+
+      // Check if email already exists
+      const existing = Store.getUserByEmail(email);
+      if (existing) { Validate.showError('signupEmail', 'An account with this email already exists.'); return; }
+
+      const submitBtn = e.target.querySelector('[type="submit"]');
+      submitBtn.textContent = 'Creating account...';
+      submitBtn.disabled = true;
+
+      setTimeout(() => {
+        const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2);
+        const colors = { client: 'linear-gradient(135deg,#6366f1,#4f46e5)', worker: 'linear-gradient(135deg,#10b981,#059669)' };
+        const user = Store.createUser({ name, email, password: pw, role: selectedRole, avatar: initials, avatarColor: colors[selectedRole] || '' });
+        const result = Auth.login(email, pw);
+        if (result.success) {
+          window.location.href = Auth.getDashboardUrl(selectedRole);
+        } else {
+          submitBtn.textContent = 'Create Account';
+          submitBtn.disabled = false;
+        }
+      }, 400);
+    });
+  </script>
+</body>
+</html>

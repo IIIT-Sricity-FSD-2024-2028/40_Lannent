@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Milestone Reports — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    /* ── Filter toolbar ── */
+    .report-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .filter-btn {
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      color: var(--muted-foreground);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .filter-btn:hover { background: var(--secondary); color: var(--foreground); }
+    .filter-btn.active {
+      background: var(--foreground);
+      color: var(--primary-foreground);
+      border-color: var(--foreground);
+    }
+
+    /* ── Select wrapper ── */
+    .select-wrap {
+      position: relative;
+      display: inline-block;
+    }
+    .select-wrap select {
+      height: 36px;
+      padding: 0 32px 0 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      color: var(--foreground);
+      cursor: pointer;
+      appearance: none;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .select-wrap select:focus { border-color: #6366f1; }
+    .select-wrap .chev {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      color: var(--muted-foreground);
+    }
+
+    /* ── Report card ── */
+    .report-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 24px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 20px;
+      transition: box-shadow 0.2s, transform 0.15s;
+    }
+    .report-card:hover {
+      box-shadow: 0 6px 20px rgba(0,0,0,0.07);
+      transform: translateY(-1px);
+    }
+    .report-card:last-child { margin-bottom: 0; }
+
+    .report-type-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .report-left {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .report-info { flex: 1; min-width: 0; }
+    .report-milestone-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--foreground);
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .report-type-label {
+      font-size: 12px;
+      color: var(--muted-foreground);
+      margin-bottom: 10px;
+    }
+
+    .report-meta-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .report-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: var(--muted-foreground);
+    }
+    .report-meta-item strong { color: var(--foreground); font-weight: 500; }
+
+    .report-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .btn-view {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--secondary);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      color: var(--foreground);
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+      text-decoration: none;
+    }
+    .btn-view:hover { background: var(--muted); }
+
+    .btn-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 8px;
+      border: none;
+      background: linear-gradient(to bottom, #2a2a2a, #1a1a1a);
+      box-shadow: inset -4px -6px 25px rgba(201,201,201,0.08), inset 4px 4px 10px rgba(29,29,29,0.24);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      color: #fff;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s;
+      white-space: nowrap;
+    }
+    .btn-download:hover { transform: scale(1.02); }
+
+    /* ── Status pill ── */
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid;
+    }
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+    }
+
+    /* ── Section header ── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--foreground);
+    }
+    .count-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 22px;
+      border-radius: 11px;
+      background: var(--muted);
+      color: var(--muted-foreground);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 0 6px;
+      margin-left: 8px;
+    }
+
+    /* ── Summary stat cards ── */
+    .reports-summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 900px) { .reports-summary { grid-template-columns: repeat(2,1fr); } }
+    @media (max-width: 500px) { .reports-summary { grid-template-columns: 1fr; } }
+
+    .summary-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .summary-icon {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .summary-val {
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 2px;
+    }
+    .summary-label {
+      font-size: 12px;
+      color: var(--muted-foreground);
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 48px 24px;
+      text-align: center;
+    }
+    .empty-icon-wrap {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      background: var(--secondary);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 14px;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .report-card { flex-direction: column; }
+      .report-actions { flex-direction: row; width: 100%; }
+      .btn-view, .btn-download { flex: 1; justify-content: center; }
+    }
+
+    /* ── Page fade in ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .report-card { animation: fadeUp 0.3s ease both; }
+    .report-card:nth-child(1) { animation-delay: 0.04s; }
+    .report-card:nth-child(2) { animation-delay: 0.08s; }
+    .report-card:nth-child(3) { animation-delay: 0.12s; }
+    .report-card:nth-child(4) { animation-delay: 0.16s; }
+    .report-card:nth-child(5) { animation-delay: 0.20s; }
+  </style>
+  <script>
+    // ── Data — merged from store + static ──
+    const STATIC_REPORTS = [
+      { id:'R-001', milestoneName:'Database Schema & Migration', milestoneId:6, type:'technical-audit', reviewer:'Dr. James Wilson', reviewerInitials:'JW', reviewerColor:'linear-gradient(135deg,#6366f1,#4f46e5)', date:'Mar 8, 2026', status:'completed', viewUrl:'expert-report-audit.html' },
+      { id:'R-002', milestoneName:'Payment Gateway Integration', milestoneId:5, type:'technical-audit', reviewer:'Dr. James Wilson', reviewerInitials:'JW', reviewerColor:'linear-gradient(135deg,#6366f1,#4f46e5)', date:'Mar 7, 2026', status:'completed', viewUrl:'expert-report-audit.html' },
+      { id:'R-003', milestoneName:'Payment Gateway Integration', milestoneId:5, type:'dispute-resolution', reviewer:'Expert Panel', reviewerInitials:'EP', reviewerColor:'linear-gradient(135deg,#f59e0b,#d97706)', date:'Mar 7, 2026', status:'in-progress', viewUrl:'expert-report-dispute.html' },
+      { id:'R-004', milestoneName:'Backend API Development', milestoneId:4, type:'technical-audit', reviewer:'Dr. Sarah Mitchell', reviewerInitials:'SM', reviewerColor:'linear-gradient(135deg,#ec4899,#be185d)', date:'Mar 6, 2026', status:'pending', viewUrl:'expert-report-audit.html' },
+      { id:'R-005', milestoneName:'UI/UX Design System', milestoneId:7, type:'technical-audit', reviewer:'Dr. James Wilson', reviewerInitials:'JW', reviewerColor:'linear-gradient(135deg,#6366f1,#4f46e5)', date:'Mar 5, 2026', status:'completed', viewUrl:'expert-report-audit.html' },
+    ];
+
+    function getReports() {
+      // Pull real audit reports from store
+      const storeReports = (typeof Store !== 'undefined' ? Store.getAuditReports() : [])
+        .filter(r => r.createdAt) // only submitted reports
+        .map(r => ({
+          id: r.id,
+          milestoneName: r.milestoneTitle || 'Milestone',
+          milestoneId: r.milestoneId,
+          type: 'technical-audit',
+          reviewer: (typeof Store !== 'undefined' ? Store.getUserById(r.expertId)?.name : null) || 'Expert Reviewer',
+          reviewerInitials: (typeof Store !== 'undefined' ? Store.getUserById(r.expertId)?.avatar : null) || 'ER',
+          reviewerColor: (typeof Store !== 'undefined' ? Store.getUserById(r.expertId)?.avatarColor : null) || 'linear-gradient(135deg,#a855f7,#7c3aed)',
+          date: r.createdAt,
+          status: r.verdict === 'pass' ? 'completed' : r.verdict === 'fail' ? 'in-progress' : 'pending',
+          verdict: r.verdict,
+          findings: r.findings,
+          project: r.projectTitle,
+          workerName: r.workerName,
+          viewUrl: 'expert-report-audit.html?id=' + r.auditRequestId,
+          fromStore: true,
+        }));
+
+      // Pull disputes from store
+      const storeDisputes = (typeof Store !== 'undefined' ? Store.getDisputes() : [])
+        .map(d => ({
+          id: d.id,
+          milestoneName: d.milestone || 'Project Dispute',
+          milestoneId: d.milestoneId,
+          type: 'dispute-resolution',
+          reviewer: (typeof Store !== 'undefined' ? Store.getUserById(d.expertId)?.name : null) || 'Expert Reviewer',
+          reviewerInitials: (typeof Store !== 'undefined' ? Store.getUserById(d.expertId)?.avatar : null) || 'ER',
+          reviewerColor: 'linear-gradient(135deg,#f59e0b,#d97706)',
+          date: d.createdAt,
+          status: d.status === 'resolved' ? 'completed' : d.status === 'open' ? 'in-progress' : 'pending',
+          verdict: d.verdict,
+          project: d.project,
+          viewUrl: 'expert-report-dispute.html?id=' + d.id,
+          fromStore: true,
+        }));
+
+      // Merge: store reports first, then static ones not duplicated
+      return [...storeReports, ...storeDisputes, ...STATIC_REPORTS];
+    }
+
+    let REPORTS = [];
+
+    let activeTypeFilter = 'all';
+    let activeMilestoneFilter = 'all';
+    let role = 'client'; // will be set from URL param on DOMContentLoaded
+
+    function statusConfig(status) {
+      switch (status) {
+        case 'completed':  return { bg:'#ecfdf5', border:'#a7f3d0', text:'#059669', dot:'#10b981', label:'Completed' };
+        case 'in-progress':return { bg:'#eff6ff', border:'#bae6fd', text:'#0284c7', dot:'#38bdf8', label:'In Progress' };
+        case 'pending':    return { bg:'#fffbeb', border:'#fde68a', text:'#b45309', dot:'#f59e0b', label:'Pending' };
+        default:           return { bg:'#f9fafb', border:'#e5e7eb', text:'#6b7280', dot:'#9ca3af', label: status };
+      }
+    }
+
+    function typeConfig(type) {
+      if (type === 'technical-audit') {
+        return { bg:'#eff6ff', color:'#2563eb', icon:'file-search', label:'Technical Audit Report' };
+      }
+      return { bg:'#fff7ed', color:'#ea580c', icon:'alert-triangle', label:'Dispute Resolution Report' };
+    }
+
+    function renderReports() {
+      const list = REPORTS.filter(r => {
+        if (activeTypeFilter !== 'all' && r.type !== activeTypeFilter) return false;
+        if (activeMilestoneFilter !== 'all' && r.milestoneName !== activeMilestoneFilter) return false;
+        return true;
+      });
+
+      const completed  = list.filter(r => r.status === 'completed').length;
+      const inProgress = list.filter(r => r.status === 'in-progress').length;
+      const pending    = list.filter(r => r.status === 'pending').length;
+      const audits     = list.filter(r => r.type === 'technical-audit').length;
+
+      // Summary
+      document.getElementById('sum-total').textContent   = list.length;
+      document.getElementById('sum-done').textContent    = completed;
+      document.getElementById('sum-prog').textContent    = inProgress;
+      document.getElementById('sum-audit').textContent   = audits;
+
+      // Count badge
+      document.getElementById('reports-count').textContent = list.length;
+
+      // Cards
+      const container = document.getElementById('reports-list');
+      if (list.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon-wrap">
+              <i data-lucide="file-text" style="width:24px;height:24px;color:var(--muted-foreground);"></i>
+            </div>
+            <h3 style="font-size:16px;font-weight:600;margin-bottom:6px;">No reports found</h3>
+            <p style="font-size:13px;color:var(--muted-foreground);">Try adjusting your filters to see more results.</p>
+          </div>`;
+        lucide.createIcons();
+        return;
+      }
+
+      container.innerHTML = list.map((r, i) => {
+        const sc = statusConfig(r.status);
+        const tc = typeConfig(r.type);
+        return `
+          <div class="report-card" style="animation-delay:${i * 0.05}s;">
+            <div class="report-left">
+              <div class="report-type-icon" style="background:${tc.bg};">
+                <i data-lucide="${tc.icon}" style="width:18px;height:18px;color:${tc.color};"></i>
+              </div>
+              <div class="report-info">
+                <div class="report-milestone-name">${r.milestoneName}</div>
+                <div class="report-type-label">${tc.label} &nbsp;·&nbsp; <span style="font-family:monospace;font-size:11px;">${r.id}</span></div>
+                <div class="report-meta-row">
+                  <span class="status-pill" style="background:${sc.bg};border-color:${sc.border};color:${sc.text};">
+                    <span class="status-dot" style="background:${sc.dot};"></span>
+                    ${sc.label}
+                  </span>
+                  <div class="report-meta-item">
+                    <div style="width:22px;height:22px;border-radius:50%;background:${r.reviewerColor};display:flex;align-items:center;justify-content:center;color:white;font-size:8px;font-weight:700;flex-shrink:0;">${r.reviewerInitials}</div>
+                    <strong>${r.reviewer}</strong>
+                  </div>
+                  <div class="report-meta-item">
+                    <i data-lucide="calendar" style="width:13px;height:13px;"></i>
+                    <strong>${r.date}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="report-actions">
+              <a href="${r.viewUrl}?role=${role}" class="btn-view">
+                <i data-lucide="eye" style="width:14px;height:14px;"></i>
+                View Report
+              </a>
+              <button class="btn-download" onclick="showToast('Downloading PDF…','info')">
+                <i data-lucide="download" style="width:14px;height:14px;"></i>
+                Download PDF
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      lucide.createIcons();
+    }
+
+    function setTypeFilter(val) {
+      activeTypeFilter = val;
+      document.querySelectorAll('.type-filter-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.val === val);
+      });
+      renderReports();
+    }
+
+    function showToast(msg, type = 'success') {
+      const t = document.createElement('div');
+      const bg = type === 'success' ? '#10b981' : type === 'info' ? '#6366f1' : '#ef4444';
+      t.style.cssText = `position:fixed;bottom:24px;right:24px;background:${bg};color:white;padding:14px 20px;border-radius:12px;font-size:14px;font-weight:500;z-index:300;box-shadow:0 8px 24px rgba(0,0,0,0.15);animation:fadeUp 0.4s ease;`;
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    // Detect role from URL param or referrer
+    function detectRole() {
+      const params = new URLSearchParams(location.search);
+      return params.get('role') || 'client';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('client', 'worker', 'expert')) return;
+      REPORTS = getReports();
+      role = detectRole();
+      const backUrl = role === 'worker' ? 'worker-milestone-board.html' : 'project-milestone-board.html';
+
+      // Build unique milestone names for filter
+      const milestoneNames = [...new Set(REPORTS.map(r => r.milestoneName))];
+      const milestoneOptions = milestoneNames.map(n =>
+        `<option value="${n}">${n}</option>`
+      ).join('');
+
+      const content = `
+        <!-- Back + Header -->
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
+          <a href="${backUrl}" style="display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--muted-foreground);transition:color 0.15s;text-decoration:none;" onmouseenter="this.style.color='var(--foreground)'" onmouseleave="this.style.color='var(--muted-foreground)'">
+            <i data-lucide="arrow-left" style="width:16px;height:16px;"></i> Milestone Board
+          </a>
+          <span style="color:var(--border);">›</span>
+          <span style="font-size:14px;font-weight:500;color:var(--foreground);">Milestone Reports</span>
+        </div>
+
+        <!-- Summary stats -->
+        <div class="reports-summary">
+          <div class="summary-card">
+            <div class="summary-icon" style="background:#eef2ff;">
+              <i data-lucide="file-text" style="width:18px;height:18px;color:#6366f1;"></i>
+            </div>
+            <div>
+              <div class="summary-val" id="sum-total">0</div>
+              <div class="summary-label">Total Reports</div>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon" style="background:#ecfdf5;">
+              <i data-lucide="check-circle" style="width:18px;height:18px;color:#10b981;"></i>
+            </div>
+            <div>
+              <div class="summary-val" style="color:#10b981;" id="sum-done">0</div>
+              <div class="summary-label">Completed</div>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon" style="background:#eff6ff;">
+              <i data-lucide="loader" style="width:18px;height:18px;color:#2563eb;"></i>
+            </div>
+            <div>
+              <div class="summary-val" style="color:#2563eb;" id="sum-prog">0</div>
+              <div class="summary-label">In Progress</div>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon" style="background:#fff7ed;">
+              <i data-lucide="file-search" style="width:18px;height:18px;color:#ea580c;"></i>
+            </div>
+            <div>
+              <div class="summary-val" id="sum-audit">0</div>
+              <div class="summary-label">Audit Reports</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:20px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+            <i data-lucide="sliders-horizontal" style="width:16px;height:16px;color:var(--muted-foreground);"></i>
+            <span style="font-size:14px;font-weight:600;">Filters</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+            <!-- Type filter buttons -->
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <button class="filter-btn type-filter-btn active" data-val="all" onclick="setTypeFilter('all')">
+                <i data-lucide="layout-grid" style="width:13px;height:13px;"></i> All Types
+              </button>
+              <button class="filter-btn type-filter-btn" data-val="technical-audit" onclick="setTypeFilter('technical-audit')">
+                <i data-lucide="file-search" style="width:13px;height:13px;"></i> Technical Audit
+              </button>
+              <button class="filter-btn type-filter-btn" data-val="dispute-resolution" onclick="setTypeFilter('dispute-resolution')">
+                <i data-lucide="alert-triangle" style="width:13px;height:13px;"></i> Dispute Resolution
+              </button>
+            </div>
+
+            <!-- Milestone select -->
+            <div class="select-wrap" style="margin-left:auto;">
+              <select onchange="activeMilestoneFilter=this.value;renderReports();">
+                <option value="all">All Milestones</option>
+                ${milestoneOptions}
+              </select>
+              <i data-lucide="chevron-down" class="chev" style="width:14px;height:14px;"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reports list -->
+        <div class="section-header">
+          <span class="section-title">
+            Reports <span class="count-badge" id="reports-count">0</span>
+          </span>
+        </div>
+        <div id="reports-list"></div>
+      `;
+
+      initDashboard({
+        role,
+        activePath: role === 'worker' ? 'worker-milestone-board.html' : 'client-my-projects.html',
+        pageTitle: 'Milestone Reports',
+        pageSubtitle: 'E-commerce Website Redesign',
+        content
+      });
+
+      lucide.createIcons();
+      renderReports();
+    });
+  </script>
+</head>
+<body></body>
+</html>

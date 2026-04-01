@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Submit Deliverable — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .submit-layout { display:grid; grid-template-columns:1fr 300px; gap:20px; }
+    .drop-zone { border:2px dashed var(--border); border-radius:16px; padding:40px; text-align:center; transition:border-color 0.2s, background 0.2s; cursor:pointer; }
+    .drop-zone:hover, .drop-zone.dragging { border-color:#6366f1; background:#f5f3ff; }
+    .file-chip { display:flex; align-items:center; gap:12px; padding:12px 16px; background:var(--input-bg); border:1px solid var(--border); border-radius:12px; margin-bottom:8px; }
+    .file-type-icon { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    @media(max-width:900px){ .submit-layout{ grid-template-columns:1fr; } }
+  </style>
+  <script>
+    let uploadedFiles = [];
+    let milestone = {
+      projectName:'E-Commerce Mobile App',
+      milestoneTitle:'Milestone 2: Payment Integration & Checkout Flow',
+      client:'Sarah Johnson',
+      clientAvatar:'SJ',
+      clientColor:'linear-gradient(135deg,#6366f1,#4f46e5)',
+      budget:3500,
+      deadline:'March 15, 2026',
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('worker')) return;
+      
+      const params = new URLSearchParams(window.location.search);
+      const mId = params.get('milestoneId') || params.get('id');
+      if (mId && typeof Store !== 'undefined') {
+        const mData = Store.getMilestoneById(mId);
+        if (mData) {
+          const tData = Store.getTaskById(mData.taskId);
+          const cUser = tData ? Store.getUserById(tData.clientId) : null;
+          milestone.projectName = tData ? tData.title : milestone.projectName;
+          milestone.milestoneTitle = mData.title || milestone.milestoneTitle;
+          milestone.budget = mData.budget || milestone.budget;
+          milestone.deadline = mData.dueDate ? new Date(mData.dueDate).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : 'No Deadline';
+          if (cUser) {
+            milestone.client = cUser.name;
+            milestone.clientAvatar = cUser.avatar;
+            milestone.clientColor = cUser.avatarColor;
+          }
+        }
+      }
+      const content = `
+        <div style="margin-bottom:16px;">
+          <a href="worker-my-projects.html" style="display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--muted-foreground);transition:color 0.15s;" onmouseenter="this.style.color='var(--foreground)'" onmouseleave="this.style.color='var(--muted-foreground)'">
+            <i data-lucide="arrow-left" style="width:16px;height:16px;"></i> Back to Projects
+          </a>
+        </div>
+
+        <!-- Milestone info banner -->
+        <div style="background:linear-gradient(135deg,#eef2ff,#e0e7ff);border:1.5px solid #c7d2fe;border-radius:16px;padding:20px 24px;margin-bottom:24px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div>
+              <div style="font-size:12px;color:#4f46e5;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Submitting for</div>
+              <div style="font-weight:600;font-size:16px;color:#1e1b4b;">${milestone.milestoneTitle}</div>
+              <div style="font-size:13px;color:#4f46e5;margin-top:4px;">${milestone.projectName}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:16px;">
+              <div style="text-align:center;">
+                <div style="font-weight:700;font-size:20px;color:#10b981;">$${milestone.budget.toLocaleString()}</div>
+                <div style="font-size:11px;color:#4f46e5;">Milestone Pay</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="font-weight:600;font-size:14px;">${milestone.deadline}</div>
+                <div style="font-size:11px;color:#4f46e5;">Deadline</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div style="width:36px;height:36px;border-radius:50%;background:${milestone.clientColor};display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;">${milestone.clientAvatar}</div>
+                <div><div style="font-size:12px;color:#4f46e5;">Client</div><div style="font-size:13px;font-weight:600;">${milestone.client}</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="submit-layout">
+          <!-- Main form -->
+          <div>
+            <!-- File upload -->
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
+              <h3 style="font-size:15px;font-weight:600;margin-bottom:6px;">Upload Deliverable Files</h3>
+              <p style="font-size:13px;color:var(--muted-foreground);margin-bottom:20px;">Upload your code, designs, documentation, and any other relevant files</p>
+              <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()"
+                ondragover="event.preventDefault();this.classList.add('dragging')"
+                ondragleave="this.classList.remove('dragging')"
+                ondrop="handleFileDrop(event)">
+                <div style="width:56px;height:56px;border-radius:50%;background:#eef2ff;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+                  <i data-lucide="upload-cloud" style="width:28px;height:28px;color:#6366f1;"></i>
+                </div>
+                <p style="font-weight:600;font-size:15px;color:var(--foreground);margin-bottom:4px;">Drop files here or click to browse</p>
+                <p style="font-size:13px;color:var(--muted-foreground);">Support for ZIP, PDF, images, code files. Max 50MB each.</p>
+              </div>
+              <input type="file" id="fileInput" multiple style="display:none;" onchange="handleFileSelect(event)" />
+              <div id="fileList" style="margin-top:16px;"></div>
+            </div>
+
+            <!-- Repository -->
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
+              <h3 style="font-size:15px;font-weight:600;margin-bottom:16px;">Repository Details (Optional)</h3>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                <div class="form-group">
+                  <label class="form-label" style="display:flex;align-items:center;gap:6px;">
+                    <i data-lucide="github" style="width:15px;height:15px;"></i>Repository URL
+                  </label>
+                  <input type="url" class="form-input" placeholder="https://github.com/username/repo" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" style="display:flex;align-items:center;gap:6px;">
+                    <i data-lucide="git-branch" style="width:15px;height:15px;"></i>Branch Name
+                  </label>
+                  <input type="text" class="form-input" placeholder="e.g. main, develop" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Documentation -->
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
+              <h3 style="font-size:15px;font-weight:600;margin-bottom:6px;">Submission Notes & Documentation</h3>
+              <p style="font-size:13px;color:var(--muted-foreground);margin-bottom:16px;">Describe what you've built, how to run/test it, and any important notes for the client</p>
+              <input type="text" id="deliverableTitle" class="form-input" placeholder="Brief title for this submission" style="margin-bottom:8px;" />
+              <div id="deliverableTitleErr" style="font-size:12px;color:#ef4444;margin-bottom:8px;display:none;"></div>
+              <textarea class="form-input" rows="6" placeholder="## What I built&#10;&#10;Describe the work completed for this milestone...&#10;&#10;## How to run&#10;&#10;1. npm install&#10;2. npm run dev&#10;&#10;## Notes for the client&#10;&#10;Any important information..."></textarea>
+              <div id="deliverableNotesErr" style="font-size:12px;color:#ef4444;margin-top:4px;display:none;"></div>
+            </div>
+
+            <!-- Checklist -->
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
+              <h3 style="font-size:15px;font-weight:600;margin-bottom:16px;">Pre-submission Checklist</h3>
+              ${[
+                'All code is thoroughly tested and bug-free',
+                'Documentation is complete and up to date',
+                'All project requirements are implemented',
+                'Code is clean and well-commented',
+                'Files are properly organized',
+              ].map((item, i) => `
+                <label style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:10px;cursor:pointer;transition:background 0.15s;margin-bottom:4px;" onmouseenter="this.style.background='var(--input-bg)'" onmouseleave="this.style.background='transparent'">
+                  <input type="checkbox" id="chk${i}" style="width:16px;height:16px;cursor:pointer;accent-color:#6366f1;" />
+                  <span style="font-size:14px;">${item}</span>
+                </label>`).join('')}
+            </div>
+
+            <div style="display:flex;gap:12px;">
+              <button class="btn-outline" style="flex:1;padding:12px;border-radius:12px;" onclick="history.back()">Save Draft</button>
+              <button class="btn-primary" style="flex:2;padding:12px;border-radius:12px;font-size:15px;" onclick="showConfirmModal()">
+                <i data-lucide="send" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:8px;"></i>Submit Deliverable
+              </button>
+            </div>
+          </div>
+
+          <!-- Sidebar -->
+          <div>
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px;">
+              <h3 style="font-size:14px;font-weight:600;margin-bottom:16px;">Submission Guidelines</h3>
+              ${[
+                { icon:'check-circle', color:'#10b981', text:'Include all source files and assets' },
+                { icon:'check-circle', color:'#10b981', text:'Provide clear setup/run instructions' },
+                { icon:'check-circle', color:'#10b981', text:'Test all features before submitting' },
+                { icon:'check-circle', color:'#10b981', text:'Document any known limitations' },
+                { icon:'alert-circle', color:'#f59e0b', text:'Do not submit incomplete work' },
+              ].map(g => `
+                <div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.04);">
+                  <i data-lucide="${g.icon}" style="width:15px;height:15px;color:${g.color};flex-shrink:0;margin-top:1px;"></i>
+                  <span style="font-size:13px;color:#374151;">${g.text}</span>
+                </div>`).join('')}
+            </div>
+
+            <div style="background:linear-gradient(135deg,#ecfdf5,#d1fae5);border:1.5px solid #a7f3d0;border-radius:16px;padding:20px;">
+              <h3 style="font-size:14px;font-weight:600;color:#065f46;margin-bottom:12px;">What happens next?</h3>
+              ${[
+                { step:'1', text:'Client reviews your deliverable', color:'#6366f1' },
+                { step:'2', text:'Optional: Expert technical audit', color:'#a855f7' },
+                { step:'3', text:'Client approves or requests changes', color:'#f59e0b' },
+                { step:'4', text:'Escrow released to your wallet', color:'#10b981' },
+              ].map(s => `
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                  <div style="width:22px;height:22px;border-radius:50%;background:${s.color};display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;flex-shrink:0;">${s.step}</div>
+                  <span style="font-size:13px;color:#065f46;">${s.text}</span>
+                </div>`).join('')}
+            </div>
+          </div>
+        </div>
+
+        <!-- Confirm Modal -->
+        <div id="confirmModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(4px);">
+          <div style="background:white;border-radius:24px;padding:32px;width:100%;max-width:420px;margin:0 16px;box-shadow:0 32px 80px rgba(0,0,0,0.15);">
+            <div style="width:56px;height:56px;border-radius:50%;background:#eef2ff;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">
+              <i data-lucide="send" style="width:24px;height:24px;color:#6366f1;"></i>
+            </div>
+            <h2 style="font-size:20px;font-weight:600;text-align:center;margin-bottom:8px;">Submit Deliverable?</h2>
+            <p style="font-size:14px;color:var(--muted-foreground);text-align:center;margin-bottom:24px;">Once submitted, the client will be notified to review your work. You can still message them directly in the workroom.</p>
+            <div style="display:flex;gap:12px;">
+              <button onclick="document.getElementById('confirmModal').style.display='none'" class="btn-outline" style="flex:1;padding:12px;border-radius:12px;">Cancel</button>
+              <button onclick="submitDeliverable()" class="btn-primary" style="flex:2;padding:12px;border-radius:12px;">Confirm Submit</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      initDashboard({
+        role: 'worker',
+        activePath: 'worker-my-projects.html',
+        pageTitle: 'Submit Deliverable',
+        pageSubtitle: milestone.milestoneTitle,
+        content
+      });
+      lucide.createIcons();
+    });
+
+    function handleFileDrop(e) {
+      e.preventDefault();
+      document.getElementById('dropZone').classList.remove('dragging');
+      addFiles(Array.from(e.dataTransfer.files));
+    }
+    function handleFileSelect(e) { addFiles(Array.from(e.target.files)); }
+
+    function addFiles(files) {
+      files.forEach(file => {
+        const id = Date.now() + Math.random();
+        uploadedFiles.push({ id, name: file.name, size: formatSize(file.size), type: file.type });
+      });
+      renderFileList();
+      lucide.createIcons();
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+
+    function getFileIcon(type) {
+      if (type.includes('image')) return { icon:'image', color:'#6366f1', bg:'#eef2ff' };
+      if (type.includes('zip') || type.includes('archive')) return { icon:'file-archive', color:'#f59e0b', bg:'#fffbeb' };
+      if (type.includes('pdf')) return { icon:'file-text', color:'#ef4444', bg:'#fee2e2' };
+      return { icon:'file', color:'#64748b', bg:'#f1f5f9' };
+    }
+
+    function renderFileList() {
+      const list = document.getElementById('fileList');
+      if (!list) return;
+      list.innerHTML = uploadedFiles.map(f => {
+        const fi = getFileIcon(f.type);
+        return `
+          <div class="file-chip" id="file-${f.id}">
+            <div class="file-type-icon" style="background:${fi.bg};">
+              <i data-lucide="${fi.icon}" style="width:16px;height:16px;color:${fi.color};"></i>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.name}</div>
+              <div style="font-size:11px;color:var(--muted-foreground);">${f.size}</div>
+            </div>
+            <button onclick="removeFile(${f.id})" style="background:none;border:none;cursor:pointer;color:var(--muted-foreground);padding:4px;" title="Remove">
+              <i data-lucide="x" style="width:14px;height:14px;"></i>
+            </button>
+          </div>`;
+      }).join('');
+    }
+
+    function removeFile(id) {
+      uploadedFiles = uploadedFiles.filter(f => f.id !== id);
+      renderFileList();
+      lucide.createIcons();
+    }
+
+    function showConfirmModal() {
+      document.getElementById('confirmModal').style.display = 'flex';
+      lucide.createIcons();
+    }
+
+    function submitDeliverable() {
+      // Get form values
+      const titleInput = document.getElementById('deliverableTitle');
+      const repoInput  = document.querySelector('input[type="url"]');
+      const notesArea  = document.querySelector('textarea.form-input');
+      const title = titleInput?.value.trim() || '';
+      const repoLink = repoInput?.value.trim() || '';
+      const notes = notesArea?.value.trim() || '';
+      let valid = true;
+
+      // Validate title
+      if (titleInput) {
+        const titleErr = document.getElementById('deliverableTitleErr');
+        if (!title || title.length < 3) {
+          if (titleInput) { titleInput.style.borderColor = '#ef4444'; }
+          if (titleErr) { titleErr.textContent = 'Title is required (at least 3 characters).'; titleErr.style.display = 'block'; }
+          valid = false;
+        } else {
+          if (titleInput) titleInput.style.borderColor = '';
+          if (titleErr) titleErr.style.display = 'none';
+        }
+      }
+
+      // Validate notes
+      if (notesArea) {
+        const notesErr = document.getElementById('deliverableNotesErr');
+        if (!notes || notes.length < 20) {
+          notesArea.style.borderColor = '#ef4444';
+          if (notesErr) { notesErr.textContent = 'Description must be at least 20 characters.'; notesErr.style.display = 'block'; }
+          valid = false;
+        } else {
+          notesArea.style.borderColor = '';
+          if (notesErr) notesErr.style.display = 'none';
+        }
+      }
+
+      // Validate file or repo link
+      if (uploadedFiles.length === 0 && !repoLink) {
+        Validate.toast('Please upload at least one file or provide a repository link.', 'error');
+        valid = false;
+      }
+      if (!valid) return;
+
+      // Save to store
+      const params = new URLSearchParams(window.location.search);
+      const milestoneId = params.get('milestoneId') || params.get('id');
+      if (milestoneId && typeof Store !== 'undefined') {
+        try {
+          const deliverable = {
+            title: document.title || 'Deliverable',
+            description: notes || 'Milestone deliverable submitted.',
+            link: repoLink || '',
+            files: uploadedFiles.map(f => f.name || f),
+          };
+          Store.submitDeliverable(milestoneId, deliverable);
+          const _ms = Store.getMilestoneById(milestoneId);
+          const _task = _ms ? Store.getTaskById(_ms.taskId) : null;
+          if (_task && _task.clientId) {
+            Store.addNotification({ userId: _task.clientId, type: 'milestone-submitted', text: 'New deliverable submitted', subtext: 'Milestone deliverable ready for review · just now', read: false });
+          }
+        } catch(e) { console.warn('Store save failed', e); }
+      }
+
+      document.getElementById('confirmModal').style.display = 'none';
+      setTimeout(() => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:300;backdrop-filter:blur(4px);';
+        overlay.innerHTML = `
+          <div style="background:white;border-radius:24px;padding:40px;text-align:center;max-width:400px;margin:0 16px;box-shadow:0 32px 80px rgba(0,0,0,0.2);">
+            <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#10b981,#059669);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;box-shadow:0 12px 32px rgba(16,185,129,0.3);">
+              <span style="font-size:32px;">✓</span>
+            </div>
+            <h2 style="font-size:22px;font-weight:600;margin-bottom:8px;">Deliverable Submitted!</h2>
+            <p style="color:var(--muted-foreground);font-size:14px;line-height:1.6;margin-bottom:24px;">The client has been notified and will review your work. You'll be notified once they provide feedback.</p>
+            <div style="display:flex;gap:12px;">
+              <a href="worker-my-projects.html" class="btn-outline" style="flex:1;padding:12px;border-radius:12px;text-align:center;text-decoration:none;">My Projects</a>
+              <a href="worker-workroom.html" class="btn-primary" style="flex:1;padding:12px;border-radius:12px;text-align:center;text-decoration:none;">Open Workroom</a>
+            </div>
+          </div>`;
+        document.body.appendChild(overlay);
+      }, 300);
+    }
+  </script>
+</head>
+<body></body>
+</html>

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Worker Wallet — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .wallet-hero { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:24px; }
+    .wallet-hero-card { border-radius:20px; padding:28px; color:white; position:relative; overflow:hidden; }
+    .wallet-hero-card::after { content:''; position:absolute; top:-40px; right:-40px; width:160px; height:160px; border-radius:50%; background:rgba(255,255,255,0.08); pointer-events:none; }
+    .tx-row { display:flex; align-items:center; gap:14px; padding:14px 0; border-bottom:1px solid rgba(0,0,0,0.05); }
+    .tx-row:last-child { border-bottom:none; }
+    .method-card { border:1.5px solid var(--border); border-radius:14px; padding:16px; cursor:pointer; transition:all 0.15s; }
+    .method-card:hover { border-color:#c7d2fe; background:#fafbff; }
+    .method-card.selected { border-color:#6366f1; background:#eef2ff; }
+    @media(max-width:768px){ .wallet-hero{ grid-template-columns:1fr; } }
+  </style>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('worker')) return;
+      const session = Auth.getCurrentUser();
+
+      function getWalletData() {
+        const user = Store.getUserById(session.userId);
+        const txs = Store.getTransactionsByUser(session.userId);
+        
+        let released = 0;
+        let pending = 0;
+        let inEscrow = 0;
+
+        const tasks = Store.getTasksByWorker(session.userId);
+        tasks.forEach(t => {
+          const msList = Store.getMilestonesByTask(t.id);
+          msList.forEach(m => {
+            if (m.status === 'completed' || m.status === 'paid' || m.status === 'approved') {
+               released += m.budget;
+            } else if (m.status === 'review' || m.status === 'audit-passed' || m.status === 'audit-requested') {
+               pending += m.budget;
+            } else if (m.status === 'in-progress' || m.status === 'not-started') {
+               inEscrow += m.budget;
+            }
+          });
+        });
+
+        return {
+          available: user ? (user.walletBalance || 0) : 0,
+          escrow: inEscrow,
+          released,
+          pending,
+          transactions: txs
+        };
+      }
+
+      function txStatus(t) {
+        if (t.type === 'milestone-release' || t.type === 'escrow-release') return 'Released';
+        if (t.type === 'escrow-lock') return 'In Escrow';
+        if (t.type === 'pending') return 'Pending Approval';
+        if (t.type === 'withdrawal') return 'Withdrawn';
+        return 'Released';
+      }
+
+      const statusClass = { Released:'badge-green', 'In Escrow':'badge-blue', 'Pending Approval':'badge-orange' };
+      const statusIcon  = { Released:'check-circle', 'In Escrow':'lock', 'Pending Approval':'clock' };
+      const statusColor = { Released:'#10b981', 'In Escrow':'#6366f1', 'Pending Approval':'#f59e0b' };
+
+      function renderEarnings(filter, txs) {
+        const all = txs || Store.getTransactionsByUser(session.userId);
+        const mapped = all.map(t => {
+          const task = Store.getTaskById(t.taskId);
+          const status = txStatus(t);
+          return { id:t.id, project: task ? task.title : (t.description || 'Transaction'), milestone: t.description || 'Payment', client: 'Platform', amount: t.type === 'withdrawal' ? '-' + t.amount : '+' + (t.amount || 0), isNavType: t.type === 'withdrawal', date: t.createdAt ? String(t.createdAt).slice(0, 10) : 'Recent', status };
+        });
+        const list = filter === 'all' ? mapped : mapped.filter(e => e.status === filter);
+        if (!list.length) return '<div style="padding:48px 24px;text-align:center;color:var(--muted-foreground);"><i data-lucide="wallet" style="width:40px;height:40px;opacity:0.3;margin:0 auto 12px;display:block;"></i><div>No transactions found.</div></div>';
+        return list.map(e => `
+          <div class="tx-row">
+            <div style="width:40px;height:40px;border-radius:12px;background:${statusColor[e.status] || '#6366f1'}20;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <i data-lucide="${statusIcon[e.status] || 'circle'}" style="width:18px;height:18px;color:${statusColor[e.status] || '#6366f1'};"></i>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.project}</div>
+              <div style="font-size:12px;color:var(--muted-foreground);">${e.milestone} · ${e.date}</div>
+            </div>
+            <span class="badge ${statusClass[e.status] || 'badge-gray'}">${e.status}</span>
+            <div style="text-align:right;flex-shrink:0;min-width:80px;">
+              <div style="font-weight:700;color:${e.isNavType ? '#ef4444' : (statusColor[e.status] || '#6366f1')};font-size:15px;">${e.isNavType ? '-' : '+'}$${Math.abs(e.isNavType ? parseFloat(String(e.amount).replace(/[-+]/g,'')) : (parseFloat(e.amount) || 0)).toLocaleString()}</div>
+            </div>
+          </div>`).join('');
+      }
+
+      const wallet = getWalletData();
+
+      const content = `
+        <div class="wallet-hero">
+          <div class="wallet-hero-card" style="background:linear-gradient(135deg,#10b981,#059669);">
+            <div style="position:relative;z-index:1;">
+              <div style="font-size:13px;font-weight:500;opacity:0.85;margin-bottom:8px;">Available Balance</div>
+              <div id="availableBalanceDisplay" style="font-size:38px;font-weight:900;letter-spacing:-0.03em;margin-bottom:20px;">$${wallet.available.toLocaleString()}</div>
+              <button onclick="showWithdrawModal()" style="padding:9px 22px;border-radius:10px;background:rgba(255,255,255,0.2);color:white;border:1px solid rgba(255,255,255,0.3);font-size:13px;font-weight:600;cursor:pointer;" onmouseenter="this.style.background='rgba(255,255,255,0.3)'" onmouseleave="this.style.background='rgba(255,255,255,0.2)'">Withdraw Funds</button>
+            </div>
+          </div>
+          <div class="wallet-hero-card" style="background:linear-gradient(135deg,#6366f1,#4f46e5);">
+            <div style="position:relative;z-index:1;">
+              <div style="font-size:13px;font-weight:500;opacity:0.85;margin-bottom:8px;">Total Earned</div>
+              <div style="font-size:38px;font-weight:900;letter-spacing:-0.03em;margin-bottom:8px;">$${wallet.released.toLocaleString()}</div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:12px;opacity:0.9;">
+                <i data-lucide="shield-check" style="width:14px;height:14px;"></i>Secured by Lannent Escrow
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
+          <div class="stat-card"><div><div class="stat-val" style="color:#10b981;">$${wallet.available.toLocaleString()}</div><div class="stat-label">Available</div></div><div class="stat-icon-wrap" style="background:#ecfdf5;"><i data-lucide="wallet" style="width:20px;height:20px;color:#10b981;"></i></div></div>
+          <div class="stat-card"><div><div class="stat-val" style="color:#6366f1;">$${wallet.released.toLocaleString()}</div><div class="stat-label">Total Earned</div></div><div class="stat-icon-wrap" style="background:#eef2ff;"><i data-lucide="trending-up" style="width:20px;height:20px;color:#6366f1;"></i></div></div>
+          <div class="stat-card"><div><div class="stat-val" style="color:#f59e0b;">5%</div><div class="stat-label">Platform Fee</div></div><div class="stat-icon-wrap" style="background:#fffbeb;"><i data-lucide="percent" style="width:20px;height:20px;color:#f59e0b;"></i></div></div>
+          <div class="stat-card"><div><div class="stat-val" style="color:#a855f7;">$${wallet.pending.toLocaleString()}</div><div class="stat-label">Pending</div></div><div class="stat-icon-wrap" style="background:#faf5ff;"><i data-lucide="clock" style="width:20px;height:20px;color:#a855f7;"></i></div></div>
+        </div>
+
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;">
+          <div style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <span style="font-weight:600;font-size:15px;">Transaction History</span>
+            <div id="earningsFilterBar" style="display:flex;gap:4px;background:var(--input-bg);padding:4px;border-radius:12px;">
+              ${[['all','All'],['Released','Released'],['In Escrow','In Escrow'],['Pending Approval','Pending']].map(([val,label],i) =>
+                `<button onclick="filterEarnings('${val}',this)" style="padding:5px 12px;border-radius:9px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;border:none;background:${i===0?'var(--card)':'transparent'};color:${i===0?'var(--foreground)':'var(--muted-foreground)'};box-shadow:${i===0?'0 1px 4px rgba(0,0,0,0.08)':'none'};">${label}</button>`).join('')}
+            </div>
+          </div>
+          <div style="padding:0 24px;" id="earningsContainer">${renderEarnings('all', wallet.transactions)}</div>
+        </div>
+
+        <!-- Withdraw Modal -->
+        <div id="withdrawModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(4px);overflow:auto;">
+          <div style="background:white;border-radius:24px;padding:26px;width:100%;max-width:520px;max-height:90vh;margin:18px;box-shadow:0 32px 80px rgba(0,0,0,0.15);overflow:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+              <div>
+                <h2 style="font-size:28px;font-weight:800;margin:0;color:#5f46ff;">Withdraw Funds</h2>
+                <p style="margin:6px 0 0;font-size:14px;color:#6b7280;">Securely transfer funds to your bank account</p>
+              </div>
+              <button onclick="document.getElementById('withdrawModal').style.display='none'" style="width:34px;height:34px;border-radius:10px;border:none;background:#e9e7ff;color:#5f46ff;cursor:pointer;font-size:22px;line-height:1;">×</button>
+            </div>
+            <div style="background:#f7f4ff;border:1px solid #e5dbff;border-radius:18px;padding:18px;margin-bottom:20px;">
+              <div style="font-size:14px;font-weight:700;color:#6b46ff;margin-bottom:8px;">Available for Withdrawal</div>
+              <div id="availableBalanceDisplayLarge" style="font-size:40px;font-weight:800;color:#5f46ff;">$${wallet.available.toLocaleString()}</div>
+            </div>
+            <div style="margin-bottom:16px;">
+              <label style="font-weight:700;font-size:14px;color:#111827;">Amount to withdraw</label>
+              <div style="margin-top:10px;position:relative;">
+                <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#7c3aed;font-size:18px;font-weight:700;">$</span>
+                <input id="withdrawAmount" type="number" min="50" step="1" placeholder="0.00" style="width:100%;padding:14px 14px 14px 40px;border:2px solid #e5e7eb;border-radius:14px;font-size:22px;font-weight:800;color:#111827;outline:none;box-sizing:border-box;" oninput="updateWithdrawPreview()" />
+              </div>
+              <div id="withdrawAmountErr" style="color:#ef4444;font-size:12px;margin-top:4px;display:none;"></div>
+              <div style="margin-top:8px;font-size:13px;color:#6b7280;">Minimum: $50 · Maximum: $<span id="withdrawMaxAmount">${wallet.available}</span></div>
+            </div>
+            <div style="margin-bottom:16px;">
+              <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:8px;">Quick Amounts</div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                ${[100,500,1000,2500].map(v => `<button type="button" onclick="setQuickAmount(${v})" style="padding:10px 16px;border-radius:12px;border:1px solid #d7cffd;background:white;color:#5f46ff;font-weight:700;cursor:pointer;">$${v}</button>`).join('')}
+              </div>
+            </div>
+            <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;padding:14px 16px;margin-bottom:20px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="color:#6b7280;">Amount</span><span id="previewAmount" style="font-weight:700;">$0.00</span></div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="color:#6b7280;">Fee (1%)</span><span id="previewFee" style="font-weight:700;color:#ef4444;">$0.00</span></div>
+              <div style="height:1px;background:#eef2ff;margin:8px 0;"></div>
+              <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:800;"><span>You'll Receive</span><span id="previewNet" style="color:#059669;">$0.00</span></div>
+            </div>
+            <div style="margin-bottom:18px;">
+              <label style="font-size:14px;font-weight:700;color:#111827;display:block;margin-bottom:8px;">Withdraw to</label>
+              <select id="withdrawDestination" style="width:100%;padding:12px 14px;border:2px solid #e5e7eb;border-radius:12px;font-size:14px;color:#111827;">
+                <option>🏦 Chase Bank ••••5241</option>
+                <option>💳 PayPal ••••1234</option>
+                <option>₿ Crypto Wallet ••••ABCD</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:12px;">
+              <button onclick="document.getElementById('withdrawModal').style.display='none'" style="flex:1;padding:14px;border:1px solid #dcd6ff;border-radius:12px;background:white;font-size:15px;font-weight:700;color:#5f46ff;">Cancel</button>
+              <button onclick="confirmWithdraw()" style="flex:1;padding:14px;border:none;border-radius:12px;background:#22c55e;color:white;font-size:15px;font-weight:800;">✓ Confirm</button>
+            </div>
+          </div>
+        </div>`;
+
+      initDashboard({ role:'worker', activePath:'worker-wallet.html', pageTitle:'Wallet & Earnings', pageSubtitle:'Track your earnings and manage withdrawals', content });
+      lucide.createIcons();
+
+      window.filterEarnings = function(filter, btn) {
+        const c = document.getElementById('earningsContainer');
+        if (c) { c.innerHTML = renderEarnings(filter); lucide.createIcons(); }
+        document.querySelectorAll('#earningsFilterBar button').forEach(b => { b.style.background='transparent'; b.style.color='var(--muted-foreground)'; b.style.boxShadow='none'; });
+        btn.style.background='var(--card)'; btn.style.color='var(--foreground)'; btn.style.boxShadow='0 1px 4px rgba(0,0,0,0.08)';
+      };
+
+      window.showWithdrawModal = function() {
+        const user = Store.getUserById(session.userId);
+        const bal = user ? (user.walletBalance || 0) : 0;
+        const el = id => document.getElementById(id);
+        if (el('availableBalanceDisplayLarge')) el('availableBalanceDisplayLarge').textContent = '$' + bal.toLocaleString();
+        if (el('withdrawMaxAmount')) el('withdrawMaxAmount').textContent = bal;
+        if (el('withdrawAmount')) el('withdrawAmount').value = '';
+        updateWithdrawPreview();
+        document.getElementById('withdrawModal').style.display = 'flex';
+      };
+
+      window.setQuickAmount = function(v) {
+        const inp = document.getElementById('withdrawAmount');
+        if (inp) { inp.value = v; updateWithdrawPreview(); }
+      };
+
+      window.updateWithdrawPreview = function() {
+        const amt = parseFloat(document.getElementById('withdrawAmount')?.value) || 0;
+        const fee = +(amt * 0.01).toFixed(2);
+        const net = +(amt - fee).toFixed(2);
+        const fmt = n => '$' + n.toFixed(2);
+        const el = id => document.getElementById(id);
+        if (el('previewAmount')) el('previewAmount').textContent = fmt(amt);
+        if (el('previewFee'))    el('previewFee').textContent    = fmt(fee);
+        if (el('previewNet'))    el('previewNet').textContent    = fmt(net);
+      };
+
+      window.confirmWithdraw = function() {
+        const amt = parseFloat(document.getElementById('withdrawAmount')?.value) || 0;
+        const user = Store.getUserById(session.userId);
+        const bal = user ? (user.walletBalance || 0) : 0;
+        const errEl = document.getElementById('withdrawAmountErr');
+        if (errEl) { errEl.style.display='none'; errEl.textContent=''; }
+        document.getElementById('withdrawAmount').style.border = '2px solid #e5e7eb';
+
+        if (amt < 50) {
+          if (errEl) { errEl.textContent = 'Minimum withdrawal is $50.'; errEl.style.display='block'; }
+          document.getElementById('withdrawAmount').style.border = '2px solid #ef4444';
+          return;
+        }
+        if (amt > bal) {
+          if (errEl) { errEl.textContent = 'Amount exceeds available balance.'; errEl.style.display='block'; }
+          document.getElementById('withdrawAmount').style.border = '2px solid #ef4444';
+          return;
+        }
+        Store.updateUser(session.userId, { walletBalance: bal - amt });
+        Store.createTransaction({ type:'withdrawal', amount:amt, fromId:session.userId, toId:'external', description:'Withdrawal request', status:'completed', createdAt:new Date().toISOString().slice(0,10) });
+        document.getElementById('withdrawModal').style.display = 'none';
+        const balDisplay = document.getElementById('availableBalanceDisplay');
+        if (balDisplay) balDisplay.textContent = '$' + (bal - amt).toLocaleString();
+        const earningsC = document.getElementById('earningsContainer');
+        if (earningsC) { earningsC.innerHTML = renderEarnings('all'); lucide.createIcons(); }
+        Validate.toast('Withdrawal of $' + amt.toLocaleString() + ' submitted successfully.', 'success');
+      };
+    });
+  </script>
+</head>
+<body></body>
+</html>

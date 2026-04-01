@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manage Tasks — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .su-toolbar { display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
+    .su-search { flex:1; min-width:200px; padding:10px 16px; border:1px solid var(--border); border-radius:12px; background:var(--background); font-size:14px; font-family:inherit; outline:none; }
+    .su-search:focus { box-shadow:0 0 0 2px var(--ring); }
+    .su-filter { padding:10px 14px; border:1px solid var(--border); border-radius:12px; background:var(--background); font-size:14px; font-family:inherit; cursor:pointer; }
+    .btn-add { display:inline-flex; align-items:center; gap:8px; padding:10px 18px; border-radius:12px; background:linear-gradient(to bottom,hsl(0,0%,16%),hsl(0,0%,10%)); color:#fff; border:none; font-size:14px; font-weight:500; cursor:pointer; transition:transform 0.15s; white-space:nowrap; }
+    .btn-add:hover { transform:scale(1.02); }
+    .task-table-wrap { background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+    .task-table-wrap table { width:100%; border-collapse:collapse; }
+    .task-table-wrap th { padding:12px 16px; text-align:left; font-size:12px; font-weight:600; color:var(--muted-foreground); background:var(--secondary); border-bottom:1px solid var(--border); text-transform:uppercase; letter-spacing:0.04em; }
+    .task-table-wrap td { padding:14px 16px; border-bottom:1px solid var(--border); font-size:14px; vertical-align:middle; }
+    .task-table-wrap tr:last-child td { border-bottom:none; }
+    .task-table-wrap tr:hover td { background:rgba(0,0,0,0.015); }
+    .action-btns { display:flex; gap:6px; }
+    .btn-edit { padding:5px 12px; border-radius:8px; border:1px solid var(--border); background:var(--background); font-size:12px; font-weight:500; cursor:pointer; }
+    .btn-edit:hover { background:var(--secondary); }
+    .btn-delete { padding:5px 12px; border-radius:8px; border:1px solid #fee2e2; background:#fef2f2; color:#991b1b; font-size:12px; font-weight:500; cursor:pointer; }
+    .btn-delete:hover { background:#fee2e2; }
+    .progress-bar { height:6px; background:#e2e8f0; border-radius:3px; overflow:hidden; width:80px; }
+    .progress-fill { height:100%; background:#6366f1; border-radius:3px; }
+    /* Modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; display:none; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:var(--card); border-radius:20px; padding:28px; max-width:520px; width:100%; box-shadow:0 24px 64px rgba(0,0,0,0.18); max-height:90vh; overflow-y:auto; }
+    .modal-title { font-size:18px; font-weight:600; margin-bottom:6px; }
+    .modal-sub { font-size:14px; color:var(--muted-foreground); margin-bottom:24px; }
+    .form-group { margin-bottom:16px; }
+    .form-label { display:block; font-size:13px; font-weight:500; margin-bottom:6px; }
+    .req { color:#ef4444; }
+    .form-input, .form-select, .form-textarea { width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:10px; background:var(--background); font-size:14px; font-family:inherit; outline:none; box-sizing:border-box; }
+    .form-input:focus, .form-select:focus, .form-textarea:focus { box-shadow:0 0 0 2px var(--ring); }
+    .form-textarea { resize:vertical; }
+    .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .modal-actions { display:flex; gap:10px; margin-top:24px; }
+    .btn-cancel-modal { flex:1; padding:10px; border-radius:12px; border:1px solid var(--border); background:var(--background); font-size:14px; font-weight:500; cursor:pointer; }
+    .btn-save-modal { flex:2; padding:10px; border-radius:12px; border:none; background:linear-gradient(to bottom,hsl(0,0%,16%),hsl(0,0%,10%)); color:#fff; font-size:14px; font-weight:500; cursor:pointer; }
+    .empty-row td { text-align:center; padding:40px; color:var(--muted-foreground); }
+  </style>
+  <script>
+    let allTasks = [];
+    let editingTaskId = null;
+
+    const statusBadge = s => {
+      const map = { 'open':'badge-orange','in-progress':'badge-blue','under-review':'badge-purple','completed':'badge-green','cancelled':'badge-red' };
+      return `<span class="badge ${map[s]||'badge-blue'}">${s.replace(/-/g,' ')}</span>`;
+    };
+
+    function renderTasks() {
+      const search = document.getElementById('taskSearch')?.value.toLowerCase() || '';
+      const statusFilter = document.getElementById('statusFilter')?.value || 'all';
+
+      let filtered = allTasks.filter(t => {
+        const matchSearch = !search || t.title.toLowerCase().includes(search) || t.category.toLowerCase().includes(search);
+        const matchStatus = statusFilter === 'all' || t.status === statusFilter;
+        return matchSearch && matchStatus;
+      });
+
+      const tbody = document.getElementById('tasksTableBody');
+      if (!tbody) return;
+
+      document.getElementById('taskCount').textContent = filtered.length + ' task' + (filtered.length !== 1 ? 's' : '');
+
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No tasks found.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(t => {
+        const client = Store.getUserById(t.clientId);
+        const worker = t.workerId ? Store.getUserById(t.workerId) : null;
+        return `
+        <tr id="taskRow_${t.id}">
+          <td>
+            <div style="font-weight:600;font-size:13px;max-width:180px;">${t.title}</div>
+            <div style="font-size:12px;color:var(--muted-foreground);">${t.category}</div>
+          </td>
+          <td style="font-size:13px;">${client?.name || 'Unknown'}</td>
+          <td style="font-size:13px;">${worker?.name || '<span style="color:var(--muted-foreground);">Unassigned</span>'}</td>
+          <td style="font-weight:600;">$${t.budget.toLocaleString()}</td>
+          <td>
+            <div class="progress-bar"><div class="progress-fill" style="width:${t.progress}%;"></div></div>
+            <span style="font-size:11px;color:var(--muted-foreground);">${t.progress}%</span>
+          </td>
+          <td>${statusBadge(t.status)}</td>
+          <td>
+            <div class="action-btns">
+              <button class="btn-edit" onclick="openEditModal('${t.id}')">Edit</button>
+              <button class="btn-delete" onclick="deleteTask('${t.id}')">Delete</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    function openAddModal() {
+      editingTaskId = null;
+      document.getElementById('tModalTitle').textContent = 'Add New Task';
+      document.getElementById('tModalSub').textContent = 'Create a new task on the platform.';
+      document.getElementById('tSaveBtn').textContent = 'Create Task';
+      clearTaskForm();
+      document.getElementById('taskModal').classList.add('open');
+    }
+
+    function openEditModal(id) {
+      const task = Store.getTaskById(id);
+      if (!task) return;
+      editingTaskId = id;
+      document.getElementById('tModalTitle').textContent = 'Edit Task';
+      document.getElementById('tModalSub').textContent = 'Update task: ' + task.title;
+      document.getElementById('tSaveBtn').textContent = 'Save Changes';
+      document.getElementById('tTitle').value = task.title;
+      document.getElementById('tCategory').value = task.category;
+      document.getElementById('tBudget').value = task.budget;
+      document.getElementById('tStatus').value = task.status;
+      document.getElementById('tDeadline').value = task.deadline || '';
+      document.getElementById('tDesc').value = task.description || '';
+      document.getElementById('taskModal').classList.add('open');
+    }
+
+    function closeTaskModal() {
+      document.getElementById('taskModal').classList.remove('open');
+      editingTaskId = null;
+      Validate.clearAllErrors();
+    }
+
+    function clearTaskForm() {
+      ['tTitle','tBudget','tDeadline','tDesc'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+      const cat = document.getElementById('tCategory'); if (cat) cat.value = 'Web Development';
+      const st = document.getElementById('tStatus'); if (st) st.value = 'open';
+    }
+
+    function saveTask() {
+      const title = document.getElementById('tTitle').value.trim();
+      const category = document.getElementById('tCategory').value;
+      const budget = document.getElementById('tBudget').value;
+      const status = document.getElementById('tStatus').value;
+      const deadline = document.getElementById('tDeadline').value;
+      const description = document.getElementById('tDesc').value.trim();
+
+      const { valid } = Validate.form([
+        { fieldId: 'tTitle', value: title, checks: [v => Validate.required(v, 'Title'), v => Validate.minLength(v, 5, 'Title')] },
+        { fieldId: 'tBudget', value: budget, checks: [v => Validate.positiveNumber(v, 'Budget')] },
+        { fieldId: 'tDesc', value: description, checks: [v => Validate.required(v, 'Description')] },
+      ]);
+      if (!valid) return;
+
+      if (editingTaskId) {
+        Store.updateTask(editingTaskId, { title, category, budget: parseFloat(budget), status, deadline, description });
+        Validate.toast('Task updated successfully.', 'success');
+      } else {
+        const session = typeof Auth !== "undefined" ? Auth.getCurrentUser() : null;
+        Store.createTask({ title, category, budget: parseFloat(budget), status, deadline, description, clientId: session?.userId || 'u1', skills: [], currency: 'USD', auditEnabled: false });
+        Validate.toast('Task created successfully.', 'success');
+      }
+
+      allTasks = Store.getTasks();
+      closeTaskModal();
+      renderTasks();
+    }
+
+    function deleteTask(id) {
+      const task = Store.getTaskById(id);
+      if (!task) return;
+      Validate.confirm(
+        `Permanently delete "${task.title}"? All milestones linked to this task will also be affected.`,
+        () => {
+          Store.deleteTask(id);
+          allTasks = Store.getTasks();
+          renderTasks();
+          Validate.toast('Task deleted.', 'error');
+        }
+      );
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('superuser')) return;
+      allTasks = Store.getTasks();
+
+      const content = `
+        <div class="su-toolbar">
+          <input class="su-search" id="taskSearch" placeholder="Search by title or category..." oninput="renderTasks()" />
+          <select class="su-filter" id="statusFilter" onchange="renderTasks()">
+            <option value="all">All Statuses</option>
+            <option value="open">Open</option>
+            <option value="in-progress">In Progress</option>
+            <option value="under-review">Under Review</option>
+            <option value="completed">Completed</option>
+          </select>
+          <button class="btn-add" onclick="openAddModal()">
+            <i data-lucide="plus" style="width:16px;height:16px;"></i> Add Task
+          </button>
+        </div>
+
+        <div style="margin-bottom:12px;font-size:13px;color:var(--muted-foreground);">Showing <strong id="taskCount"></strong></div>
+
+        <div class="task-table-wrap">
+          <table>
+            <thead>
+              <tr><th>Task</th><th>Client</th><th>Worker</th><th>Budget</th><th>Progress</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="tasksTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Modal -->
+        <div class="modal-overlay" id="taskModal">
+          <div class="modal">
+            <p class="modal-title" id="tModalTitle">Add Task</p>
+            <p class="modal-sub" id="tModalSub"></p>
+            <div class="form-group">
+              <label class="form-label">Title <span class="req">*</span></label>
+              <input class="form-input" id="tTitle" placeholder="e.g. E-commerce Website Redesign" />
+            </div>
+            <div class="grid-2">
+              <div class="form-group">
+                <label class="form-label">Category</label>
+                <select class="form-select" id="tCategory">
+                  <option>Web Development</option><option>Mobile Development</option><option>Backend / API</option><option>UI/UX Design</option><option>AI / Machine Learning</option><option>DevOps / Cloud</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Status</label>
+                <select class="form-select" id="tStatus">
+                  <option value="open">Open</option><option value="in-progress">In Progress</option><option value="under-review">Under Review</option><option value="completed">Completed</option>
+                </select>
+              </div>
+            </div>
+            <div class="grid-2">
+              <div class="form-group">
+                <label class="form-label">Budget (USD) <span class="req">*</span></label>
+                <input class="form-input" id="tBudget" type="number" placeholder="5000" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Deadline</label>
+                <input class="form-input" id="tDeadline" type="date" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Description <span class="req">*</span></label>
+              <textarea class="form-textarea" id="tDesc" rows="3" placeholder="Task description..."></textarea>
+            </div>
+            <div class="modal-actions">
+              <button class="btn-cancel-modal" onclick="closeTaskModal()">Cancel</button>
+              <button class="btn-save-modal" id="tSaveBtn" onclick="saveTask()">Save</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      initDashboard({ role: 'superuser', activePath: 'superuser-tasks.html', pageTitle: 'Manage Tasks', pageSubtitle: 'View, edit or remove any task on the platform', content });
+
+      setTimeout(() => {
+        lucide.createIcons();
+        renderTasks();
+        document.getElementById('taskModal')?.addEventListener('click', e => { if (e.target.id === 'taskModal') closeTaskModal(); });
+        ['tTitle','tBudget','tDesc'].forEach(id => document.getElementById(id)?.addEventListener('input', () => Validate.clearError(id)));
+      }, 100);
+    });
+  </script>
+</head>
+<body></body>
+</html>
