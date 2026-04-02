@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Expert Reviewer Login — GigBoard</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <style>
+    .forgot-link { font-size: 12px; color: var(--muted-foreground); transition: color 0.2s; }
+    .forgot-link:hover { color: var(--foreground); }
+    .remember-row { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; }
+    .remember-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--foreground); cursor: pointer; }
+    .remember-row label { font-size: 14px; color: var(--muted-foreground); cursor: pointer; font-weight: 400; }
+    .btn-google {
+      width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 12px; border-radius: 12px; border: 1px solid var(--border);
+      background: var(--card); font-size: 14px; font-weight: 500; font-family: inherit;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .btn-google:hover { background: var(--secondary); }
+  </style>
+</head>
+<body>
+  <div class="auth-page">
+    <!-- Background video -->
+    <div class="auth-video-wrap">
+      <video class="auth-video" autoplay muted loop playsinline>
+        <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260302_085640_276ea93b-d7da-4418-a09b-2aa5b490e838.mp4" type="video/mp4" />
+      </video>
+      <div class="auth-overlay"></div>
+    </div>
+
+    <!-- LEFT — Branding -->
+    <div class="auth-left">
+      <h1 class="auth-title">Ensure quality with <span class="serif">expert</span> reviews.</h1>
+      <p class="auth-sub">Access the audit dashboard to review technical deliverables, resolve disputes, and maintain quality standards across the platform.</p>
+      <div class="auth-features">
+        <div class="auth-feature">
+          <div class="auth-feature-icon"><i data-lucide="file-check" style="width:15px;height:15px;"></i></div>
+          <span style="font-size:14px;">Technical audit dashboard</span>
+        </div>
+        <div class="auth-feature">
+          <div class="auth-feature-icon"><i data-lucide="scale" style="width:15px;height:15px;"></i></div>
+          <span style="font-size:14px;">Dispute resolution panel</span>
+        </div>
+        <div class="auth-feature">
+          <div class="auth-feature-icon"><i data-lucide="lock" style="width:15px;height:15px;"></i></div>
+          <span style="font-size:14px;">Secure expert verification</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT — Login Form -->
+    <div class="auth-right">
+      <div class="auth-card">
+        <div class="auth-card-brand">
+          <i data-lucide="shield-check" style="width:20px;height:20px;"></i>
+          <span class="auth-card-brand-name">GigBoard</span>
+        </div>
+        <h2 style="font-size:24px;font-weight:500;letter-spacing:-0.03em;margin-top:24px;margin-bottom:4px;">Expert Reviewer Login</h2>
+        <p style="font-size:14px;color:var(--muted-foreground);margin-bottom:32px;">Access the audit dashboard to review deliverables and resolve disputes.</p>
+
+        <form id="expertLoginForm">
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-input" placeholder="expert@example.com" id="expertEmail" />
+          </div>
+
+          <div class="form-group">
+            <div class="form-label-row">
+              <label class="form-label" style="margin-bottom:0;">Password</label>
+              <a href="forgot-password.html" class="forgot-link">Forgot password?</a>
+            </div>
+            <div class="form-input-wrap">
+              <input type="password" class="form-input form-input-pr" placeholder="••••••••" id="expertPw" />
+              <button type="button" class="form-input-icon-right" id="toggleExpertPw">
+                <i data-lucide="eye" style="width:16px;height:16px;"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="remember-row">
+            <input type="checkbox" id="rememberMe" />
+            <label for="rememberMe">Remember me</label>
+          </div>
+
+          <button type="submit" class="btn-submit">Login</button>
+        </form>
+
+        <div class="divider">
+          <div class="divider-line"></div>
+          <span class="divider-text">or continue with</span>
+          <div class="divider-line"></div>
+        </div>
+
+        <button class="btn-google" onclick="handleGoogleLogin()">
+          <svg width="16" height="16" viewBox="0 0 24 24">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 0 0 1 12c0 1.77.42 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
+          Login with Google
+        </button>
+
+        <p class="auth-footer-text" style="margin-top:32px;">
+          Want to join our network? <a href="expert-signup.html">Apply as Expert Reviewer</a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    lucide.createIcons();
+
+    if (Auth.isLoggedIn()) {
+      const u = Auth.getCurrentUser();
+      window.location.href = Auth.getDashboardUrl(u.role);
+    }
+
+    let showPw = false;
+    document.getElementById('toggleExpertPw').addEventListener('click', function () {
+      showPw = !showPw;
+      document.getElementById('expertPw').type = showPw ? 'text' : 'password';
+      this.innerHTML = showPw
+        ? '<i data-lucide="eye-off" style="width:16px;height:16px;"></i>'
+        : '<i data-lucide="eye" style="width:16px;height:16px;"></i>';
+      lucide.createIcons();
+    });
+
+    ['expertEmail','expertPw'].forEach(id => {
+      document.getElementById(id)?.addEventListener('input', () => Validate.clearError(id));
+    });
+
+    document.getElementById('expertLoginForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const email = document.getElementById('expertEmail').value.trim();
+      const pw    = document.getElementById('expertPw').value;
+
+      const { valid } = Validate.form([
+        { fieldId: 'expertEmail', value: email, checks: [Validate.email] },
+        { fieldId: 'expertPw',    value: pw,    checks: [v => Validate.required(v, 'Password')] },
+      ]);
+      if (!valid) return;
+
+      const btn = e.target.querySelector('[type="submit"]');
+      btn.textContent = 'Signing in...'; btn.disabled = true;
+      setTimeout(() => {
+        const result = Auth.login(email, pw);
+        if (!result.success) {
+          Validate.showError('expertEmail', result.error);
+          btn.textContent = 'Login'; btn.disabled = false;
+          return;
+        }
+        window.location.href = Auth.getDashboardUrl(result.user.role);
+      }, 400);
+    });
+
+    function handleGoogleLogin() {
+      Validate.toast('Social login is not available in demo mode.', 'info');
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Worker Dashboard — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('worker')) return;
+
+      // Live stats from store
+      const session = typeof Auth !== "undefined" ? Auth.getCurrentUser() : null;
+      const userId = session?.userId || 'u2';
+      const myTasks = Store.getTasksByWorker(userId);
+      const activeProjects = myTasks.filter(t => t.status === 'in-progress').length;
+      const completedProjects = myTasks.filter(t => t.status === 'completed').length;
+      const user = Store.getUserById(userId);
+      const earned = Store.getTransactionsByUser(userId).filter(t => t.type === 'milestone-release').reduce((s,t) => s+t.amount, 0);
+      const proposals = Store.getProposalsByWorker(userId).length;
+      const milestones = Store.getMilestones().filter(m => m.workerId === userId);
+      const completedMs = milestones.filter(m => m.status === 'completed').length;
+
+      const content = `
+        <!-- Stats -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div>
+              <div class="stat-val">${activeProjects}</div>
+              <div class="stat-label">Active Projects</div>
+              <div class="stat-change">${myTasks.length} total</div>
+            </div>
+            <div class="stat-icon-wrap" style="background:#eff6ff;">
+              <i data-lucide="folder-kanban" style="width:20px;height:20px;color:#3b82f6;"></i>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="stat-val">$${(earned || 0).toLocaleString()}</div>
+              <div class="stat-label">Total Earned</div>
+              <div class="stat-change">Lifetime earnings</div>
+            </div>
+            <div class="stat-icon-wrap" style="background:#ecfdf5;">
+              <i data-lucide="wallet" style="width:20px;height:20px;color:#10b981;"></i>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="stat-val">${proposals}</div>
+              <div class="stat-label">Proposals Sent</div>
+              <div class="stat-change">${Store.getProposalsByWorker(userId).filter(p=>p.status==='pending').length} pending review</div>
+            </div>
+            <div class="stat-icon-wrap" style="background:#faf5ff;">
+              <i data-lucide="send" style="width:20px;height:20px;color:#a855f7;"></i>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="stat-val">${user?.rating || 4.9}</div>
+              <div class="stat-label">Rating</div>
+              <div class="stat-change">From 47 reviews</div>
+            </div>
+            <div class="stat-icon-wrap" style="background:#fffbeb;">
+              <i data-lucide="star" style="width:20px;height:20px;color:#f59e0b;"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div style="margin-bottom: 32px; margin-top: 32px;">
+          <h2 style="font-size: 18px; font-weight: 600; margin-bottom: 16px;">Quick Actions</h2>
+          <div class="quick-actions-v2">
+            <a href="browse-tasks.html" class="qa-v2-card" style="background:#f0f6ff; border-color:#e0efff;">
+              <div class="qa-v2-icon" style="color:#2563eb;">
+                <i data-lucide="search" style="width:20px;height:20px;"></i>
+              </div>
+              <div class="qa-v2-content">
+                <div class="qa-v2-title">Find Tasks</div>
+                <div class="qa-v2-desc">Browse and apply for new opportunities</div>
+              </div>
+            </a>
+            <a href="worker-my-projects.html" class="qa-v2-card" style="background:#f0fdf4; border-color:#dcfce7;">
+              <div class="qa-v2-icon" style="color:#16a34a;">
+                <i data-lucide="folder-kanban" style="width:20px;height:20px;"></i>
+              </div>
+              <div class="qa-v2-content">
+                <div class="qa-v2-title">My Projects</div>
+                <div class="qa-v2-desc">Manage your active milestones</div>
+              </div>
+            </a>
+            <a href="messages.html" class="qa-v2-card" style="background:#fffaf0; border-color:#ffeed5;">
+              <div class="qa-v2-icon" style="color:#ea580c;">
+                <i data-lucide="message-square" style="width:20px;height:20px;"></i>
+              </div>
+              <div class="qa-v2-content">
+                <div class="qa-v2-title">Messages</div>
+                <div class="qa-v2-desc">Communicate with your clients</div>
+              </div>
+            </a>
+            <a href="worker-wallet.html" class="qa-v2-card" style="background:#fdf5ff; border-color:#f8e4ff;">
+              <div class="qa-v2-icon" style="color:#9333ea;">
+                <i data-lucide="wallet" style="width:20px;height:20px;"></i>
+              </div>
+              <div class="qa-v2-content">
+                <div class="qa-v2-title">Wallet</div>
+                <div class="qa-v2-desc">View earnings and withdraw funds</div>
+              </div>
+            </a>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+          <!-- Active Projects -->
+          <div class="projects-table">
+            <div class="table-header">
+              <span class="table-title">Active Projects</span>
+              <a href="worker-my-projects.html" class="btn-outline" style="font-size:13px;padding:6px 14px;">View All</a>
+            </div>
+            <div style="padding:8px 0;">
+              ${myTasks.filter(t => t.status !== 'completed').slice(0, 3).map(t => {
+                const client = Store.getUserById(t.clientId);
+                const clientName = client ? client.name : 'Unknown Client';
+                const dueText = t.deadline ? new Date(t.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'TBD';
+                
+                const ms = Store.getMilestonesByTask(t.id);
+                const msCount = ms.length;
+                const msDone = ms.filter(m => ['completed', 'approved', 'audit-passed', 'done'].includes(m.status)).length;
+                const prog = msCount ? Math.round((msDone / msCount) * 100) : 0;
+                
+                const statusColors = { 'in-progress': 'badge-blue', 'review': 'badge-purple', 'pending': 'badge-orange', 'completed': 'badge-green', 'open': 'badge-orange' };
+                const badgeClass = statusColors[t.status] || 'badge-blue';
+
+                return `
+                <div style="padding:12px 20px;border-bottom:1px solid rgba(0,0,0,0.04);transition:background 0.15s;cursor:pointer;"
+                     onmouseenter="this.style.background='#f8f9fb'" onmouseleave="this.style.background='transparent'" onclick="window.location.href='worker-workroom.html?id=${t.id}'">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                    <span style="font-size:14px;font-weight:600;">${t.title}</span>
+                    <span class="badge ${badgeClass}" style="text-transform:capitalize;">${t.status.replace(/-/g, ' ')}</span>
+                  </div>
+                  <div style="font-size:12px;color:var(--muted-foreground);margin-bottom:8px;">Client: ${clientName} · Due ${dueText}</div>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <div style="flex:1;height:5px;border-radius:9999px;background:var(--muted);overflow:hidden;">
+                      <div style="height:100%;border-radius:9999px;background:#6366f1;width:${prog}%;"></div>
+                    </div>
+                    <span style="font-size:11px;font-weight:600;color:#6366f1;">${prog}%</span>
+                  </div>
+                </div>`;
+              }).join('') || '<div style="padding:24px;text-align:center;color:var(--muted-foreground);font-size:13px;">No active projects. Apply for some tasks!</div>'}
+            </div>
+          </div>
+
+          <!-- Recommended Tasks -->
+          <div class="projects-table">
+            <div class="table-header">
+              <span class="table-title">Recommended Tasks</span>
+              <a href="browse-tasks.html" class="btn-primary" style="font-size:13px;padding:6px 14px;">Browse All</a>
+            </div>
+            <div style="padding:8px 0;">
+              ${Store.getTasks().filter(t => t.status === 'open' && t.workerId !== userId && t.clientId !== userId).slice(0, 3).map(t => {
+                const match = Math.floor(Math.random() * 20) + 80; // random match 80-99%
+                const tags = t.skills || ['JavaScript', 'HTML'];
+                return `
+                <div style="padding:16px 20px;border-bottom:1px solid rgba(0,0,0,0.04);cursor:pointer;transition:background 0.15s;" onmouseenter="this.style.background='#f8f9fb'" onmouseleave="this.style.background='transparent'" onclick="window.location.href='task-details.html?id=${t.id}'">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
+                    <span style="font-size:14px;font-weight:600;">${t.title}</span>
+                    <span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;background:#eef2ff;color:#4f46e5;">${match}% match</span>
+                  </div>
+                  <div style="font-size:13px;font-weight:600;color:#10b981;margin-bottom:8px;">$${t.budget.toLocaleString()}</div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    ${tags.map(tag => `<span class="skill-tag">${tag}</span>`).join('')}
+                  </div>
+                </div>`;
+              }).join('') || '<div style="padding:20px;text-align:center;color:var(--muted-foreground);font-size:13px;">No recommended tasks right now.</div>'}
+            </div>
+          </div>
+        </div>
+
+        <!-- Performance Summary -->
+        <div style="margin-top:20px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+            <h3 style="font-size:15px;font-weight:600;">Performance Summary</h3>
+            <a href="performance-analytics.html" class="btn-outline" style="font-size:13px;padding:6px 14px;">Full Analytics</a>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
+            ${[
+              { label:'On-Time Delivery', val:'94%', color:'#10b981', bg:'#ecfdf5' },
+              { label:'Client Satisfaction', val:'4.9★', color:'#f59e0b', bg:'#fffbeb' },
+              { label:'Acceptance Rate', val:'87%', color:'#6366f1', bg:'#eef2ff' },
+              { label:'Response Time', val:'1.2h', color:'#a855f7', bg:'#faf5ff' },
+            ].map(m => `
+              <div style="padding:16px;border-radius:12px;background:${m.bg};text-align:center;">
+                <div style="font-size:22px;font-weight:900;color:${m.color};margin-bottom:4px;">${m.val}</div>
+                <div style="font-size:12px;color:#64748b;font-weight:500;">${m.label}</div>
+              </div>`).join('')}
+          </div>
+        </div>
+      `;
+
+      initDashboard({
+        role: 'worker',
+        activePath: 'worker-dashboard.html',
+        pageTitle: 'Worker Dashboard',
+        pageSubtitle: 'Track your active projects and find new opportunities',
+        content
+      });
+      lucide.createIcons();
+    });
+  </script>
+</head>
+<body></body>
+</html>

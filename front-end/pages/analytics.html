@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Project Insights — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    /* ── Layout helpers ───────────────────────────────────────────── */
+    .pi-grid-4   { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+    .pi-grid-2   { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+    @media(max-width:1100px){ .pi-grid-4{ grid-template-columns:repeat(2,1fr); } }
+    @media(max-width:700px) { .pi-grid-4{ grid-template-columns:1fr; } .pi-grid-2{ grid-template-columns:1fr; } }
+
+    /* ── Stat cards ───────────────────────────────────────────────── */
+    .pi-stat {
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:20px;
+      box-shadow:0 4px 12px rgba(194,194,194,.10);
+    }
+    .pi-stat-top   { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; }
+    .pi-stat-icon  { padding:10px; border-radius:10px; display:flex; align-items:center; justify-content:center; }
+    .pi-stat-trend { display:flex; align-items:center; gap:4px; font-size:12px; font-weight:500; }
+    .pi-stat-label { font-size:12px; color:var(--muted-foreground); margin-bottom:4px; }
+    .pi-stat-val   { font-size:30px; font-weight:500; line-height:1.1; }
+
+    /* ── Section cards ────────────────────────────────────────────── */
+    .pi-card {
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:24px;
+      box-shadow:0 4px 12px rgba(194,194,194,.10);
+    }
+    .pi-card-title   { font-size:17px; font-weight:500; margin-bottom:4px; }
+    .pi-card-subtitle{ font-size:13px; color:var(--muted-foreground); margin-bottom:24px; }
+
+    /* ── Chart wrapper ────────────────────────────────────────────── */
+    .pi-chart-wrap { position:relative; height:300px; }
+
+    /* ── Worker performance table ─────────────────────────────────── */
+    .pi-table { width:100%; border-collapse:collapse; }
+    .pi-table th {
+      text-align:left; padding:12px 16px;
+      font-size:11px; font-weight:500; text-transform:uppercase;
+      letter-spacing:.06em; color:var(--muted-foreground);
+      border-bottom:1px solid var(--border);
+    }
+    .pi-table th.center, .pi-table td.center { text-align:center; }
+    .pi-table td { padding:14px 16px; border-bottom:1px solid var(--border); font-size:13px; }
+    .pi-table tr:last-child td { border-bottom:none; }
+    .pi-table tr:hover td { background:rgba(0,0,0,.02); }
+    .pi-avatar {
+      width:32px; height:32px; border-radius:50%;
+      background:linear-gradient(135deg,#3b82f6,#8b5cf6);
+      display:flex; align-items:center; justify-content:center;
+      color:#fff; font-size:11px; font-weight:600; flex-shrink:0;
+    }
+    .pi-bar-wrap { display:flex; align-items:center; justify-content:center; gap:8px; }
+    .pi-bar-bg   { width:64px; height:8px; border-radius:9999px; background:var(--secondary); overflow:hidden; }
+    .pi-bar-fill { height:100%; border-radius:9999px; background:#22c55e; }
+    .top-badge   { display:inline-flex; align-items:center; gap:4px; font-size:11px; color:#ca8a04; margin-top:2px; }
+
+    /* ── Project health cards ─────────────────────────────────────── */
+    .pi-health-item {
+      padding:16px; border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(0,0,0,.015);
+      margin-bottom:12px;
+      transition:background .15s;
+    }
+    .pi-health-item:last-child { margin-bottom:0; }
+    .pi-health-item:hover { background:rgba(0,0,0,.03); }
+    .pi-health-row { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; }
+    .pi-risk-badge {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:4px 10px; border-radius:6px; border:1px solid; font-size:11px; font-weight:500;
+    }
+    .pi-prog-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .pi-prog-label{ display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; font-size:11px; }
+    .pi-prog-label span:last-child { font-size:13px; font-weight:500; }
+    .pi-prog-bg   { height:8px; border-radius:9999px; background:var(--secondary); overflow:hidden; }
+    .pi-prog-fill { height:100%; border-radius:9999px; }
+
+    /* ── Activity timeline ────────────────────────────────────────── */
+    .pi-timeline-item { display:flex; align-items:flex-start; gap:12px; margin-bottom:16px; }
+    .pi-timeline-item:last-child { margin-bottom:0; }
+    .pi-tl-icon {
+      width:36px; height:36px; border-radius:8px;
+      display:flex; align-items:center; justify-content:center;
+      flex-shrink:0; border:1px solid rgba(0,0,0,.06);
+    }
+    .pi-tl-title { font-size:13px; font-weight:500; margin-bottom:2px; }
+    .pi-tl-desc  { font-size:12px; color:var(--muted-foreground); margin-bottom:2px; }
+    .pi-tl-time  { font-size:11px; color:var(--muted-foreground); opacity:.7; }
+  </style>
+</head>
+<body></body>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('client')) return;
+
+    /* ── Data ────────────────────────────────────────────────────── */
+    var milestoneData = [
+      { month:'Jan', completed:12 }, { month:'Feb', completed:19 },
+      { month:'Mar', completed:15 }, { month:'Apr', completed:24 },
+      { month:'May', completed:31 }, { month:'Jun', completed:28 },
+    ];
+
+    var revenueData = [
+      { month:'Jan', escrow:45000, released:38000, pending:7000 },
+      { month:'Feb', escrow:52000, released:44000, pending:8000 },
+      { month:'Mar', escrow:48000, released:40000, pending:8000 },
+      { month:'Apr', escrow:61000, released:53000, pending:8000 },
+      { month:'May', escrow:68000, released:59000, pending:9000 },
+      { month:'Jun', escrow:64000, released:55000, pending:9000 },
+    ];
+
+    var workerPerformance = [
+      { name:'Sarah Johnson',   avatar:'SJ', projectsCompleted:28, successRate:98, rating:4.9, onTimeDelivery:96, top:true  },
+      { name:'Michael Chen',    avatar:'MC', projectsCompleted:24, successRate:95, rating:4.8, onTimeDelivery:92, top:false },
+      { name:'Emily Rodriguez', avatar:'ER', projectsCompleted:21, successRate:97, rating:4.9, onTimeDelivery:94, top:false },
+      { name:'David Kim',       avatar:'DK', projectsCompleted:19, successRate:93, rating:4.7, onTimeDelivery:89, top:false },
+      { name:'Jessica Lee',     avatar:'JL', projectsCompleted:17, successRate:96, rating:4.8, onTimeDelivery:91, top:false },
+    ];
+
+    var projectHealth = [
+      { name:'E-commerce Website Redesign',   healthScore:92, progress:75, risk:'low',    worker:'Sarah Johnson'   },
+      { name:'Mobile App Development',        healthScore:78, progress:45, risk:'medium', worker:'Michael Chen'    },
+      { name:'Content Management System',     healthScore:95, progress:90, risk:'low',    worker:'Emily Rodriguez' },
+      { name:'Payment Gateway Integration',   healthScore:68, progress:60, risk:'high',   worker:'David Kim'       },
+    ];
+
+    var activityTimeline = [
+      { icon:'check-circle',  title:'Milestone Submitted',   desc:'Frontend Component Library submitted by Michael Chen', time:'2 hours ago', color:'#16a34a', bg:'#f0fdf4' },
+      { icon:'users',         title:'Worker Hired',          desc:'Sarah Johnson hired for E-commerce Website Redesign',   time:'5 hours ago', color:'#2563eb', bg:'#eff6ff' },
+      { icon:'dollar-sign',   title:'Escrow Released',       desc:'$2,100 released for Database Migration project',         time:'1 day ago',   color:'#7c3aed', bg:'#faf5ff' },
+      { icon:'shield',        title:'Expert Audit Completed',desc:'Technical audit passed with 96/100 score',               time:'1 day ago',   color:'#d97706', bg:'#fffbeb' },
+      { icon:'award',         title:'Milestone Approved',    desc:'Landing Page Design approved and escrow released',       time:'2 days ago',  color:'#16a34a', bg:'#f0fdf4' },
+    ];
+
+    /* ── Risk badge helper ────────────────────────────────────────── */
+    function riskBadge(risk) {
+      if (risk === 'low')    return { label:'Low Risk',    bg:'#f0fdf4', border:'#bbf7d0', text:'#15803d' };
+      if (risk === 'medium') return { label:'Medium Risk', bg:'#fffbeb', border:'#fde68a', text:'#b45309' };
+      return                        { label:'High Risk',   bg:'#fef2f2', border:'#fecaca', text:'#b91c1c' };
+    }
+
+    function healthColor(s) {
+      return s >= 90 ? '#16a34a' : s >= 70 ? '#ca8a04' : '#dc2626';
+    }
+
+    function healthBarColor(s) {
+      return s >= 90 ? '#22c55e' : s >= 70 ? '#eab308' : '#ef4444';
+    }
+
+    /* ── Build HTML ──────────────────────────────────────────────── */
+
+    // Worker performance rows
+    var workerRows = workerPerformance.map(function(w) {
+      return '<tr>'
+        + '<td><div style="display:flex;align-items:center;gap:12px;">'
+        + '<div class="pi-avatar">' + w.avatar + '</div>'
+        + '<div><div style="font-weight:500;">' + w.name + '</div>'
+        + (w.top ? '<div class="top-badge"><i data-lucide="award" style="width:12px;height:12px;"></i> Top Performer</div>' : '')
+        + '</div></div></td>'
+        + '<td class="center" style="font-weight:500;">' + w.projectsCompleted + '</td>'
+        + '<td class="center"><div class="pi-bar-wrap"><div class="pi-bar-bg"><div class="pi-bar-fill" style="width:' + w.successRate + '%;"></div></div><span style="font-weight:500;">' + w.successRate + '%</span></div></td>'
+        + '<td class="center"><div style="display:flex;align-items:center;justify-content:center;gap:4px;"><i data-lucide="star" style="width:14px;height:14px;fill:#facc15;color:#facc15;"></i><span style="font-weight:500;">' + w.rating + '</span></div></td>'
+        + '<td class="center" style="font-weight:500;">' + w.onTimeDelivery + '%</td>'
+        + '</tr>';
+    }).join('');
+
+    // Project health items
+    var healthItems = projectHealth.map(function(p) {
+      var rb = riskBadge(p.risk);
+      return '<div class="pi-health-item">'
+        + '<div class="pi-health-row">'
+        + '<div><div style="font-size:13px;font-weight:500;margin-bottom:2px;">' + p.name + '</div>'
+        + '<div style="font-size:11px;color:var(--muted-foreground);">' + p.worker + '</div></div>'
+        + '<span class="pi-risk-badge" style="background:' + rb.bg + ';border-color:' + rb.border + ';color:' + rb.text + ';">'
+        + '<i data-lucide="alert-circle" style="width:12px;height:12px;"></i>' + rb.label + '</span>'
+        + '</div>'
+        + '<div class="pi-prog-grid">'
+        + '<div><div class="pi-prog-label"><span style="color:var(--muted-foreground);">Health Score</span><span style="color:' + healthColor(p.healthScore) + ';">' + p.healthScore + '/100</span></div>'
+        + '<div class="pi-prog-bg"><div class="pi-prog-fill" style="width:' + p.healthScore + '%;background:' + healthBarColor(p.healthScore) + ';"></div></div></div>'
+        + '<div><div class="pi-prog-label"><span style="color:var(--muted-foreground);">Progress</span><span>' + p.progress + '%</span></div>'
+        + '<div class="pi-prog-bg"><div class="pi-prog-fill" style="width:' + p.progress + '%;background:linear-gradient(90deg,#3b82f6,#8b5cf6);"></div></div></div>'
+        + '</div></div>';
+    }).join('');
+
+    // Activity timeline items
+    var timelineItems = activityTimeline.map(function(a) {
+      return '<div class="pi-timeline-item">'
+        + '<div class="pi-tl-icon" style="background:' + a.bg + ';">'
+        + '<i data-lucide="' + a.icon + '" style="width:16px;height:16px;color:' + a.color + ';"></i></div>'
+        + '<div><div class="pi-tl-title">' + a.title + '</div>'
+        + '<div class="pi-tl-desc">' + a.desc + '</div>'
+        + '<div class="pi-tl-time">' + a.time + '</div></div>'
+        + '</div>';
+    }).join('');
+
+    /* ── Full page content ────────────────────────────────────────── */
+    var content = ''
+
+      // ── STAT CARDS ──────────────────────────────────────────────
+      + '<div class="pi-grid-4" style="margin-bottom:24px;">'
+
+      + '<div class="pi-stat">'
+      + '<div class="pi-stat-top">'
+      + '<div class="pi-stat-icon" style="background:#eff6ff;border:1px solid #bfdbfe;">'
+      + '<i data-lucide="activity" style="width:18px;height:18px;color:#2563eb;"></i></div>'
+      + '<div class="pi-stat-trend" style="color:#16a34a;"><i data-lucide="trending-up" style="width:14px;height:14px;"></i>+12%</div></div>'
+      + '<div class="pi-stat-label">Total Projects</div>'
+      + '<div class="pi-stat-val">48</div></div>'
+
+      + '<div class="pi-stat">'
+      + '<div class="pi-stat-top">'
+      + '<div class="pi-stat-icon" style="background:#f0fdf4;border:1px solid #bbf7d0;">'
+      + '<i data-lucide="clock" style="width:18px;height:18px;color:#16a34a;"></i></div>'
+      + '<div class="pi-stat-trend" style="color:#16a34a;"><i data-lucide="trending-up" style="width:14px;height:14px;"></i>+8%</div></div>'
+      + '<div class="pi-stat-label">Active Projects</div>'
+      + '<div class="pi-stat-val">16</div></div>'
+
+      + '<div class="pi-stat">'
+      + '<div class="pi-stat-top">'
+      + '<div class="pi-stat-icon" style="background:#faf5ff;border:1px solid #ddd6fe;">'
+      + '<i data-lucide="check-circle" style="width:18px;height:18px;color:#7c3aed;"></i></div>'
+      + '<div class="pi-stat-trend" style="color:#16a34a;"><i data-lucide="trending-up" style="width:14px;height:14px;"></i>+15%</div></div>'
+      + '<div class="pi-stat-label">Completed Projects</div>'
+      + '<div class="pi-stat-val">29</div></div>'
+
+      + '<div class="pi-stat">'
+      + '<div class="pi-stat-top">'
+      + '<div class="pi-stat-icon" style="background:#fef2f2;border:1px solid #fecaca;">'
+      + '<i data-lucide="alert-circle" style="width:18px;height:18px;color:#dc2626;"></i></div>'
+      + '<div class="pi-stat-trend" style="color:#dc2626;"><i data-lucide="trending-down" style="width:14px;height:14px;"></i>-3%</div></div>'
+      + '<div class="pi-stat-label">Delayed Projects</div>'
+      + '<div class="pi-stat-val">3</div></div>'
+
+      + '</div>'  // /pi-grid-4
+
+      // ── CHARTS ROW ──────────────────────────────────────────────
+      + '<div class="pi-grid-2" style="margin-bottom:24px;">'
+
+      + '<div class="pi-card">'
+      + '<div class="pi-card-title">Milestone Velocity</div>'
+      + '<div class="pi-card-subtitle">Milestones completed over time</div>'
+      + '<div class="pi-chart-wrap"><canvas id="milestoneChart"></canvas></div>'
+      + '</div>'
+
+      + '<div class="pi-card">'
+      + '<div class="pi-card-title">Revenue Analytics</div>'
+      + '<div class="pi-card-subtitle">Escrow and released funds breakdown</div>'
+      + '<div class="pi-chart-wrap"><canvas id="revenueChart"></canvas></div>'
+      + '</div>'
+
+      + '</div>'  // /pi-grid-2
+
+      // ── WORKER PERFORMANCE TABLE ─────────────────────────────────
+      + '<div class="pi-card" style="margin-bottom:24px;">'
+      + '<div class="pi-card-title">Worker Performance</div>'
+      + '<div class="pi-card-subtitle">Top performing workers ranked by success metrics</div>'
+      + '<div style="overflow-x:auto;">'
+      + '<table class="pi-table">'
+      + '<thead><tr>'
+      + '<th>Worker</th>'
+      + '<th class="center">Projects Completed</th>'
+      + '<th class="center">Success Rate</th>'
+      + '<th class="center">Average Rating</th>'
+      + '<th class="center">On-Time Delivery</th>'
+      + '</tr></thead>'
+      + '<tbody>' + workerRows + '</tbody>'
+      + '</table></div></div>'
+
+      // ── PROJECT HEALTH + ACTIVITY TIMELINE ──────────────────────
+      + '<div class="pi-grid-2">'
+
+      + '<div class="pi-card">'
+      + '<div class="pi-card-title">Project Health</div>'
+      + '<div class="pi-card-subtitle">Current project health indicators</div>'
+      + healthItems
+      + '</div>'
+
+      + '<div class="pi-card">'
+      + '<div class="pi-card-title">Activity Timeline</div>'
+      + '<div class="pi-card-subtitle">Recent project events and updates</div>'
+      + timelineItems
+      + '</div>'
+
+      + '</div>';  // /pi-grid-2
+
+    /* ── Init dashboard ──────────────────────────────────────────── */
+    initDashboard({
+      role: 'client',
+      activePath: 'analytics.html',
+      pageTitle: 'Project Insights',
+      pageSubtitle: 'Track project progress, milestone velocity, worker performance, and revenue analytics.',
+      content: content
+    });
+
+    /* ── Build charts after DOM is ready ────────────────────────── */
+    var chartDefaults = {
+      font: { family: "'Geist','Inter',-apple-system,sans-serif", size: 12 },
+      grid: { color: '#e5e7eb', drawBorder: false },
+      tick: { color: '#9ca3af' },
+      tooltip: {
+        backgroundColor: '#fff',
+        borderColor: '#e5e7eb',
+        borderWidth: 1,
+        titleColor: '#111827',
+        bodyColor: '#374151',
+        padding: 10,
+        cornerRadius: 8,
+        titleFont: { family: "'Geist','Inter',-apple-system,sans-serif", size: 12, weight: '500' },
+        bodyFont:  { family: "'Geist','Inter',-apple-system,sans-serif", size: 12 },
+      }
+    };
+
+    // Milestone velocity — Line chart
+    var milCtx = document.getElementById('milestoneChart');
+    if (milCtx) {
+      new Chart(milCtx, {
+        type: 'line',
+        data: {
+          labels: milestoneData.map(function(d){ return d.month; }),
+          datasets: [{
+            label: 'Completed',
+            data: milestoneData.map(function(d){ return d.completed; }),
+            borderColor: '#8b5cf6',
+            backgroundColor: 'rgba(139,92,246,.10)',
+            borderWidth: 2,
+            pointBackgroundColor: '#8b5cf6',
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            fill: true,
+            tension: 0.35,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: chartDefaults.tooltip,
+          },
+          scales: {
+            x: { grid: chartDefaults.grid, ticks: { color: chartDefaults.tick.color, font: chartDefaults.font } },
+            y: { grid: chartDefaults.grid, ticks: { color: chartDefaults.tick.color, font: chartDefaults.font } },
+          }
+        }
+      });
+    }
+
+    // Revenue analytics — Bar chart
+    var revCtx = document.getElementById('revenueChart');
+    if (revCtx) {
+      new Chart(revCtx, {
+        type: 'bar',
+        data: {
+          labels: revenueData.map(function(d){ return d.month; }),
+          datasets: [
+            { label:'Escrow',   data: revenueData.map(function(d){ return d.escrow;   }), backgroundColor:'#3b82f6', borderRadius:4 },
+            { label:'Released', data: revenueData.map(function(d){ return d.released; }), backgroundColor:'#10b981', borderRadius:4 },
+            { label:'Pending',  data: revenueData.map(function(d){ return d.pending;  }), backgroundColor:'#f59e0b', borderRadius:4 },
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { font: chartDefaults.font, color: '#374151', usePointStyle: true, pointStyleWidth: 10, padding: 16 }
+            },
+            tooltip: chartDefaults.tooltip,
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: chartDefaults.tick.color, font: chartDefaults.font } },
+            y: { grid: chartDefaults.grid, ticks: { color: chartDefaults.tick.color, font: chartDefaults.font,
+              callback: function(v){ return '$' + (v/1000) + 'k'; }
+            }},
+          }
+        }
+      });
+    }
+
+    lucide.createIcons();
+  });
+</script>
+</html>
