@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Expert Applications — Lannent Admin</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    /* ── Filter toolbar ── */
+    .app-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .app-search-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 200px;
+    }
+    .app-search-wrap svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted-foreground);
+      pointer-events: none;
+    }
+    .app-search {
+      width: 100%;
+      height: 40px;
+      padding: 0 14px 0 38px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--foreground);
+      outline: none;
+      transition: box-shadow 0.15s;
+    }
+    .app-search::placeholder { color: var(--muted-foreground); }
+    .app-search:focus { box-shadow: 0 0 0 2px rgba(99,102,241,0.18); }
+
+    .filter-pill {
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      color: var(--muted-foreground);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .filter-pill:hover { background: var(--secondary); color: var(--foreground); }
+    .filter-pill.active {
+      background: var(--foreground);
+      color: var(--primary-foreground);
+      border-color: var(--foreground);
+    }
+
+    /* ── Application card ── */
+    .app-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 24px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      transition: box-shadow 0.2s, transform 0.15s;
+      animation: fadeUp 0.3s ease both;
+    }
+    .app-card:hover {
+      box-shadow: 0 6px 20px rgba(0,0,0,0.07);
+      transform: translateY(-1px);
+    }
+    .app-card:nth-child(1) { animation-delay: 0.03s; }
+    .app-card:nth-child(2) { animation-delay: 0.06s; }
+    .app-card:nth-child(3) { animation-delay: 0.09s; }
+    .app-card:nth-child(4) { animation-delay: 0.12s; }
+
+    .app-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .app-info { flex: 1; min-width: 0; }
+    .app-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--foreground);
+      margin-bottom: 2px;
+    }
+    .app-email {
+      font-size: 13px;
+      color: var(--muted-foreground);
+      margin-bottom: 10px;
+    }
+    .app-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: var(--muted-foreground);
+    }
+    .app-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .app-meta-item strong { color: var(--foreground); font-weight: 500; }
+
+    .app-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    /* ── Status badge ── */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid;
+    }
+    .sb-pending  { background: #fffbeb; border-color: #fde68a; color: #b45309; }
+    .sb-approved { background: #ecfdf5; border-color: #a7f3d0; color: #059669; }
+    .sb-rejected { background: #fef2f2; border-color: #fca5a5; color: #b91c1c; }
+
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+    }
+    .sd-pending  { background: #f59e0b; }
+    .sd-approved { background: #10b981; }
+    .sd-rejected { background: #ef4444; }
+
+    /* ── Action buttons ── */
+    .app-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .btn-approve, .btn-reject {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-approve {
+      background: #ecfdf5;
+      border-color: #a7f3d0;
+      color: #059669;
+    }
+    .btn-approve:hover { background: #d1fae5; transform: scale(1.02); }
+    .btn-approve:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-reject {
+      background: #fef2f2;
+      border-color: #fca5a5;
+      color: #b91c1c;
+    }
+    .btn-reject:hover { background: #fee2e2; transform: scale(1.02); }
+    .btn-reject:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .btn-details {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--foreground);
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .btn-details:hover { background: var(--secondary); }
+
+    /* ── Confirmation modal ── */
+    .confirm-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 500;
+      animation: fadeIn 0.2s ease;
+    }
+    .confirm-overlay.show { display: flex; }
+    .confirm-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 28px 32px;
+      max-width: 420px;
+      width: 90%;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+      animation: modalIn 0.3s ease;
+    }
+    @keyframes modalIn {
+      from { opacity: 0; transform: scale(0.95) translateY(10px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .confirm-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .confirm-text {
+      font-size: 14px;
+      color: var(--muted-foreground);
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+    .confirm-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    .confirm-btn {
+      padding: 9px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      transition: all 0.15s;
+    }
+    .confirm-btn-cancel {
+      background: var(--card);
+      color: var(--muted-foreground);
+    }
+    .confirm-btn-cancel:hover { background: var(--secondary); color: var(--foreground); }
+    .confirm-btn-approve {
+      background: #059669;
+      border-color: #059669;
+      color: #fff;
+    }
+    .confirm-btn-approve:hover { background: #047857; }
+    .confirm-btn-reject {
+      background: #dc2626;
+      border-color: #dc2626;
+      color: #fff;
+    }
+    .confirm-btn-reject:hover { background: #b91c1c; }
+
+    /* ── Detail modal ── */
+    .detail-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 500;
+      animation: fadeIn 0.2s ease;
+    }
+    .detail-overlay.show { display: flex; }
+    .detail-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 28px 32px;
+      max-width: 560px;
+      width: 90%;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+      animation: modalIn 0.3s ease;
+    }
+    .detail-field {
+      margin-bottom: 14px;
+    }
+    .detail-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted-foreground);
+      margin-bottom: 3px;
+    }
+    .detail-value {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--foreground);
+      word-break: break-word;
+    }
+    .detail-value a {
+      color: #6366f1;
+      text-decoration: none;
+    }
+    .detail-value a:hover { text-decoration: underline; }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 16px;
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 56px 24px;
+      text-align: center;
+      color: var(--muted-foreground);
+    }
+    .empty-state svg { margin: 0 auto 14px; display: block; }
+    .empty-state p { font-size: 14px; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    @media (max-width: 640px) {
+      .app-card { flex-direction: column; }
+      .app-right { flex-direction: row; width: 100%; justify-content: space-between; }
+    }
+  </style>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('superuser')) return;
+      const session = Auth.getCurrentUser();
+
+      let activeFilter = 'all';
+      let searchQuery = '';
+
+      function getApps() {
+        const apps = Store.getExpertApplications();
+        // Sort by newest first
+        return apps.sort((a, b) => (b.appliedAt || '').localeCompare(a.appliedAt || ''));
+      }
+
+      function getFiltered() {
+        return getApps().filter(a => {
+          const q = searchQuery.toLowerCase();
+          const matchesSearch = !q ||
+            a.name.toLowerCase().includes(q) ||
+            a.email.toLowerCase().includes(q) ||
+            (a.expertise || '').toLowerCase().includes(q);
+          const matchesFilter = activeFilter === 'all' || a.status === activeFilter;
+          return matchesSearch && matchesFilter;
+        });
+      }
+
+      const avatarColors = [
+        'linear-gradient(135deg,#6366f1,#4f46e5)',
+        'linear-gradient(135deg,#a855f7,#7c3aed)',
+        'linear-gradient(135deg,#ec4899,#be185d)',
+        'linear-gradient(135deg,#10b981,#059669)',
+        'linear-gradient(135deg,#f59e0b,#d97706)',
+      ];
+
+      function getInitials(name) {
+        return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+      }
+
+      function statusBadge(status) {
+        const cls = status === 'pending' ? 'sb-pending' : status === 'approved' ? 'sb-approved' : 'sb-rejected';
+        const dot = status === 'pending' ? 'sd-pending' : status === 'approved' ? 'sd-approved' : 'sd-rejected';
+        const label = status.charAt(0).toUpperCase() + status.slice(1);
+        return `<span class="status-badge ${cls}"><span class="status-dot ${dot}"></span>${label}</span>`;
+      }
+
+      function buildCards(list) {
+        if (!list.length) return `
+          <div class="empty-state">
+            <i data-lucide="shield-check" style="width:48px;height:48px;opacity:0.35;"></i>
+            <p>No expert applications found matching your filters.</p>
+          </div>`;
+
+        return list.map((a, i) => {
+          const initials = getInitials(a.name);
+          const color = avatarColors[i % avatarColors.length];
+          const isPending = a.status === 'pending';
+          return `
+            <div class="app-card" id="acard-${a.id}">
+              <div class="app-avatar" style="background:${color};">${initials}</div>
+              <div class="app-info">
+                <div class="app-name">${a.name}</div>
+                <div class="app-email">${a.email}</div>
+                <div class="app-meta">
+                  <span class="app-meta-item">
+                    <i data-lucide="briefcase" style="width:12px;height:12px;"></i>
+                    <strong>${a.expertise || 'N/A'}</strong>
+                  </span>
+                  <span class="app-meta-item">
+                    <i data-lucide="clock" style="width:12px;height:12px;"></i>
+                    <strong>${a.experience || 'N/A'} years</strong>
+                  </span>
+                  <span class="app-meta-item">
+                    <i data-lucide="globe" style="width:12px;height:12px;"></i>
+                    <strong>${a.country || 'N/A'}</strong>
+                  </span>
+                  <span class="app-meta-item">
+                    <i data-lucide="calendar" style="width:12px;height:12px;"></i>
+                    Applied: <strong>${a.appliedAt || 'N/A'}</strong>
+                  </span>
+                </div>
+              </div>
+              <div class="app-right">
+                ${statusBadge(a.status)}
+                <div class="app-actions">
+                  <button class="btn-details" onclick="showDetails('${a.id}')">
+                    <i data-lucide="eye" style="width:12px;height:12px;"></i> Details
+                  </button>
+                  ${isPending ? `
+                    <button class="btn-approve" onclick="confirmAction('${a.id}','approved')">
+                      <i data-lucide="check" style="width:12px;height:12px;"></i> Approve
+                    </button>
+                    <button class="btn-reject" onclick="confirmAction('${a.id}','rejected')">
+                      <i data-lucide="x" style="width:12px;height:12px;"></i> Reject
+                    </button>
+                  ` : a.reviewedAt ? `<span style="font-size:11px;color:var(--muted-foreground);">Reviewed ${a.reviewedAt}</span>` : ''}
+                </div>
+              </div>
+            </div>`;
+        }).join('');
+      }
+
+      function render() {
+        const list = getFiltered();
+        const el = document.getElementById('appsList');
+        if (el) {
+          el.innerHTML = buildCards(list);
+          lucide.createIcons();
+        }
+        // Update stats
+        const all = getApps();
+        const setCount = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+        setCount('statTotal', all.length);
+        setCount('statPending', all.filter(a => a.status === 'pending').length);
+        setCount('statApproved', all.filter(a => a.status === 'approved').length);
+        setCount('statRejected', all.filter(a => a.status === 'rejected').length);
+        setCount('filteredCount', list.length);
+      }
+
+      // Build initial page
+      const all = getApps();
+      const content = `
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px;">
+          <div class="stat-card">
+            <div><div class="stat-val" id="statTotal">${all.length}</div><div class="stat-label">Total Applications</div></div>
+            <div class="stat-icon-wrap" style="background:#eef2ff;"><i data-lucide="file-text" style="width:20px;height:20px;color:#6366f1;"></i></div>
+          </div>
+          <div class="stat-card">
+            <div><div class="stat-val" id="statPending" style="color:#f59e0b;">${all.filter(a => a.status === 'pending').length}</div><div class="stat-label">Pending Review</div></div>
+            <div class="stat-icon-wrap" style="background:#fffbeb;"><i data-lucide="clock" style="width:20px;height:20px;color:#f59e0b;"></i></div>
+          </div>
+          <div class="stat-card">
+            <div><div class="stat-val" id="statApproved" style="color:#10b981;">${all.filter(a => a.status === 'approved').length}</div><div class="stat-label">Approved</div></div>
+            <div class="stat-icon-wrap" style="background:#ecfdf5;"><i data-lucide="check-circle" style="width:20px;height:20px;color:#10b981;"></i></div>
+          </div>
+          <div class="stat-card">
+            <div><div class="stat-val" id="statRejected" style="color:#ef4444;">${all.filter(a => a.status === 'rejected').length}</div><div class="stat-label">Rejected</div></div>
+            <div class="stat-icon-wrap" style="background:#fef2f2;"><i data-lucide="x-circle" style="width:20px;height:20px;color:#ef4444;"></i></div>
+          </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="app-toolbar">
+          <div class="app-search-wrap">
+            <i data-lucide="search" style="width:15px;height:15px;"></i>
+            <input class="app-search" type="text" id="appSearch" placeholder="Search by name, email or expertise..." />
+          </div>
+          <button class="filter-pill active" data-filter="all">All <span id="filteredCount" style="margin-left:4px;opacity:0.7;">${all.length}</span></button>
+          <button class="filter-pill" data-filter="pending">Pending</button>
+          <button class="filter-pill" data-filter="approved">Approved</button>
+          <button class="filter-pill" data-filter="rejected">Rejected</button>
+        </div>
+
+        <!-- Applications List -->
+        <div id="appsList">${buildCards(all)}</div>
+
+        <!-- Confirmation Modal -->
+        <div class="confirm-overlay" id="confirmModal">
+          <div class="confirm-card">
+            <div class="confirm-title" id="confirmTitle">Confirm Action</div>
+            <div class="confirm-text" id="confirmText">Are you sure?</div>
+            <div class="confirm-actions">
+              <button class="confirm-btn confirm-btn-cancel" onclick="closeConfirm()">Cancel</button>
+              <button class="confirm-btn" id="confirmBtn" onclick="executeAction()">Confirm</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detail Modal -->
+        <div class="detail-overlay" id="detailModal">
+          <div class="detail-card" id="detailContent"></div>
+        </div>
+      `;
+
+      initDashboard({
+        role: 'superuser',
+        activePath: 'superuser-expert-applications.html',
+        pageTitle: 'Expert Applications',
+        pageSubtitle: 'Review and manage expert reviewer applications.',
+        content,
+      });
+      lucide.createIcons();
+
+      // ── Event listeners ──
+      document.getElementById('appSearch')?.addEventListener('input', function () {
+        searchQuery = this.value;
+        render();
+      });
+
+      document.querySelectorAll('.filter-pill').forEach(btn => {
+        btn.addEventListener('click', function () {
+          activeFilter = this.dataset.filter;
+          document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
+          this.classList.add('active');
+          render();
+        });
+      });
+
+      // ── Confirm / Execute ──
+      let pendingAction = null;
+
+      window.confirmAction = function (appId, status) {
+        pendingAction = { appId, status };
+        const app = Store.getExpertApplicationById(appId);
+        const isApprove = status === 'approved';
+        document.getElementById('confirmTitle').textContent = isApprove ? 'Approve Application' : 'Reject Application';
+        document.getElementById('confirmText').innerHTML = isApprove
+          ? `Are you sure you want to <strong>approve</strong> <strong>${app?.name}</strong>'s application? This will create an expert account and allow them to log in.`
+          : `Are you sure you want to <strong>reject</strong> <strong>${app?.name}</strong>'s application? They will not be able to log in as an expert reviewer.`;
+        const confirmBtn = document.getElementById('confirmBtn');
+        confirmBtn.textContent = isApprove ? 'Approve' : 'Reject';
+        confirmBtn.className = 'confirm-btn ' + (isApprove ? 'confirm-btn-approve' : 'confirm-btn-reject');
+        document.getElementById('confirmModal').classList.add('show');
+      };
+
+      window.closeConfirm = function () {
+        document.getElementById('confirmModal').classList.remove('show');
+        pendingAction = null;
+      };
+
+      window.executeAction = function () {
+        if (!pendingAction) return;
+        const { appId, status } = pendingAction;
+        Store.updateExpertApplicationStatus(appId, status, session?.userId || 'u4');
+        closeConfirm();
+        render();
+
+        // Toast
+        const app = Store.getExpertApplicationById(appId);
+        const msg = status === 'approved'
+          ? `✓ ${app?.name}'s application approved. Expert account created.`
+          : `✗ ${app?.name}'s application rejected.`;
+        if (typeof Validate !== 'undefined') {
+          Validate.toast(msg, status === 'approved' ? 'success' : 'error');
+        }
+      };
+
+      // ── Detail modal ──
+      window.showDetails = function (appId) {
+        const app = Store.getExpertApplicationById(appId);
+        if (!app) return;
+        const html = `
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+            <h3 style="font-size:18px;font-weight:600;">Application Details</h3>
+            <button onclick="closeDetails()" style="background:none;border:none;cursor:pointer;color:var(--muted-foreground);padding:4px;">
+              <i data-lucide="x" style="width:20px;height:20px;"></i>
+            </button>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border);">
+            <div class="app-avatar" style="background:${avatarColors[0]};width:52px;height:52px;font-size:16px;">${getInitials(app.name)}</div>
+            <div>
+              <div style="font-size:16px;font-weight:600;">${app.name}</div>
+              <div style="font-size:13px;color:var(--muted-foreground);">${app.email}</div>
+            </div>
+            <div style="margin-left:auto;">${statusBadge(app.status)}</div>
+          </div>
+          <div class="detail-grid">
+            <div class="detail-field">
+              <div class="detail-label">Phone</div>
+              <div class="detail-value">${app.phoneCountry || ''} ${app.phone || 'N/A'}</div>
+            </div>
+            <div class="detail-field">
+              <div class="detail-label">Country</div>
+              <div class="detail-value">${app.country || 'N/A'}</div>
+            </div>
+            <div class="detail-field">
+              <div class="detail-label">Primary Expertise</div>
+              <div class="detail-value">${app.expertise || 'N/A'}</div>
+            </div>
+            <div class="detail-field">
+              <div class="detail-label">Experience</div>
+              <div class="detail-value">${app.experience || 'N/A'} years</div>
+            </div>
+            <div class="detail-field">
+              <div class="detail-label">LinkedIn</div>
+              <div class="detail-value">${app.linkedin ? `<a href="${app.linkedin}" target="_blank">${app.linkedin}</a>` : 'N/A'}</div>
+            </div>
+            <div class="detail-field">
+              <div class="detail-label">GitHub</div>
+              <div class="detail-value">${app.github ? `<a href="${app.github}" target="_blank">${app.github}</a>` : 'N/A'}</div>
+            </div>
+          </div>
+          <div class="detail-field" style="margin-top:6px;">
+            <div class="detail-label">Motivation</div>
+            <div class="detail-value" style="font-size:13px;line-height:1.65;color:var(--muted-foreground);font-weight:400;">${app.motivation || 'No motivation provided.'}</div>
+          </div>
+          <div class="detail-grid" style="margin-top:10px;padding-top:14px;border-top:1px solid var(--border);">
+            <div class="detail-field">
+              <div class="detail-label">Applied On</div>
+              <div class="detail-value">${app.appliedAt || 'N/A'}</div>
+            </div>
+            <div class="detail-field">
+              <div class="detail-label">Reviewed On</div>
+              <div class="detail-value">${app.reviewedAt || 'Not yet reviewed'}</div>
+            </div>
+          </div>
+          ${app.status === 'pending' ? `
+            <div style="display:flex;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+              <button class="btn-approve" style="flex:1;justify-content:center;height:40px;font-size:14px;" onclick="closeDetails();confirmAction('${app.id}','approved')">
+                <i data-lucide="check" style="width:14px;height:14px;"></i> Approve Application
+              </button>
+              <button class="btn-reject" style="flex:1;justify-content:center;height:40px;font-size:14px;" onclick="closeDetails();confirmAction('${app.id}','rejected')">
+                <i data-lucide="x" style="width:14px;height:14px;"></i> Reject Application
+              </button>
+            </div>
+          ` : ''}
+        `;
+        document.getElementById('detailContent').innerHTML = html;
+        document.getElementById('detailModal').classList.add('show');
+        lucide.createIcons();
+      };
+
+      window.closeDetails = function () {
+        document.getElementById('detailModal').classList.remove('show');
+      };
+
+      // Close modals on overlay click
+      document.getElementById('confirmModal')?.addEventListener('click', function (e) {
+        if (e.target === this) closeConfirm();
+      });
+      document.getElementById('detailModal')?.addEventListener('click', function (e) {
+        if (e.target === this) closeDetails();
+      });
+    });
+  </script>
+</head>
+<body></body>
+</html>

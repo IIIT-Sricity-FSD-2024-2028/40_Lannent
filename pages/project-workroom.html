@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Project Workroom — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .workroom-layout { display:grid; grid-template-columns:1fr 300px; gap:20px; height:calc(100vh - 180px); }
+    .chat-panel { display:flex; flex-direction:column; background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+    .chat-panel-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+    .chat-msgs { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:16px; min-height:0; }
+    .chat-footer-bar { padding:12px 16px; border-top:1px solid var(--border); display:flex; align-items:flex-end; gap:8px; }
+    .workroom-sidebar { display:flex; flex-direction:column; gap:16px; overflow-y:auto; }
+    .sidebar-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px; }
+    .milestone-badge { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:9999px; font-size:12px; font-weight:600; }
+    .milestone-row { transition:all 0.15s ease; border:1px solid var(--border); background:var(--background); }
+    .milestone-row:hover { border-color:#6366f1; background:#edf2ff; }
+    .milestone-row.selected { border-color:#6366f1; box-shadow:0 0 0 2px rgba(99,102,241,0.18); background:#eff6ff; }
+    .btn-disabled { opacity:0.65; cursor:not-allowed !important; }
+    .sidebar-card .btn-primary, .sidebar-card .btn-outline { width:100%; text-align:center; }
+    .sidebar-card .btn-primary { background:#52586f; color:white; border:none; }
+    .sidebar-card .btn-outline { background:white; border:1px solid var(--border); color:#0f172a; }
+    .sidebar-card .btn-primary:disabled, .sidebar-card .btn-outline.btn-disabled { opacity:0.65; color:#9ca3af; }
+    .attach-chip { display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:10px; background:var(--input-bg); border:1px solid var(--border); font-size:13px; margin-top:8px; cursor:pointer; transition:background 0.15s; }
+    .attach-chip:hover { background:var(--secondary); }
+    @media(max-width:900px){ .workroom-layout{ grid-template-columns:1fr; } .workroom-sidebar{ display:none; } }
+  </style>
+  <script>
+    let project = null;
+    let initialMessages = [];
+    let milestones = [];
+
+    function formatAmount(amount) {
+      if (typeof amount === 'number') return '$' + amount.toLocaleString();
+      if (typeof amount === 'string') return amount.startsWith('$') ? amount : '$' + amount;
+      return '$0';
+    }
+
+    function normalizeStatus(status) {
+      if (!status) return 'pending';
+      if (status === 'submitted' || status === 'review') return 'review';
+      if (status === 'in-progress') return 'inprogress';
+      if (status === 'completed' || status === 'approved') return 'completed';
+      if (status === 'disputed') return 'disputed';
+      return status;
+    }
+
+    function statusLabel(status) {
+      return status === 'review' ? 'Submitted for Review'
+        : status === 'inprogress' ? 'In Progress'
+        : status === 'completed' ? 'Completed'
+        : status === 'disputed' ? 'Disputed'
+        : status === 'pending' ? 'Pending'
+        : status;
+    }
+
+    const statusColors = { completed:'#10b981', inprogress:'#6366f1', pending:'#94a3b8', review:'#f59e0b', disputed:'#ef4444' };
+    const statusBgs = { completed:'#ecfdf5', inprogress:'#eef2ff', pending:'#f1f5f9', review:'#fffbeb', disputed:'#fef2f2' };
+
+    let selectedMilestoneId = null;
+
+    function getStoredMilestones() {
+      try {
+        const stored = localStorage.getItem('milestonesData');
+        if (!stored) return milestones;
+        return JSON.parse(stored);
+      } catch (e) {
+        console.warn('localStorage unavailable for milestonesData', e);
+        return milestones;
+      }
+    }
+
+    function saveMilestones() {
+      try {
+        localStorage.setItem('milestonesData', JSON.stringify(milestones));
+      } catch (e) {
+        console.warn('Could not save milestonesData to localStorage', e);
+      }
+    }
+
+    function markMilestoneSelected(id) {
+      selectedMilestoneId = id;
+      const ms = milestones.find(m => m.id === id);
+      if (!ms) return;
+
+      document.querySelectorAll('.milestone-row').forEach(el => el.classList.remove('selected'));
+      const row = document.getElementById('milestoneRow-' + id);
+      if (row) row.classList.add('selected');
+
+      const selectedTitle = document.getElementById('selectedMilestoneTitle');
+      if (selectedTitle) selectedTitle.textContent = ms.title;
+
+      const reviewBtn = document.getElementById('btnReviewDeliverable');
+      const disputeBtn = document.getElementById('btnRaiseDispute');
+      if (reviewBtn) { reviewBtn.disabled = false; reviewBtn.classList.remove('btn-disabled'); }
+      if (disputeBtn) { disputeBtn.disabled = false; disputeBtn.classList.remove('btn-disabled'); }
+    }
+
+    function renderMilestonesList() {
+      const list = document.getElementById('milestonesSection');
+      if (!list) return;
+      const reviewMilestones = milestones.filter(m => m.status === 'review' || m.status === 'disputed');
+      if (!reviewMilestones.length) {
+        list.innerHTML = '<div style="font-size:13px;color:var(--muted-foreground);">No submitted milestones for review.</div>';
+        return;
+      }
+      list.innerHTML = reviewMilestones.map(m => {
+        const statusLabel = m.statusLabel || { review:'Submitted for Review', disputed:'Disputed' }[m.status] || (m.status || 'Unknown');
+        return `
+          <div id="milestoneRow-${m.id}" class="milestone-row${m.id === selectedMilestoneId ? ' selected' : ''}" style="cursor:pointer;padding:10px;border-radius:10px;margin-bottom:8px;" onclick="markMilestoneSelected('${m.id}')">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span style="font-size:14px;font-weight:600;max-width:70%;">${m.title}</span>
+              <span style="font-size:11px;font-weight:700;color:${statusColors[m.status]};background:${statusBgs[m.status]};padding:4px 10px;border-radius:9999px;min-width:fit-content;">${statusLabel}</span>
+            </div>
+            <div style="font-size:12px;color:var(--muted-foreground);margin-top:6px;">${m.amount}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function goToReviewMilestone() {
+      if (!selectedMilestoneId) {
+        showToast('Select a milestone first', 'warn');
+        return;
+      }
+      const m = milestones.find(m => m.id === selectedMilestoneId);
+      if (!m) return;
+      try {
+        localStorage.setItem('selectedMilestone', JSON.stringify(m));
+      } catch (e) {
+        console.warn('Could not set selectedMilestone in localStorage', e);
+      }
+      window.location.href = 'review-deliverable.html';
+    }
+
+    function raiseDisputeFromWorkroom() {
+      if (!selectedMilestoneId) {
+        showToast('Select a milestone first', 'warn');
+        return;
+      }
+      const m = milestones.find(m => m.id === selectedMilestoneId);
+      if (!m) return;
+      try {
+        localStorage.setItem('disputeTargetMilestone', JSON.stringify(m));
+      } catch (e) {
+        console.warn('Could not set disputeTargetMilestone in localStorage', e);
+      }
+      window.location.href = 'dispute.html';
+    }
+
+    function showToast(msg, type = 'success') {
+      const t = document.createElement('div');
+      const bg = type === 'success' ? '#10b981' : type === 'warn' ? '#f59e0b' : '#ef4444';
+      t.style.cssText = `position:fixed;bottom:24px;right:24px;background:${bg};color:white;padding:14px 20px;border-radius:12px;font-size:14px;font-weight:500;z-index:300;box-shadow:0 8px 24px rgba(0,0,0,0.2);`;
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 2800);
+    }
+
+    function getUserRole() {
+      try {
+        return (typeof Auth !== 'undefined' && Auth.getCurrentUser()?.role) || 'client';
+      } catch (err) {
+        console.warn('localStorage unavailable, defaulting role to client', err);
+        return 'client';
+      }
+    }
+
+    function safeSetUserRole(value) {
+      try {
+        localStorage.setItem('userRole', value);
+      } catch (err) {
+        console.warn('localStorage unavailable, cannot set user role to', value);
+      }
+    }
+
+    const role = getUserRole();
+    safeSetUserRole(role);
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('client', 'worker')) return;
+
+      const params = new URLSearchParams(window.location.search);
+      const taskId = params.get('id');
+      const task = taskId ? Store.getTaskById(taskId) : null;
+      if (!task) {
+        document.body.innerHTML = '<div style="padding:80px;text-align:center;color:#6b7280;font-size:16px;">No project selected for this workroom. Please choose a project from your <a href="client-my-projects.html">My Projects</a> page.</div>';
+        return;
+      }
+
+      const client = Store.getUserById(task.clientId) || { name:'Client', avatar:'CL', avatarColor:'linear-gradient(135deg,#94a3b8,#64748b)' };
+      const worker = Store.getUserById(task.workerId) || { name:'Unassigned', avatar:'UN', avatarColor:'linear-gradient(135deg,#a855f7,#9333ea)' };
+
+      project = {
+        name: task.title || 'Untitled Project',
+        client: { name: client.name || 'Client', avatar: client.avatar || 'CL', color: client.avatarColor || 'linear-gradient(135deg,#6366f1,#4f46e5)' },
+        worker: { name: worker.name || 'Worker', avatar: worker.avatar || 'WK', color: worker.avatarColor || 'linear-gradient(135deg,#10b981,#059669)' },
+        totalBudget: task.budget || 0,
+        deadline: task.deadline || 'TBD',
+        status: task.status ? task.status.replace(/-/g, ' ') : 'In Progress',
+        milestonesCount: (task.milestonesCount || Store.getMilestonesByTask(task.id).length || 0),
+        completedMilestones: Store.getMilestonesByTask(task.id).filter(m => m.status === 'completed' || m.status === 'approved').length || 0,
+      };
+
+      milestones = Store.getMilestonesByTask(task.id).map(m => ({
+        id: m.id,
+        title: m.title || 'Untitled Milestone',
+        amount: formatAmount(m.budget || 0),
+        status: normalizeStatus(m.status),
+        statusLabel: statusLabel(normalizeStatus(m.status)),
+      }));
+
+      if (!milestones.length) {
+        milestones = [
+          { id: 'none', title:'No milestones available', amount:'$0', status:'pending', statusLabel:'Pending' }
+        ];
+      }
+
+      initialMessages = JSON.parse(localStorage.getItem('workroomMessages_' + task.id) || 'null') || [
+        { id:'1', sender:'client', avatar:client.avatar||'CL', color:client.avatarColor||'linear-gradient(135deg,#6366f1,#4f46e5)', content:'Welcome to the workspace for “'+project.name+'”.', time:'Just now' }
+      ];
+
+      function renderMsg(m) {
+        const isMe = (role === 'client' && m.sender === 'client') || (role === 'worker' && m.sender === 'worker');
+        return `
+          <div style="display:flex;${isMe ? 'flex-direction:row-reverse;' : ''}gap:10px;max-width:75%;${isMe ? 'margin-left:auto;' : ''}">
+            <div style="width:32px;height:32px;border-radius:50%;background:${m.color};display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;flex-shrink:0;">${m.avatar}</div>
+            <div>
+              <div style="padding:10px 14px;border-radius:16px;${isMe ? 'background:#6366f1;color:white;border-bottom-right-radius:4px;' : 'background:var(--card);border:1px solid var(--border);border-bottom-left-radius:4px;'}font-size:14px;line-height:1.5;">
+                ${m.content}
+                ${m.attachment ? `
+                  <div class="attach-chip" style="margin-top:8px;background:${isMe ? 'rgba(255,255,255,0.15)' : 'var(--input-bg)'};border-color:${isMe ? 'rgba(255,255,255,0.2)' : 'var(--border)'};">
+                    <i data-lucide="${m.attachment.icon}" style="width:15px;height:15px;"></i>
+                    <span>${m.attachment.name}</span>
+                    <span style="opacity:0.6;font-size:11px;">${m.attachment.size}</span>
+                    <i data-lucide="download" style="width:13px;height:13px;margin-left:4px;"></i>
+                  </div>` : ''}
+              </div>
+              <div style="font-size:11px;color:var(--muted-foreground);margin-top:4px;${isMe ? 'text-align:right;' : ''}">${m.time}</div>
+            </div>
+          </div>`;
+      }
+
+      const content = `
+        <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+          <a href="client-my-projects.html" style="display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--muted-foreground);transition:color 0.15s;" onmouseenter="this.style.color='var(--foreground)'" onmouseleave="this.style.color='var(--muted-foreground)'">
+            <i data-lucide="arrow-left" style="width:16px;height:16px;"></i> Back
+          </a>
+          <span style="color:var(--border);">›</span>
+          <span style="font-size:14px;font-weight:500;">${project.name}</span>
+          <span class="badge badge-blue" style="margin-left:auto;">${project.status}</span>
+        </div>
+
+        <!-- Project summary strip -->
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:36px;height:36px;border-radius:50%;background:${project.client.color};display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;">${project.client.avatar}</div>
+            <div><div style="font-size:12px;color:var(--muted-foreground);">Client</div><div style="font-size:13px;font-weight:600;">${project.client.name}</div></div>
+          </div>
+          <div style="width:1px;height:30px;background:var(--border);"></div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:36px;height:36px;border-radius:50%;background:${project.worker.color};display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;">${project.worker.avatar}</div>
+            <div><div style="font-size:12px;color:var(--muted-foreground);">Worker</div><div style="font-size:13px;font-weight:600;">${project.worker.name}</div></div>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:16px;">
+            <div style="text-align:center;"><div style="font-weight:700;color:#10b981;">$${project.totalBudget.toLocaleString()}</div><div style="font-size:11px;color:var(--muted-foreground);">Budget</div></div>
+            <div style="text-align:center;"><div style="font-weight:700;">${project.deadline}</div><div style="font-size:11px;color:var(--muted-foreground);">Deadline</div></div>
+            <div style="text-align:center;"><div style="font-weight:700;">${project.completedMilestones}/${project.milestonesCount}</div><div style="font-size:11px;color:var(--muted-foreground);">Milestones</div></div>
+          </div>
+        </div>
+
+        <div class="workroom-layout">
+          <!-- Chat Panel -->
+          <div class="chat-panel">
+            <div class="chat-panel-header">
+              <i data-lucide="message-square" style="width:18px;height:18px;color:#6366f1;"></i>
+              <span style="font-weight:600;font-size:14px;">Project Workroom Chat</span>
+              <div style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;color:#22c55e;"><div style="width:6px;height:6px;border-radius:50%;background:#22c55e;animation:pulse 2s infinite;"></div>Live</div>
+            </div>
+
+            <div class="chat-msgs" id="chatMsgs">
+              ${initialMessages.map(m => renderMsg(m)).join('')}
+            </div>
+
+            <div class="chat-footer-bar">
+              <button class="topnav-btn" title="Attach file" onclick="document.getElementById('fileInput').click()">
+                <i data-lucide="paperclip" style="width:16px;height:16px;"></i>
+              </button>
+              <input type="file" id="fileInput" style="display:none;" />
+              <textarea id="workroomInput" placeholder="Type your message..." style="flex:1;padding:10px 14px;border-radius:12px;border:1px solid var(--border);background:var(--input-bg);font-size:14px;font-family:inherit;outline:none;resize:none;min-height:40px;max-height:120px;" rows="1"></textarea>
+              <button id="workroomSend" style="width:40px;height:40px;border-radius:12px;background:#6366f1;color:white;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+                <i data-lucide="send" style="width:16px;height:16px;"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Sidebar -->
+          <div class="workroom-sidebar">
+            <!-- Milestones -->
+            <div class="sidebar-card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+                <h3 style="font-size:14px;font-weight:600;">Milestones Submitted for Review</h3>
+                <a href="project-milestone-board.html" style="font-size:12px;color:#6366f1;font-weight:500;text-decoration:none;">View Board →</a>
+              </div>
+              <div id="milestonesSection"></div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="sidebar-card">
+              <h3 style="font-size:14px;font-weight:600;margin-bottom:12px;">Quick Actions</h3>
+              <button id="btnReviewDeliverable" class="btn-primary btn-disabled" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;border-radius:12px;margin-bottom:8px;font-size:13px;" onclick="goToReviewMilestone()" disabled>
+                <i data-lucide="eye" style="width:15px;height:15px;"></i> Review Deliverable
+              </button>
+              <a href="project-milestone-board.html" class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;border-radius:12px;margin-bottom:8px;text-decoration:none;font-size:13px;">
+                <i data-lucide="layout" style="width:15px;height:15px;"></i> Milestone Board
+              </a>
+              <button id="btnRaiseDispute" class="btn-outline btn-disabled" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;border-radius:12px;font-size:13px;" onclick="raiseDisputeFromWorkroom()" disabled>
+                <i data-lucide="alert-triangle" style="width:15px;height:15px;color:#f59e0b;"></i> Raise Dispute
+              </button>
+              <div style="margin-top:10px;font-size:13px;color:var(--muted-foreground);">
+                Selected milestone: <strong id="selectedMilestoneTitle">None</strong>
+              </div>
+            </div>
+
+            <!-- Escrow -->
+            <div class="sidebar-card" style="background:linear-gradient(145deg,#ecfdf5,#d1fae5);border-color:#a7f3d0;">
+              <h3 style="font-size:14px;font-weight:600;margin-bottom:12px;color:#065f46;">Escrow Status</h3>
+              <div style="margin-bottom:8px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px;">
+                  <span style="color:#065f46;">Released</span><span style="font-weight:700;color:#059669;">$4,500</span>
+                </div>
+                <div style="height:8px;border-radius:9999px;background:rgba(16,185,129,0.2);overflow:hidden;">
+                  <div style="width:56%;height:100%;border-radius:9999px;background:linear-gradient(90deg,#10b981,#34d399);"></div>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;">
+                <span style="color:#065f46;">Remaining</span><span style="font-weight:700;color:#6366f1;">$3,500</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      initDashboard({
+        role,
+        activePath: role === 'worker' ? 'worker-my-projects.html' : 'client-my-projects.html',
+        pageTitle: 'Project Workroom',
+        pageSubtitle: project.name,
+        content
+      });
+      lucide.createIcons();
+
+      milestones = getStoredMilestones();
+      renderMilestonesList();
+
+      // Chat send
+      const msgs = document.getElementById('chatMsgs');
+      document.getElementById('workroomSend')?.addEventListener('click', sendWorkroomMsg);
+      document.getElementById('workroomInput')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendWorkroomMsg(); }
+      });
+      document.getElementById('workroomInput')?.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+      });
+
+      if (msgs) msgs.scrollTop = msgs.scrollHeight;
+    });
+
+    function sendWorkroomMsg() {
+      const input = document.getElementById('workroomInput');
+      const msgs = document.getElementById('chatMsgs');
+      if (!input || !msgs) return;
+      const text = input.value.trim();
+      if (!text) return;
+      const role = localStorage.getItem('userRole') || 'client';
+      const isClient = role === 'client';
+      const div = document.createElement('div');
+      div.style.cssText = `display:flex;flex-direction:${isClient ? 'row-reverse' : 'row'};gap:10px;max-width:75%;${isClient ? 'margin-left:auto;' : ''}`;
+      div.innerHTML = `
+        <div style="width:32px;height:32px;border-radius:50%;background:${isClient ? 'linear-gradient(135deg,#6366f1,#4f46e5)' : 'linear-gradient(135deg,#10b981,#059669)'};display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;flex-shrink:0;">${isClient ? 'TC' : 'SJ'}</div>
+        <div>
+          <div style="padding:10px 14px;border-radius:16px;${isClient ? 'background:#6366f1;color:white;border-bottom-right-radius:4px;' : 'background:var(--card);border:1px solid var(--border);border-bottom-left-radius:4px;'}font-size:14px;line-height:1.5;">${text}</div>
+          <div style="font-size:11px;color:var(--muted-foreground);margin-top:4px;${isClient ? 'text-align:right;' : ''}">Just now</div>
+        </div>`;
+      msgs.appendChild(div);
+      input.value = '';
+      input.style.height = 'auto';
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    function showRaiseDisputeModal() {
+      const t = document.createElement('div');
+      t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#f59e0b;color:white;padding:14px 20px;border-radius:12px;font-size:14px;font-weight:500;z-index:300;box-shadow:0 8px 24px rgba(245,158,11,0.3);';
+      t.textContent = '⚠ Dispute form would open here';
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+  </script>
+</head>
+<body></body>
+</html>

@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dispute Cases — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    /* ── Dispute card grid ── */
+    .dispute-grid {
+      display: grid;
+      gap: 16px;
+    }
+    .dispute-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      transition: box-shadow 0.2s, transform 0.2s;
+    }
+    .dispute-card:hover {
+      box-shadow: 0 8px 28px rgba(0,0,0,0.08);
+      transform: translateY(-1px);
+    }
+
+    /* ── Card top row ── */
+    .dispute-card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+    .dispute-card-left { flex: 1; min-width: 0; }
+
+    .dispute-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .dispute-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--foreground);
+    }
+
+    /* ── Status badge ── */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .status-open         { background: #fef2f2; border-color: #fca5a5; color: #b91c1c; }
+    .status-investigating { background: #faf5ff; border-color: #d8b4fe; color: #7c3aed; }
+    .status-resolved     { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+
+    /* ── Severity indicator ── */
+    .severity-icon-high   { color: #dc2626; }
+    .severity-icon-medium { color: #ea580c; }
+    .severity-icon-low    { color: #ca8a04; }
+
+    /* ── Body text ── */
+    .dispute-meta {
+      font-size: 13px;
+      color: var(--muted-foreground);
+      margin-bottom: 4px;
+    }
+    .dispute-issue {
+      font-size: 13px;
+      color: var(--muted-foreground);
+      margin-bottom: 10px;
+    }
+    .dispute-footer-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted-foreground);
+      flex-wrap: wrap;
+    }
+    .dispute-footer-row .dot {
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: var(--muted-foreground);
+      flex-shrink: 0;
+      opacity: 0.5;
+    }
+
+    /* ── Resolve button ── */
+    .btn-resolve {
+      width: 100%;
+      height: 40px;
+      margin-top: 16px;
+      border-radius: 10px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--foreground);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-family: inherit;
+      text-decoration: none;
+      transition: background 0.15s, transform 0.15s;
+    }
+    .btn-resolve:hover  { background: var(--secondary); transform: scale(1.005); }
+    .btn-resolve:active { transform: scale(0.99); }
+
+    /* ── Search & filter toolbar ── */
+    .dispute-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .dispute-search-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 200px;
+    }
+    .dispute-search-wrap svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted-foreground);
+      pointer-events: none;
+    }
+    .dispute-search {
+      width: 100%;
+      height: 40px;
+      padding: 0 14px 0 38px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--foreground);
+      outline: none;
+      transition: box-shadow 0.15s;
+    }
+    .dispute-search::placeholder { color: var(--muted-foreground); }
+    .dispute-search:focus { box-shadow: 0 0 0 2px rgba(99,102,241,0.18); }
+
+    .filter-btn {
+      height: 40px;
+      padding: 0 16px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      color: var(--muted-foreground);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .filter-btn:hover  { background: var(--secondary); color: var(--foreground); }
+    .filter-btn.active {
+      background: var(--foreground);
+      color: var(--primary-foreground);
+      border-color: var(--foreground);
+    }
+
+    /* ── Empty state ── */
+    .dispute-empty {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 56px 24px;
+      text-align: center;
+      color: var(--muted-foreground);
+    }
+    .dispute-empty svg { margin: 0 auto 14px; display: block; }
+    .dispute-empty p { font-size: 14px; }
+  </style>
+
+  <script>
+    const statusClass = {
+      'open':       'status-open',
+      'resolved':   'status-resolved',
+    };
+    const severityIconClass = { high:'severity-icon-high', medium:'severity-icon-medium', low:'severity-icon-low' };
+
+    function loadDisputes() {
+      return Store.getDisputes().map(d => {
+        const task = Store.getTaskById(d.taskId);
+        const raiser = Store.getUserById(d.raisedBy);
+        return {
+          id: d.id,
+          project: d.project || (task ? task.title : 'Unknown Project'),
+          milestone: d.milestone || 'Milestone',
+          issue: d.reason ? d.reason.substring(0, 80) + (d.reason.length > 80 ? '...' : '') : 'Dispute raised',
+          raisedBy: (raiser ? raiser.name : d.raisedByName || 'Unknown') + ' (' + (raiser ? raiser.role : 'user') + ')',
+          status: d.status === 'open' ? 'Open' : d.status === 'resolved' ? 'Resolved' : 'Under Investigation',
+          rawStatus: d.status,
+          severity: d.severity || 'medium',
+          date: d.createdAt ? new Date(d.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Recently',
+          amount: d.amount || '',
+        };
+      });
+    }
+
+    function buildCards(list) {
+      if (!list.length) return `
+        <div class="dispute-empty">
+          <i data-lucide="scale" style="width:48px;height:48px;opacity:0.35;"></i>
+          <p>No dispute cases found matching your filters.</p>
+        </div>`;
+      return list.map(d => `
+        <div class="dispute-card" id="dcard-${d.id}">
+          <div class="dispute-card-top">
+            <div class="dispute-card-left">
+              <div class="dispute-title-row">
+                <span class="dispute-title">${d.project}</span>
+                <i data-lucide="alert-triangle" style="width:16px;height:16px;flex-shrink:0;" class="${severityIconClass[d.severity] || 'severity-icon-medium'}"></i>
+              </div>
+              <div class="dispute-meta">Milestone: ${d.milestone}</div>
+              <div class="dispute-issue">${d.issue}</div>
+              <div class="dispute-footer-row">
+                <span>Raised by: ${d.raisedBy}</span>
+                <span class="dot"></span>
+                <span>${d.date}</span>
+                ${d.amount ? `<span class="dot"></span><span style="font-weight:600;color:#6366f1;">${d.amount} escrow</span>` : ''}
+              </div>
+            </div>
+            <span class="status-badge ${d.rawStatus === 'resolved' ? 'status-resolved' : d.rawStatus === 'open' ? 'status-open' : 'status-investigating'}">${d.status}</span>
+          </div>
+          <a href="${d.rawStatus === 'resolved' ? 'expert-report-dispute.html' : 'resolve-dispute.html'}?id=${d.id}" class="btn-resolve">
+            <i data-lucide="${d.rawStatus === 'resolved' ? 'file-text' : 'shield'}" style="width:15px;height:15px;"></i>
+            ${d.rawStatus === 'resolved' ? 'View Resolution' : 'Resolve Dispute'}
+          </a>
+        </div>`).join('');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('expert')) return;
+      let activeFilter = 'all';
+      let searchQuery  = '';
+
+      function getFiltered() {
+        const disputes = loadDisputes();
+        return disputes.filter(d => {
+          const q  = searchQuery.toLowerCase();
+          const ok = !q || d.project.toLowerCase().includes(q) || d.issue.toLowerCase().includes(q);
+          const sf = activeFilter === 'all' || d.status === activeFilter;
+          return ok && sf;
+        });
+      }
+
+      function render() {
+        const el = document.getElementById('disputeGrid');
+        if (el) { el.innerHTML = buildCards(getFiltered()); lucide.createIcons(); }
+        updateStats();
+      }
+
+      function updateStats() {
+        const all = loadDisputes();
+        const el = id => document.getElementById(id);
+        if (el('statTotal'))       el('statTotal').textContent       = all.length;
+        if (el('statOpen'))        el('statOpen').textContent        = all.filter(d=>d.rawStatus==='open').length;
+        if (el('statInvest'))      el('statInvest').textContent      = all.filter(d=>d.status==='Under Investigation').length;
+        if (el('statResolved'))    el('statResolved').textContent    = all.filter(d=>d.rawStatus==='resolved').length;
+      }
+
+      const initial = loadDisputes();
+      const content = `
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px;">
+          <div class="stat-card"><div><div class="stat-val" id="statTotal">${initial.length}</div><div class="stat-label">Total Cases</div></div><div class="stat-icon-wrap" style="background:#eef2ff;"><i data-lucide="scale" style="width:20px;height:20px;color:#6366f1;"></i></div></div>
+          <div class="stat-card"><div><div class="stat-val" id="statOpen">${initial.filter(d=>d.rawStatus==='open').length}</div><div class="stat-label">Open</div></div><div class="stat-icon-wrap" style="background:#fee2e2;"><i data-lucide="alert-circle" style="width:20px;height:20px;color:#ef4444;"></i></div></div>
+          <div class="stat-card"><div><div class="stat-val" id="statInvest">${initial.filter(d=>d.status==='Under Investigation').length}</div><div class="stat-label">Investigating</div></div><div class="stat-icon-wrap" style="background:#faf5ff;"><i data-lucide="search" style="width:20px;height:20px;color:#a855f7;"></i></div></div>
+          <div class="stat-card"><div><div class="stat-val" id="statResolved" style="color:#10b981;">${initial.filter(d=>d.rawStatus==='resolved').length}</div><div class="stat-label">Resolved</div></div><div class="stat-icon-wrap" style="background:#ecfdf5;"><i data-lucide="check-circle-2" style="width:20px;height:20px;color:#10b981;"></i></div></div>
+        </div>
+        <div class="dispute-toolbar">
+          <div class="dispute-search-wrap">
+            <i data-lucide="search" style="width:15px;height:15px;"></i>
+            <input class="dispute-search" type="text" id="disputeSearch" placeholder="Search by project or issue..." oninput="handleSearch(this.value)" />
+          </div>
+          <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+          <button class="filter-btn" onclick="setFilter('Open',this)">Open</button>
+          <button class="filter-btn" onclick="setFilter('Under Investigation',this)">Investigating</button>
+          <button class="filter-btn" onclick="setFilter('Resolved',this)">Resolved</button>
+        </div>
+        <div class="dispute-grid" id="disputeGrid">${buildCards(initial)}</div>`;
+
+      initDashboard({ role:'expert', activePath:'expert-dispute-cases.html', pageTitle:'Dispute Cases', pageSubtitle:'Mediate conflicts between clients and workers with fair resolutions.', content });
+      lucide.createIcons();
+
+      window.setFilter = function(val, btn) {
+        activeFilter = val;
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        render();
+      };
+      window.handleSearch = function(val) { searchQuery = val; render(); };
+    });
+  </script>
+</head>
+<body></body>
+</html>
