@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manage Users — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .su-toolbar { display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
+    .su-search { flex:1; min-width:200px; padding:10px 16px; border:1px solid var(--border); border-radius:12px; background:var(--background); font-size:14px; font-family:inherit; outline:none; }
+    .su-search:focus { box-shadow:0 0 0 2px var(--ring); }
+    .su-filter { padding:10px 14px; border:1px solid var(--border); border-radius:12px; background:var(--background); font-size:14px; font-family:inherit; outline:none; cursor:pointer; }
+    .btn-add { display:inline-flex; align-items:center; gap:8px; padding:10px 18px; border-radius:12px; background:linear-gradient(to bottom,hsl(0,0%,16%),hsl(0,0%,10%)); color:#fff; border:none; font-size:14px; font-weight:500; cursor:pointer; transition:transform 0.15s; white-space:nowrap; }
+    .btn-add:hover { transform:scale(1.02); }
+    .user-table-wrap { background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+    .user-table-wrap table { width:100%; border-collapse:collapse; }
+    .user-table-wrap th { padding:12px 16px; text-align:left; font-size:12px; font-weight:600; color:var(--muted-foreground); background:var(--secondary); border-bottom:1px solid var(--border); text-transform:uppercase; letter-spacing:0.04em; }
+    .user-table-wrap td { padding:14px 16px; border-bottom:1px solid var(--border); font-size:14px; vertical-align:middle; }
+    .user-table-wrap tr:last-child td { border-bottom:none; }
+    .user-table-wrap tr:hover td { background:rgba(0,0,0,0.015); }
+    .action-btns { display:flex; gap:6px; }
+    .btn-edit { padding:5px 12px; border-radius:8px; border:1px solid var(--border); background:var(--background); font-size:12px; font-weight:500; cursor:pointer; transition:background 0.15s; }
+    .btn-edit:hover { background:var(--secondary); }
+    .btn-suspend { padding:5px 12px; border-radius:8px; border:1px solid #fef3c7; background:#fffbeb; color:#92400e; font-size:12px; font-weight:500; cursor:pointer; transition:background 0.15s; }
+    .btn-suspend:hover { background:#fef3c7; }
+    .btn-delete { padding:5px 12px; border-radius:8px; border:1px solid #fee2e2; background:#fef2f2; color:#991b1b; font-size:12px; font-weight:500; cursor:pointer; transition:background 0.15s; }
+    .btn-delete:hover { background:#fee2e2; }
+    /* Modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; display:none; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:var(--card); border-radius:20px; padding:28px; max-width:480px; width:100%; box-shadow:0 24px 64px rgba(0,0,0,0.18); max-height:90vh; overflow-y:auto; }
+    .modal-title { font-size:18px; font-weight:600; margin-bottom:6px; }
+    .modal-sub { font-size:14px; color:var(--muted-foreground); margin-bottom:24px; }
+    .form-group { margin-bottom:16px; }
+    .form-label { display:block; font-size:13px; font-weight:500; margin-bottom:6px; }
+    .form-label .req { color:#ef4444; }
+    .form-input, .form-select { width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:10px; background:var(--background); font-size:14px; font-family:inherit; outline:none; box-sizing:border-box; }
+    .form-input:focus, .form-select:focus { box-shadow:0 0 0 2px var(--ring); }
+    .modal-actions { display:flex; gap:10px; margin-top:24px; }
+    .btn-cancel-modal { flex:1; padding:10px; border-radius:12px; border:1px solid var(--border); background:var(--background); font-size:14px; font-weight:500; cursor:pointer; }
+    .btn-save-modal { flex:2; padding:10px; border-radius:12px; border:none; background:linear-gradient(to bottom,hsl(0,0%,16%),hsl(0,0%,10%)); color:#fff; font-size:14px; font-weight:500; cursor:pointer; }
+    .empty-row td { text-align:center; padding:40px; color:var(--muted-foreground); }
+  </style>
+  <script>
+    let allUsers = [];
+    let editingUserId = null;
+
+    function renderUsers() {
+      const search = document.getElementById('userSearch')?.value.toLowerCase() || '';
+      const roleFilter = document.getElementById('roleFilter')?.value || 'all';
+
+      let filtered = allUsers.filter(u => {
+        const matchSearch = !search || u.name.toLowerCase().includes(search) || u.email.toLowerCase().includes(search);
+        const matchRole = roleFilter === 'all' || u.role === roleFilter;
+        return matchSearch && matchRole;
+      });
+
+      const tbody = document.getElementById('usersTableBody');
+      if (!tbody) return;
+
+      document.getElementById('userCount').textContent = filtered.length + ' user' + (filtered.length !== 1 ? 's' : '');
+
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No users found.</td></tr>';
+        return;
+      }
+
+      const roleColors = { client:'badge-blue', worker:'badge-green', expert:'badge-purple', superuser:'badge-red' };
+
+      tbody.innerHTML = filtered.map(u => `
+        <tr id="userRow_${u.id}">
+          <td>
+            <div class="worker-cell">
+              <div class="worker-avatar" style="${u.avatarColor ? 'background:' + u.avatarColor : ''}">${u.avatar}</div>
+              <div>
+                <div style="font-weight:600;">${u.name}</div>
+                <div style="font-size:12px;color:var(--muted-foreground);">${u.email}</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge ${roleColors[u.role] || 'badge-blue'}">${u.role}</span></td>
+          <td><span class="badge ${u.status === 'active' ? 'badge-green' : 'badge-red'}">${u.status}</span></td>
+          <td style="color:var(--muted-foreground);font-size:13px;">${u.joinDate}</td>
+          <td style="font-weight:600;">$${(u.walletBalance || 0).toLocaleString()}</td>
+          <td>
+            <div class="action-btns">
+              <button class="btn-edit" onclick="openEditModal('${u.id}')">Edit</button>
+              <button class="btn-suspend" onclick="toggleSuspend('${u.id}')">${u.status === 'active' ? 'Suspend' : 'Activate'}</button>
+              <button class="btn-delete" onclick="deleteUser('${u.id}')">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function openAddModal() {
+      editingUserId = null;
+      document.getElementById('modalTitle').textContent = 'Add New User';
+      document.getElementById('modalSub').textContent = 'Create a new user account on the platform.';
+      document.getElementById('saveModalBtn').textContent = 'Create User';
+      clearModalForm();
+      document.getElementById('userModal').classList.add('open');
+    }
+
+    function openEditModal(id) {
+      const user = Store.getUserById(id);
+      if (!user) return;
+      editingUserId = id;
+      document.getElementById('modalTitle').textContent = 'Edit User';
+      document.getElementById('modalSub').textContent = 'Update details for ' + user.name;
+      document.getElementById('saveModalBtn').textContent = 'Save Changes';
+      document.getElementById('mName').value = user.name;
+      document.getElementById('mEmail').value = user.email;
+      document.getElementById('mRole').value = user.role;
+      document.getElementById('mStatus').value = user.status;
+      document.getElementById('mPassword').value = '';
+      document.getElementById('userModal').classList.add('open');
+    }
+
+    function closeModal() {
+      document.getElementById('userModal').classList.remove('open');
+      editingUserId = null;
+      Validate.clearAllErrors();
+    }
+
+    function clearModalForm() {
+      ['mName','mEmail','mPassword','mRole','mStatus'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = el.tagName === 'SELECT' ? el.options[0]?.value : '';
+      });
+      Validate.clearAllErrors();
+    }
+
+    function saveUser() {
+      const name = document.getElementById('mName').value.trim();
+      const email = document.getElementById('mEmail').value.trim();
+      const password = document.getElementById('mPassword').value;
+      const role = document.getElementById('mRole').value;
+      const status = document.getElementById('mStatus').value;
+
+      const rules = [
+        { fieldId: 'mName', value: name, checks: [v => Validate.required(v, 'Name'), v => Validate.minLength(v, 2, 'Name')] },
+        { fieldId: 'mEmail', value: email, checks: [Validate.email] },
+        { fieldId: 'mRole', value: role, checks: [v => Validate.selected(v, 'role')] },
+      ];
+
+      if (!editingUserId) {
+        rules.push({ fieldId: 'mPassword', value: password, checks: [Validate.password] });
+      }
+
+      const { valid } = Validate.form(rules);
+      if (!valid) return;
+
+      // Check email uniqueness
+      const existing = Store.getUserByEmail(email);
+      if (existing && existing.id !== editingUserId) {
+        Validate.showError('mEmail', 'This email is already in use.');
+        return;
+      }
+
+      if (editingUserId) {
+        const updates = { name, email, role, status };
+        if (password) updates.password = password;
+        const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2);
+        updates.avatar = initials;
+        Store.updateUser(editingUserId, updates);
+        Validate.toast('User updated successfully.', 'success');
+      } else {
+        const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2);
+        const colors = { client:'linear-gradient(135deg,#6366f1,#4f46e5)', worker:'linear-gradient(135deg,#10b981,#059669)', expert:'linear-gradient(135deg,#a855f7,#7c3aed)', superuser:'linear-gradient(135deg,#ef4444,#dc2626)' };
+        Store.createUser({ name, email, password, role, status, avatar: initials, avatarColor: colors[role] || '' });
+        Validate.toast('User created successfully.', 'success');
+      }
+
+      allUsers = Store.getUsers();
+      closeModal();
+      renderUsers();
+    }
+
+    function toggleSuspend(id) {
+      const user = Store.getUserById(id);
+      if (!user) return;
+      const newStatus = user.status === 'active' ? 'suspended' : 'active';
+      Validate.confirm(
+        `Are you sure you want to ${newStatus === 'suspended' ? 'suspend' : 'activate'} ${user.name}?`,
+        () => {
+          Store.updateUser(id, { status: newStatus });
+          allUsers = Store.getUsers();
+          renderUsers();
+          Validate.toast(`User ${newStatus === 'suspended' ? 'suspended' : 'activated'}.`, newStatus === 'suspended' ? 'warning' : 'success');
+        }
+      );
+    }
+
+    function deleteUser(id) {
+      const user = Store.getUserById(id);
+      if (!user) return;
+      const session = typeof Auth !== "undefined" ? Auth.getCurrentUser() : null;
+      if (session && session.userId === id) { Validate.toast('You cannot delete your own account.', 'error'); return; }
+
+      Validate.confirm(
+        `Permanently delete ${user.name}? This action cannot be undone.`,
+        () => {
+          Store.deleteUser(id);
+          allUsers = Store.getUsers();
+          const row = document.getElementById('userRow_' + id);
+          if (row) { row.style.opacity = '0'; row.style.transition = 'opacity 0.3s'; setTimeout(() => renderUsers(), 300); }
+          else renderUsers();
+          Validate.toast('User deleted.', 'error');
+        }
+      );
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('superuser')) return;
+
+      allUsers = Store.getUsers();
+
+      const content = `
+        <div class="su-toolbar">
+          <input class="su-search" id="userSearch" placeholder="Search by name or email..." oninput="renderUsers()" />
+          <select class="su-filter" id="roleFilter" onchange="renderUsers()">
+            <option value="all">All Roles</option>
+            <option value="client">Client</option>
+            <option value="worker">Worker</option>
+            <option value="expert">Expert</option>
+            <option value="superuser">Super User</option>
+          </select>
+          <button class="btn-add" onclick="openAddModal()">
+            <i data-lucide="plus" style="width:16px;height:16px;"></i> Add User
+          </button>
+        </div>
+
+        <div style="margin-bottom:12px;font-size:13px;color:var(--muted-foreground);">Showing <strong id="userCount"></strong></div>
+
+        <div class="user-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>User</th><th>Role</th><th>Status</th><th>Joined</th><th>Wallet</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Modal -->
+        <div class="modal-overlay" id="userModal">
+          <div class="modal">
+            <p class="modal-title" id="modalTitle">Add User</p>
+            <p class="modal-sub" id="modalSub">Create a new user account.</p>
+            <div class="form-group">
+              <label class="form-label">Full Name <span class="req">*</span></label>
+              <input class="form-input" id="mName" placeholder="e.g. Jane Smith" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email <span class="req">*</span></label>
+              <input class="form-input" id="mEmail" type="email" placeholder="user@example.com" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Password <span class="req" id="pwRequired">*</span></label>
+              <input class="form-input" id="mPassword" type="password" placeholder="Leave blank to keep existing" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Role <span class="req">*</span></label>
+              <select class="form-select" id="mRole">
+                <option value="">Select role</option>
+                <option value="client">Client</option>
+                <option value="worker">Worker</option>
+                <option value="expert">Expert</option>
+                <option value="superuser">Super User</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select class="form-select" id="mStatus">
+                <option value="active">Active</option>
+                <option value="suspended">Suspended</option>
+              </select>
+            </div>
+            <div class="modal-actions">
+              <button class="btn-cancel-modal" onclick="closeModal()">Cancel</button>
+              <button class="btn-save-modal" id="saveModalBtn" onclick="saveUser()">Save</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      initDashboard({ role: 'superuser', activePath: 'superuser-users.html', pageTitle: 'Manage Users', pageSubtitle: 'Add, edit, suspend or delete platform users', content });
+
+      setTimeout(() => {
+        lucide.createIcons();
+        renderUsers();
+
+        // Close modal on overlay click
+        document.getElementById('userModal')?.addEventListener('click', e => {
+          if (e.target.id === 'userModal') closeModal();
+        });
+
+        // Auto-clear errors
+        ['mName','mEmail','mPassword','mRole'].forEach(id => {
+          document.getElementById(id)?.addEventListener('input', () => Validate.clearError(id));
+        });
+      }, 100);
+    });
+  </script>
+</head>
+<body></body>
+</html>

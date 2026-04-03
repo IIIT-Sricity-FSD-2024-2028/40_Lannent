@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Apply as Expert Reviewer — Lannent</title>
+  <meta name="description" content="Join Lannent's network of expert reviewers. Conduct technical audits, resolve disputes, and earn competitive fees." />
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <style>
+    /* ═══════════════════════════════════════════════
+       LAYOUT — split-panel auth style
+    ═══════════════════════════════════════════════ */
+    .auth-card-signup {
+      width: 100%;
+      max-width: 560px;
+      border-radius: 24px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      padding: 36px;
+      box-shadow: 0 10px 40px 5px rgba(194,194,194,0.25);
+      animation: fadeUp 0.6s cubic-bezier(0.25,0.4,0.25,1) forwards;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--foreground);
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-title i { width: 14px; height: 14px; color: var(--muted-foreground); }
+
+    .form-row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .input-icon-wrap {
+      position: relative;
+    }
+    .input-icon-wrap .form-input { padding-left: 36px; }
+    .input-icon-wrap .input-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted-foreground);
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+    }
+
+    /* ═══════════════════════════════════════════════
+       FORM INPUT STATES
+    ═══════════════════════════════════════════════ */
+    .form-input.input-error,
+    .form-textarea.input-error {
+      border-color: #ef4444 !important;
+      box-shadow: 0 0 0 2px rgba(239,68,68,0.12) !important;
+    }
+    .form-input.input-valid,
+    .form-textarea.input-valid {
+      border-color: #10b981 !important;
+      box-shadow: 0 0 0 2px rgba(16,185,129,0.10) !important;
+    }
+    .field-error-msg {
+      color: #ef4444;
+      font-size: 12px;
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      animation: errSlide 0.2s ease;
+    }
+    @keyframes errSlide {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ═══════════════════════════════════════════════
+       PHONE INPUT GROUP
+    ═══════════════════════════════════════════════ */
+    .exp-phone-group {
+      display: flex; gap: 8px; align-items: flex-start;
+    }
+    .exp-phone-country {
+      width: 160px; flex-shrink: 0; height: 44px; padding: 0 8px;
+      border: 1px solid var(--border); border-radius: 12px;
+      background: hsl(0,0%,99%); font-size: 13px;
+      color: var(--foreground); outline: none; cursor: pointer;
+      font-family: inherit;
+      transition: box-shadow 0.2s, border-color 0.2s;
+    }
+    .exp-phone-country:focus {
+      box-shadow: 0 0 0 2px var(--ring);
+    }
+    .exp-phone-input-wrap {
+      flex: 1; position: relative;
+    }
+    .exp-phone-input-wrap .input-icon {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      color: var(--muted-foreground); pointer-events: none;
+      display: flex; align-items: center;
+    }
+    .exp-phone-input-wrap .form-input {
+      padding-left: 36px; width: 100%; box-sizing: border-box;
+    }
+    .exp-phone-hint {
+      font-size: 11px; color: var(--muted-foreground); margin-top: 4px;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .exp-phone-hint i { width: 12px; height: 12px; }
+
+    /* ═══════════════════════════════════════════════
+       FILE UPLOAD
+    ═══════════════════════════════════════════════ */
+    .upload-zone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 24px 16px;
+      border-radius: 12px;
+      border: 2px dashed var(--border);
+      background: var(--secondary);
+      font-size: 13px;
+      color: var(--muted-foreground);
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+      position: relative;
+      text-align: center;
+    }
+    .upload-zone:hover { background: var(--accent); border-color: var(--ring); }
+    .upload-zone.drag-over {
+      border-color: #6366f1;
+      background: rgba(99,102,241,0.06);
+    }
+    .upload-zone.has-file {
+      border-color: #22c55e;
+      border-style: solid;
+      color: #16a34a;
+      background: #f0fdf4;
+    }
+    .upload-zone.has-error {
+      border-color: #ef4444;
+      background: #fef2f2;
+      color: #ef4444;
+    }
+    .upload-zone input[type="file"] {
+      display: none;
+    }
+    .upload-icon { display: flex; margin-bottom: 4px; }
+    .upload-main { font-size: 13px; font-weight: 500; }
+    .upload-sub { font-size: 11px; opacity: 0.7; }
+    .upload-file-name {
+      font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;
+    }
+
+    /* ═══════════════════════════════════════════════
+       TEXTAREA & CHARACTER COUNTER
+    ═══════════════════════════════════════════════ */
+    .form-textarea {
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: hsl(0,0%,99%);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      resize: none;
+      color: var(--foreground);
+      transition: box-shadow 0.2s, border-color 0.2s;
+      box-sizing: border-box;
+    }
+    .form-textarea::placeholder { color: var(--muted-foreground); }
+    .form-textarea:focus { box-shadow: 0 0 0 2px var(--ring); }
+
+    .char-counter {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--muted-foreground);
+    }
+    .char-counter.warning { color: #f59e0b; }
+    .char-counter.danger { color: #ef4444; }
+    .char-bar {
+      height: 3px;
+      border-radius: 2px;
+      background: var(--border);
+      margin-top: 6px;
+      overflow: hidden;
+    }
+    .char-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.2s, background 0.2s;
+    }
+
+    /* ═══════════════════════════════════════════════
+       SUBMIT BUTTON
+    ═══════════════════════════════════════════════ */
+    .btn-submit {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 14px 28px;
+      border-radius: 32px;
+      background: linear-gradient(to bottom, hsl(0,0%,16%), hsl(0,0%,10%));
+      color: white;
+      font-size: 15px;
+      font-weight: 500;
+      font-family: inherit;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.2s, opacity 0.2s;
+      box-shadow: inset -4px -6px 25px 0 rgba(201,201,201,.08), inset 4px 4px 10px 0 rgba(29,29,29,.24);
+    }
+    .btn-submit:hover:not(:disabled) { transform: scale(1.01); }
+    .btn-submit:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-submit.loading {
+      pointer-events: none;
+    }
+    .btn-spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ═══════════════════════════════════════════════
+       TOOLTIP HINTS
+    ═══════════════════════════════════════════════ */
+    .form-label {
+      position: relative;
+    }
+    .label-tooltip {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 4px;
+      cursor: help;
+      position: relative;
+    }
+    .label-tooltip i { width: 13px; height: 13px; color: var(--muted-foreground); }
+    .label-tooltip .tooltip-text {
+      display: none;
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e293b;
+      color: white;
+      font-size: 11px;
+      font-weight: 400;
+      padding: 6px 10px;
+      border-radius: 8px;
+      white-space: nowrap;
+      z-index: 10;
+      margin-bottom: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .label-tooltip:hover .tooltip-text { display: block; }
+
+    /* ═══════════════════════════════════════════════
+       FIXED VIDEO / STICKY LEFT
+    ═══════════════════════════════════════════════ */
+    .auth-video-wrap { position: fixed !important; }
+    .auth-left {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ═══════════════════════════════════════════════
+       RESPONSIVE
+    ═══════════════════════════════════════════════ */
+    @media (max-width: 768px) {
+      .form-row-2 { grid-template-columns: 1fr; }
+      .exp-phone-group { flex-direction: column; }
+      .exp-phone-country { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-page">
+    <!-- Background video (fixed) -->
+    <div class="auth-video-wrap">
+      <video class="auth-video" autoplay muted loop playsinline>
+        <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260302_085640_276ea93b-d7da-4418-a09b-2aa5b490e838.mp4" type="video/mp4" />
+      </video>
+      <div class="auth-overlay"></div>
+    </div>
+
+    <!-- LEFT — Branding (sticky) -->
+    <div class="auth-left">
+      <h1 class="auth-title">Join our network of <span class="serif">expert</span> reviewers.</h1>
+      <p class="auth-sub">Help maintain quality standards across the platform by conducting technical audits and resolving disputes. Earn competitive fees while building your reputation.</p>
+      <div class="auth-features">
+        <div class="auth-feature">
+          <div class="auth-feature-icon"><i data-lucide="file-check" style="width:15px;height:15px;"></i></div>
+          <span style="font-size:14px;">Conduct technical audits</span>
+        </div>
+        <div class="auth-feature">
+          <div class="auth-feature-icon"><i data-lucide="scale" style="width:15px;height:15px;"></i></div>
+          <span style="font-size:14px;">Resolve project disputes</span>
+        </div>
+        <div class="auth-feature">
+          <div class="auth-feature-icon"><i data-lucide="lock" style="width:15px;height:15px;"></i></div>
+          <span style="font-size:14px;">Earn $80–$150 per review</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT — Application Form (scrollable) -->
+    <div class="auth-right" style="align-items:flex-start;padding-top:48px;padding-bottom:48px;overflow-y:auto;max-height:100vh;">
+      <div class="auth-card-signup">
+        <div class="auth-card-brand">
+          <i data-lucide="shield-check" style="width:20px;height:20px;"></i>
+          <span class="auth-card-brand-name">Lannent</span>
+        </div>
+        <h2 style="font-size:24px;font-weight:500;letter-spacing:-0.03em;margin-top:24px;margin-bottom:4px;">Apply as Expert Reviewer</h2>
+        <p style="font-size:14px;color:var(--muted-foreground);margin-bottom:28px;">Join our network of technical experts who verify project deliverables.</p>
+
+        <form id="expertSignupForm" novalidate>
+
+          <!-- ═══ BASIC INFORMATION ═══ -->
+          <div class="section-title">
+            <i data-lucide="user"></i> Basic Information
+          </div>
+
+          <!-- Full Name -->
+          <div class="form-group" id="grp-expName">
+            <label class="form-label" for="expName">
+              Full Name <span style="color:#ef4444;">*</span>
+              <span class="label-tooltip">
+                <i data-lucide="help-circle"></i>
+                <span class="tooltip-text">Letters, spaces, and prefixes like "Dr." allowed</span>
+              </span>
+            </label>
+            <input type="text" class="form-input" placeholder="Dr. Jane Smith" id="expName" aria-required="true" autocomplete="name" />
+            <div id="expName_error" class="field-error-msg" style="display:none;"></div>
+          </div>
+
+          <!-- Email & Phone Row -->
+          <div class="form-group" id="grp-expEmail">
+            <label class="form-label" for="expEmail">
+              Email Address <span style="color:#ef4444;">*</span>
+            </label>
+            <div class="input-icon-wrap">
+              <span class="input-icon"><i data-lucide="mail" style="width:16px;height:16px;"></i></span>
+              <input type="email" class="form-input" placeholder="jane@example.com" id="expEmail" aria-required="true" autocomplete="email" />
+            </div>
+            <div id="expEmail_error" class="field-error-msg" style="display:none;"></div>
+          </div>
+
+          <!-- Phone with Country Code -->
+          <div class="form-group" id="grp-expPhone">
+            <label class="form-label" for="expPhone">
+              Phone Number <span style="color:#ef4444;">*</span>
+              <span class="label-tooltip">
+                <i data-lucide="help-circle"></i>
+                <span class="tooltip-text">Digits only, validated per country</span>
+              </span>
+            </label>
+            <div class="exp-phone-group">
+              <select class="exp-phone-country" id="expPhoneCountry" aria-label="Country code"></select>
+              <div class="exp-phone-input-wrap">
+                <span class="input-icon"><i data-lucide="phone" style="width:16px;height:16px;"></i></span>
+                <input type="tel" class="form-input" id="expPhone" aria-required="true" autocomplete="tel" />
+              </div>
+            </div>
+            <div class="exp-phone-hint" id="expPhoneHint"><i data-lucide="info"></i> Enter 10-digit number</div>
+            <div id="expPhone_error" class="field-error-msg" style="display:none;"></div>
+          </div>
+
+          <!-- Country -->
+          <div class="form-group" id="grp-expCountry">
+            <label class="form-label" for="expCountry">
+              Country <span style="color:#ef4444;">*</span>
+            </label>
+            <select class="form-input" id="expCountry" aria-required="true">
+              <option value="">Select your country</option>
+              <option value="in">India</option>
+              <option value="us">United States</option>
+              <option value="uk">United Kingdom</option>
+              <option value="ca">Canada</option>
+              <option value="au">Australia</option>
+              <option value="de">Germany</option>
+              <option value="fr">France</option>
+              <option value="sg">Singapore</option>
+              <option value="other">Other</option>
+            </select>
+            <div id="expCountry_error" class="field-error-msg" style="display:none;"></div>
+          </div>
+
+          <!-- ═══ PROFESSIONAL DETAILS ═══ -->
+          <div class="section-title" style="margin-top:8px;">
+            <i data-lucide="briefcase"></i> Professional Details
+          </div>
+
+          <!-- Primary Expertise -->
+          <div class="form-group" id="grp-expExpertise">
+            <label class="form-label" for="expExpertise">
+              Primary Expertise <span style="color:#ef4444;">*</span>
+            </label>
+            <select class="form-input" id="expExpertise" aria-required="true">
+              <option value="">Select your primary expertise</option>
+              <option value="frontend">Frontend Development</option>
+              <option value="backend">Backend Development</option>
+              <option value="fullstack">Full-Stack Development</option>
+              <option value="mobile">Mobile Development</option>
+              <option value="devops">DevOps &amp; Infrastructure</option>
+              <option value="security">Security &amp; Auditing</option>
+              <option value="data">Data Engineering</option>
+              <option value="ml">Machine Learning</option>
+            </select>
+            <div id="expExpertise_error" class="field-error-msg" style="display:none;"></div>
+          </div>
+
+          <!-- Years of Experience -->
+          <div class="form-group" id="grp-expYears">
+            <label class="form-label" for="expYears">
+              Years of Experience <span style="color:#ef4444;">*</span>
+            </label>
+            <select class="form-input" id="expYears" aria-required="true">
+              <option value="">Select years of experience</option>
+              <option value="1-3">1–3 years</option>
+              <option value="3-5">3–5 years</option>
+              <option value="5-8">5–8 years</option>
+              <option value="8-12">8–12 years</option>
+              <option value="12+">12+ years</option>
+            </select>
+            <div id="expYears_error" class="field-error-msg" style="display:none;"></div>
+          </div>
+
+          <!-- LinkedIn Profile -->
+          <div class="form-group" id="grp-expLinkedin">
+            <label class="form-label" for="expLinkedin">
+              LinkedIn Profile
+              <span style="color:var(--muted-foreground);font-weight:400;font-size:12px;"> (Optional)</span>
+              <span class="label-tooltip">
+                <i data-lucide="help-circle"></i>
+                <span class="tooltip-text">Must contain "linkedin.com"</span>
+              </span>
+            </label>
+            <div class="input-icon-wrap">
+              <span class="input-icon"><i data-lucide="linkedin" style="width:16px;height:16px;"></i></span>
+              <input type="url" class="form-input" placeholder="https://linkedin.com/in/janesmith" id="expLinkedin" autocomplete="url" />
+            </div>
+            <div id="expLinkedin_error" class="field-error-msg" style="display:none;"></div>
+          </div>
+
+          <!-- GitHub / Portfolio URL -->
+          <div class="form-group" id="grp-expGithub">
+            <label class="form-label" for="expGithub">
+              GitHub / Portfolio URL
+              <span style="color:var(--muted-foreground);font-weight:400;font-size:12px;"> (Optional)</span>
+            </label>
+            <div class="input-icon-wrap">
+              <span class="input-icon"><i data-lucide="github" style="width:16px;height:16px;"></i></span>
+              <input type="url" class="form-input" placeholder="https://github.com/janesmith" id="expGithub" autocomplete="url" />
+            </div>
+            <div id="expGithub_error" class="field-error-msg" style="display:none;"></div>
+          </div>
+
+          <!-- ═══ VERIFICATION DOCUMENTS ═══ -->
+          <div class="section-title" style="margin-top:8px;">
+            <i data-lucide="file-text"></i> Verification Documents
+          </div>
+
+          <!-- Resume Upload (PDF, max 2MB) -->
+          <div class="form-group" id="grp-expResume">
+            <label class="form-label">
+              Upload Resume <span style="color:#ef4444;">*</span>
+              <span class="label-tooltip">
+                <i data-lucide="help-circle"></i>
+                <span class="tooltip-text">PDF only, max 2MB</span>
+              </span>
+            </label>
+            <label class="upload-zone" id="resumeZone" for="expResume" tabindex="0" role="button" aria-label="Upload resume PDF">
+              <input type="file" accept=".pdf" id="expResume" aria-required="true" />
+              <div class="upload-icon"><i data-lucide="upload" style="width:24px;height:24px;"></i></div>
+              <div class="upload-main" id="resumeMainText">Click or drag & drop your resume</div>
+              <div class="upload-sub" id="resumeSubText">PDF only · Max 2MB</div>
+            </label>
+            <div id="expResume_error" class="field-error-msg" style="display:none;"></div>
+          </div>
+
+          <!-- Certifications Upload (Optional, PDF/JPG/PNG, max 5MB) -->
+          <div class="form-group" id="grp-expCert">
+            <label class="form-label">
+              Upload Certifications
+              <span style="color:var(--muted-foreground);font-weight:400;font-size:12px;"> (Optional)</span>
+              <span class="label-tooltip">
+                <i data-lucide="help-circle"></i>
+                <span class="tooltip-text">PDF, JPG, or PNG · Max 5MB</span>
+              </span>
+            </label>
+            <label class="upload-zone" id="certZone" for="expCert" tabindex="0" role="button" aria-label="Upload certifications">
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png" id="expCert" />
+              <div class="upload-icon"><i data-lucide="upload" style="width:24px;height:24px;"></i></div>
+              <div class="upload-main" id="certMainText">Click or drag & drop certifications</div>
+              <div class="upload-sub" id="certSubText">PDF, JPG, PNG · Max 5MB</div>
+            </label>
+            <div id="expCert_error" class="field-error-msg" style="display:none;"></div>
+          </div>
+
+          <!-- ═══ MOTIVATION ═══ -->
+          <div class="form-group" style="margin-top:8px;" id="grp-expMotivation">
+            <label class="form-label" for="expMotivation">
+              Why do you want to become an expert reviewer? <span style="color:#ef4444;">*</span>
+            </label>
+            <textarea
+              class="form-textarea"
+              rows="5"
+              id="expMotivation"
+              aria-required="true"
+              placeholder="Share your motivation and how your expertise can help maintain quality standards..."
+              maxlength="500"
+            ></textarea>
+            <div class="char-counter" id="motivCharCounter">
+              <span id="motivCharText">0/500 characters</span>
+              <span id="motivCharMin">Min 30 characters</span>
+            </div>
+            <div class="char-bar">
+              <div class="char-bar-fill" id="motivCharBar" style="width:0%;background:var(--border);"></div>
+            </div>
+            <div id="expMotivation_error" class="field-error-msg" style="display:none;"></div>
+          </div>
+
+          <!-- Submit Button -->
+          <button type="submit" class="btn-submit" id="expSubmitBtn" disabled style="margin-top:8px;">
+            <span id="submitBtnText">Submit Application</span>
+          </button>
+        </form>
+
+        <p class="auth-footer-text" style="margin-top:24px;">
+          Already have an account? <a href="expert-login.html">Sign in</a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SUCCESS MODAL ═══ -->
+  <div id="successModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(4px);">
+    <div style="background:white;border-radius:24px;padding:40px;text-align:center;max-width:420px;margin:0 16px;box-shadow:0 32px 80px rgba(0,0,0,0.15);animation:fadeUp 0.4s ease;">
+      <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#10b981,#059669);display:flex;align-items:center;justify-content:center;margin:0 auto 24px;box-shadow:0 12px 32px rgba(16,185,129,0.3);">
+        <i data-lucide="check" style="width:32px;height:32px;color:white;"></i>
+      </div>
+      <h2 style="font-size:22px;font-weight:600;margin-bottom:8px;">Application Submitted!</h2>
+      <p style="color:#64748b;font-size:14px;line-height:1.6;margin-bottom:24px;">Thank you for applying! We'll review your application within 48 hours and reach out via email.</p>
+      <a href="../index.html" style="display:inline-block;padding:12px 28px;border-radius:32px;background:linear-gradient(to bottom,hsl(0,0%,16%),hsl(0,0%,10%));color:white;font-weight:500;text-decoration:none;font-size:14px;transition:transform 0.2s;" onmouseenter="this.style.transform='scale(1.02)'" onmouseleave="this.style.transform=''">Back to Home</a>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       VALIDATION SCRIPT
+  ═══════════════════════════════════════════════ -->
+  <script>
+    lucide.createIcons();
+
+    /* ────────────────────────────────────────────────
+       DOM References
+    ──────────────────────────────────────────────── */
+    const $  = id => document.getElementById(id);
+    const el = {
+      form:         $('expertSignupForm'),
+      name:         $('expName'),
+      email:        $('expEmail'),
+      phoneCountry: $('expPhoneCountry'),
+      phone:        $('expPhone'),
+      phoneHint:    $('expPhoneHint'),
+      country:      $('expCountry'),
+      expertise:    $('expExpertise'),
+      years:        $('expYears'),
+      linkedin:     $('expLinkedin'),
+      github:       $('expGithub'),
+      resume:       $('expResume'),
+      resumeZone:   $('resumeZone'),
+      cert:         $('expCert'),
+      certZone:     $('certZone'),
+      motivation:   $('expMotivation'),
+      submitBtn:    $('expSubmitBtn'),
+      submitText:   $('submitBtnText'),
+    };
+
+    /* ────────────────────────────────────────────────
+       ERROR HELPERS (per-field, below-field messages)
+    ──────────────────────────────────────────────── */
+    const errIcon = '<svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+
+    function showFieldError(fieldId, msg) {
+      const field = $(fieldId);
+      const errEl = $(fieldId + '_error');
+      if (field) { field.classList.remove('input-valid'); field.classList.add('input-error'); }
+      if (errEl) { errEl.innerHTML = errIcon + msg; errEl.style.display = 'flex'; }
+    }
+
+    function clearFieldError(fieldId) {
+      const field = $(fieldId);
+      const errEl = $(fieldId + '_error');
+      if (field) field.classList.remove('input-error');
+      if (errEl) { errEl.innerHTML = ''; errEl.style.display = 'none'; }
+    }
+
+    function markFieldValid(fieldId) {
+      const field = $(fieldId);
+      if (field) { field.classList.remove('input-error'); field.classList.add('input-valid'); }
+      clearFieldError(fieldId);
+    }
+
+    /* ────────────────────────────────────────────────
+       INDIVIDUAL VALIDATORS
+       Each returns null (valid) or error string.
+    ──────────────────────────────────────────────── */
+
+    /** 1. Full Name: required, min 3, letters/spaces/dots */
+    function validateName() {
+      const v = el.name.value.trim();
+      if (!v) return 'Full name is required.';
+      if (v.length < 3) return 'Full name must be at least 3 characters.';
+      if (!/^[a-zA-Z\s.]{3,}$/.test(v)) return 'Only letters, spaces, and "." allowed.';
+      return null;
+    }
+
+    /** 2. Email */
+    function validateEmail() {
+      const v = el.email.value.trim();
+      if (!v) return 'Email address is required.';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'Please enter a valid email address.';
+      return null;
+    }
+
+    /** 3. Phone (country-aware, required) */
+    function validatePhone() {
+      const code  = el.phoneCountry.value;
+      const v = el.phone.value.trim();
+      if (!v) return 'Phone number is required.';
+      const digits = v.replace(/\D/g, '');
+      const rule = Validate.getPhoneValidationRule(code);
+      if (digits.length !== rule.length) return `Phone must be exactly ${rule.length} digits for ${rule.name} (${code}).`;
+      if (!rule.pattern.test(digits)) return `Invalid phone number for ${rule.name} (${code}).`;
+      return null;
+    }
+
+    /** 4. Country dropdown */
+    function validateCountry() {
+      if (!el.country.value) return 'Please select your country.';
+      return null;
+    }
+
+    /** 5. Primary Expertise dropdown */
+    function validateExpertise() {
+      if (!el.expertise.value) return 'Please select your primary expertise.';
+      return null;
+    }
+
+    /** 6. Years of Experience dropdown */
+    function validateYears() {
+      if (!el.years.value) return 'Please select your years of experience.';
+      return null;
+    }
+
+    /** 7. LinkedIn (optional, must be valid URL containing linkedin.com) */
+    function validateLinkedin() {
+      const v = el.linkedin.value.trim();
+      if (!v) return null; // optional
+      try { new URL(v); } catch { return 'Please enter a valid URL.'; }
+      if (!v.toLowerCase().includes('linkedin.com')) return 'URL must contain "linkedin.com".';
+      return null;
+    }
+
+    /** 8. GitHub / Portfolio (optional, must be valid URL) */
+    function validateGithub() {
+      const v = el.github.value.trim();
+      if (!v) return null; // optional
+      try { new URL(v); } catch { return 'Please enter a valid URL.'; }
+      return null;
+    }
+
+    /** 9. Resume: required, PDF only, max 2MB */
+    function validateResume() {
+      const files = el.resume.files;
+      if (!files || files.length === 0) return 'Please upload your resume (PDF).';
+      const file = files[0];
+      if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf'))
+        return 'Resume must be a PDF file.';
+      if (file.size > 2 * 1024 * 1024) return 'Resume must be under 2MB.';
+      return null;
+    }
+
+    /** 10. Certifications: optional, PDF/JPG/PNG, max 5MB */
+    function validateCert() {
+      const files = el.cert.files;
+      if (!files || files.length === 0) return null; // optional
+      const file = files[0];
+      const allowed = ['application/pdf', 'image/jpeg', 'image/png'];
+      const ext = file.name.toLowerCase().split('.').pop();
+      if (!allowed.includes(file.type) && !['pdf','jpg','jpeg','png'].includes(ext))
+        return 'Only PDF, JPG, or PNG files allowed.';
+      if (file.size > 5 * 1024 * 1024) return 'Certifications must be under 5MB.';
+      return null;
+    }
+
+    /** 11. Motivation: required, 30–500 chars */
+    function validateMotivation() {
+      const v = el.motivation.value.trim();
+      if (!v) return 'This field is required.';
+      if (v.length < 30) return `Please write at least 30 characters (currently ${v.length}).`;
+      if (v.length > 500) return 'Maximum 500 characters allowed.';
+      return null;
+    }
+
+    /* ────────────────────────────────────────────────
+       FIELD → VALIDATOR MAPPING
+    ──────────────────────────────────────────────── */
+    const fieldValidators = {
+      expName:       validateName,
+      expEmail:      validateEmail,
+      expPhone:      validatePhone,
+      expCountry:    validateCountry,
+      expExpertise:  validateExpertise,
+      expYears:      validateYears,
+      expLinkedin:   validateLinkedin,
+      expGithub:     validateGithub,
+      expResume:     validateResume,
+      expCert:       validateCert,
+      expMotivation: validateMotivation,
+    };
+
+    /** Run a single field's validator and update UI. Returns true if valid. */
+    function runFieldValidation(fieldId) {
+      const fn = fieldValidators[fieldId];
+      if (!fn) return true;
+      const err = fn();
+      if (err) { showFieldError(fieldId, err); return false; }
+      markFieldValid(fieldId);
+      return true;
+    }
+
+    /** Run ALL validators silently (no UI changes) to determine submit button state. */
+    function isFormValid() {
+      for (const [id, fn] of Object.entries(fieldValidators)) {
+        if (fn() !== null) return false;
+      }
+      return true;
+    }
+
+    /** Enable / disable submit button based on form validity. */
+    function updateSubmitState() {
+      el.submitBtn.disabled = !isFormValid();
+    }
+
+    /* ────────────────────────────────────────────────
+       PHONE COUNTRY SETUP
+    ──────────────────────────────────────────────── */
+    (function setupPhoneCountry() {
+      const countries = Validate.getPhoneCountries();
+      el.phoneCountry.innerHTML = countries.map(c =>
+        `<option value="${c.code}"${c.code === '+91' ? ' selected' : ''}>${c.flag} ${c.name} (${c.code})</option>`
+      ).join('');
+
+      function updatePhoneUI() {
+        const rule = Validate.getPhoneValidationRule(el.phoneCountry.value);
+        el.phone.setAttribute('maxlength', rule.length);
+        el.phone.setAttribute('placeholder', rule.placeholder);
+        el.phoneHint.innerHTML = `<i data-lucide="info"></i> Enter ${rule.length}-digit number`;
+        lucide.createIcons();
+        // Re-validate if there's a value
+        if (el.phone.value.trim()) runFieldValidation('expPhone');
+        updateSubmitState();
+      }
+
+      el.phoneCountry.addEventListener('change', updatePhoneUI);
+      updatePhoneUI();
+
+      // Block non-digits in real-time
+      el.phone.addEventListener('input', function () {
+        this.value = this.value.replace(/\D/g, '');
+      });
+      el.phone.addEventListener('keypress', function (e) {
+        if (!/[0-9]/.test(e.key)) e.preventDefault();
+      });
+      el.phone.addEventListener('paste', function (e) {
+        e.preventDefault();
+        const text = (e.clipboardData || window.clipboardData).getData('text');
+        this.value = text.replace(/\D/g, '').substring(0, parseInt(this.getAttribute('maxlength')) || 15);
+      });
+    })();
+
+    /* ────────────────────────────────────────────────
+       DRAG & DROP FILE UPLOADS
+    ──────────────────────────────────────────────── */
+    function setupUploadZone(zoneEl, inputEl, mainTextId, subTextId, defaultMain, defaultSub) {
+      // Drag events
+      ['dragenter','dragover'].forEach(evt => {
+        zoneEl.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); zoneEl.classList.add('drag-over'); });
+      });
+      ['dragleave','drop'].forEach(evt => {
+        zoneEl.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); zoneEl.classList.remove('drag-over'); });
+      });
+      zoneEl.addEventListener('drop', e => {
+        const dt = e.dataTransfer;
+        if (dt.files && dt.files.length > 0) {
+          inputEl.files = dt.files;
+          inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+
+      // File change
+      inputEl.addEventListener('change', function () {
+        const mainText = $(mainTextId);
+        const subText  = $(subTextId);
+        if (this.files && this.files[0]) {
+          const f = this.files[0];
+          const sizeMB = (f.size / (1024*1024)).toFixed(1);
+          mainText.innerHTML = `<span class="upload-file-name"><i data-lucide="file-check" style="width:14px;height:14px;"></i> ${f.name}</span>`;
+          subText.textContent = `${sizeMB} MB`;
+          zoneEl.classList.add('has-file');
+          zoneEl.classList.remove('has-error');
+          lucide.createIcons();
+        } else {
+          mainText.textContent = defaultMain;
+          subText.textContent = defaultSub;
+          zoneEl.classList.remove('has-file');
+        }
+      });
+    }
+
+    setupUploadZone(el.resumeZone, el.resume, 'resumeMainText', 'resumeSubText', 'Click or drag & drop your resume', 'PDF only · Max 2MB');
+    setupUploadZone(el.certZone, el.cert, 'certMainText', 'certSubText', 'Click or drag & drop certifications', 'PDF, JPG, PNG · Max 5MB');
+
+    /* ────────────────────────────────────────────────
+       MOTIVATION CHARACTER COUNTER
+    ──────────────────────────────────────────────── */
+    el.motivation.addEventListener('input', function () {
+      const len = this.value.length;
+      const pct = Math.min(100, (len / 500) * 100);
+      $('motivCharText').textContent = `${len}/500 characters`;
+      $('motivCharBar').style.width = pct + '%';
+
+      const counter = $('motivCharCounter');
+      const bar = $('motivCharBar');
+      if (len < 30) {
+        counter.className = 'char-counter danger';
+        bar.style.background = '#ef4444';
+        $('motivCharMin').textContent = `${30 - len} more needed`;
+      } else if (len > 450) {
+        counter.className = 'char-counter warning';
+        bar.style.background = '#f59e0b';
+        $('motivCharMin').textContent = `${500 - len} remaining`;
+      } else {
+        counter.className = 'char-counter';
+        bar.style.background = '#10b981';
+        $('motivCharMin').textContent = '✓ Meets minimum';
+      }
+    });
+
+    /* ────────────────────────────────────────────────
+       EVENT WIRING: input / change / blur
+    ──────────────────────────────────────────────── */
+    // Text fields — validate on input (debounced) and blur
+    const textFields = ['expName','expEmail','expPhone','expLinkedin','expGithub','expMotivation'];
+    textFields.forEach(id => {
+      const field = $(id);
+      if (!field) return;
+
+      let timer;
+      field.addEventListener('input', () => {
+        clearTimeout(timer);
+        clearFieldError(id);
+        timer = setTimeout(() => { runFieldValidation(id); updateSubmitState(); }, 350);
+      });
+      field.addEventListener('blur', () => {
+        clearTimeout(timer);
+        runFieldValidation(id);
+        updateSubmitState();
+      });
+    });
+
+    // Dropdowns — validate on change
+    ['expCountry','expExpertise','expYears','expPhoneCountry'].forEach(id => {
+      const field = $(id);
+      if (!field) return;
+      field.addEventListener('change', () => {
+        if (id === 'expPhoneCountry') {
+          if (el.phone.value.trim()) runFieldValidation('expPhone');
+        } else {
+          runFieldValidation(id);
+        }
+        updateSubmitState();
+      });
+    });
+
+    // File inputs — validate on change
+    ['expResume','expCert'].forEach(id => {
+      $(id)?.addEventListener('change', () => {
+        const err = fieldValidators[id]();
+        const zoneId = id === 'expResume' ? 'resumeZone' : 'certZone';
+        if (err) {
+          showFieldError(id, err);
+          $(zoneId).classList.add('has-error');
+          $(zoneId).classList.remove('has-file');
+        } else {
+          clearFieldError(id);
+          $(zoneId).classList.remove('has-error');
+        }
+        updateSubmitState();
+      });
+    });
+
+    /* ────────────────────────────────────────────────
+       FORM SUBMIT
+    ──────────────────────────────────────────────── */
+    el.form.addEventListener('submit', function (e) {
+      e.preventDefault();
+
+      // Run ALL validations with UI
+      let firstErrorId = null;
+      const requiredFields = ['expName','expEmail','expPhone','expCountry','expExpertise','expYears','expResume','expMotivation'];
+      const optionalFields = ['expLinkedin','expGithub','expCert'];
+      const allFields = [...requiredFields, ...optionalFields];
+
+      allFields.forEach(id => {
+        const valid = runFieldValidation(id);
+        if (!valid && !firstErrorId) firstErrorId = id;
+
+        // Update upload zone error state for file fields
+        if (id === 'expResume' && !valid) el.resumeZone.classList.add('has-error');
+        if (id === 'expCert' && !valid) el.certZone.classList.add('has-error');
+      });
+
+      if (firstErrorId) {
+        // Scroll to first error
+        const grp = $('grp-' + firstErrorId) || $(firstErrorId);
+        if (grp) grp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+
+      // Check duplicate email in users AND applications
+      if (typeof Store !== 'undefined') {
+        const existingUser = Store.getUserByEmail(el.email.value.trim());
+        const existingApp  = Store.getExpertApplicationByEmail(el.email.value.trim());
+        if (existingUser) {
+          showFieldError('expEmail', 'An account with this email already exists.');
+          $('grp-expEmail')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+        if (existingApp) {
+          const statusMsg = existingApp.status === 'pending'
+            ? 'An application with this email is already under review.'
+            : existingApp.status === 'rejected'
+            ? 'A previous application with this email was rejected. Please contact support.'
+            : 'This email is already approved. Please log in instead.';
+          showFieldError('expEmail', statusMsg);
+          $('grp-expEmail')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+      }
+
+      // ── Loading state ──
+      el.submitBtn.disabled = true;
+      el.submitBtn.classList.add('loading');
+      el.submitText.innerHTML = '<div class="btn-spinner"></div> Submitting...';
+
+      // Save application to Store
+      const phoneCountry = $('expPhoneCountry') ? $('expPhoneCountry').value : '+91';
+      const appData = {
+        name: el.name.value.trim(),
+        email: el.email.value.trim(),
+        phone: el.phone.value.trim(),
+        phoneCountry: phoneCountry,
+        country: el.country.value,
+        expertise: el.expertise.value,
+        experience: el.years.value,
+        linkedin: el.linkedin.value.trim(),
+        github: el.github.value.trim(),
+        motivation: el.motivation.value.trim(),
+      };
+
+      setTimeout(() => {
+        if (typeof Store !== 'undefined') {
+          const result = Store.saveExpertApplication(appData);
+          if (!result.success) {
+            showFieldError('expEmail', result.error);
+            el.submitBtn.disabled = false;
+            el.submitBtn.classList.remove('loading');
+            el.submitText.textContent = 'Submit Application';
+            return;
+          }
+        }
+        el.submitBtn.classList.remove('loading');
+        el.submitText.textContent = 'Submit Application';
+        $('successModal').style.display = 'flex';
+        lucide.createIcons();
+      }, 1800);
+    });
+
+    // Initial submit state
+    updateSubmitState();
+  </script>
+</body>
+</html>

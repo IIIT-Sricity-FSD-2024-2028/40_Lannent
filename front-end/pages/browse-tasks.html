@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Browse Tasks — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <script>
+    // Fetch open tasks from store
+
+    // Merge open tasks from store
+    function getAllBrowseTasks() {
+      const storeTasks = Store.getOpenTasks().map(t => ({
+        id: t.id,
+        title: t.title,
+        desc: t.description,
+        budget: '$' + t.budget.toLocaleString(),
+        type: 'Fixed',
+        level: 'Intermediate',
+        tags: t.skills || [],
+        proposals: Store.getProposalsByTask(t.id).filter(p => p.type !== 'invitation').length,
+        deadline: t.deadline || 'TBD',
+        badge: t.auditEnabled ? 'Audit' : 'New',
+        badgeClass: t.auditEnabled ? 'badge-purple' : 'badge-green',
+        category: t.category?.toLowerCase().replace(/[^a-z]/g,'') || 'web',
+        fromStore: true,
+      }));
+      return storeTasks;
+    }
+
+    let tasks = [];
+
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('worker')) return;
+      tasks = getAllBrowseTasks();
+      function renderTaskCards(list) {
+        if (!list.length) return '<p style="color:var(--muted-foreground);padding:32px;text-align:center;">No tasks found matching your criteria.</p>';
+        return `<div class="task-grid">${list.map(t => `
+          <div class="task-card" onclick="window.location.href='task-details.html?id=${t.id}'">
+            <div class="task-card-header">
+              <span style="font-weight:600;font-size:15px;color:var(--foreground);">${t.title}</span>
+              ${t.badge ? `<span class="badge ${t.badgeClass}">${t.badge}</span>` : ''}
+            </div>
+            <p class="task-desc">${t.desc}</p>
+            <div class="skills-list">${t.tags.slice(0,3).map(function(tag){ return '<span class="skill-tag">' + (tag) + '</span>'; }).join('')}${t.tags.length > 3 ? `<span class="skill-tag">+${t.tags.length-3}</span>` : ''}</div>
+            <div class="task-meta">
+              <div class="task-meta-item"><i data-lucide="briefcase" style="width:13px;height:13px;"></i>${t.type}</div>
+              <div class="task-meta-item"><i data-lucide="bar-chart-2" style="width:13px;height:13px;"></i>${t.level}</div>
+              <div class="task-meta-item"><i data-lucide="users" style="width:13px;height:13px;"></i>${t.proposals} proposals</div>
+              <div class="task-meta-item"><i data-lucide="clock" style="width:13px;height:13px;"></i>Due ${t.deadline}</div>
+            </div>
+            <div class="task-footer">
+              <div class="task-budget">${t.budget} <span>/ project</span></div>
+              <button class="btn-primary" style="font-size:13px;padding:6px 16px;">Apply Now</button>
+            </div>
+          </div>`).join('')}</div>`;
+      }
+
+      const content = `
+        <div style="display: grid; grid-template-columns: 280px 1fr; gap: 32px; align-items: start;">
+          <!-- Left Filter Sidebar -->
+          <div style="background: white; border: 1px solid #E8EAFF; border-radius: 16px; padding: 28px; position: sticky; top: 104px;">
+            <h3 style="font-family: serif; font-size: 20px; font-weight: 500; margin-bottom: 24px; color: #000;">Filters</h3>
+            
+            <div style="margin-bottom: 24px;">
+              <label style="display: block; font-family: serif; font-size: 15px; margin-bottom: 12px; color: #000;">Category</label>
+              <select style="width: 100%; padding: 10px 14px; border: 1px solid #E2E8F0; border-radius: 8px; font-family: serif; font-size: 14px; color: #000; background: white; appearance: none; background-image: url('data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'16\\' height=\\'16\\' viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'black\\' stroke-width=\\'2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><polyline points=\\'6 9 12 15 18 9\\'/></svg>'); background-repeat: no-repeat; background-position: right 14px center;" id="taskCategorySidebar" onchange="document.getElementById('taskCategory').value = this.value; document.getElementById('taskCategory').dispatchEvent(new Event('change'));">
+                <option value="all">All Categories</option>
+                <option value="web">Web Development</option>
+                <option value="mobile">Mobile Development</option>
+                <option value="backend">Backend / API</option>
+                <option value="design">Design</option>
+                <option value="ai">AI / ML</option>
+                <option value="devops">DevOps</option>
+              </select>
+              <!-- Hidden replica to keep original logic intact -->
+              <input type="hidden" id="taskCategory" value="all" />
+            </div>
+
+            <div style="margin-bottom: 24px;">
+              <label style="display: block; font-family: serif; font-size: 15px; margin-bottom: 12px; color: #000;">Budget Range</label>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <input type="text" placeholder="Min" style="flex: 1; min-width: 0; padding: 10px 14px; border: 1px solid #E2E8F0; border-radius: 8px; font-family: serif; font-size: 14px; color: #4A5568;" />
+                <span style="color: #4A5568;">-</span>
+                <input type="text" placeholder="Max" style="flex: 1; min-width: 0; padding: 10px 14px; border: 1px solid #E2E8F0; border-radius: 8px; font-family: serif; font-size: 14px; color: #4A5568;" />
+              </div>
+            </div>
+
+            <div style="margin-bottom: 24px;">
+              <label style="display: block; font-family: serif; font-size: 15px; margin-bottom: 12px; color: #000;">Required Skills</label>
+              <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                ${['React', 'Node.js', 'Python', 'UI Design', 'JavaScript', 'TypeScript', 'Vue.js', 'Figma', 'CSS', 'MongoDB', 'PostgreSQL', 'AWS'].map(skill => `
+                  <button style="padding: 6px 16px; background: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 9999px; font-family: serif; font-size: 13px; color: #4A5568; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#E2E8F0'" onmouseout="this.style.background='#F1F5F9'">${skill}</button>
+                `).join('')}
+              </div>
+            </div>
+
+            <div style="margin-top: 32px; padding: 16px 20px; background: #FAFAFB; border: 1px solid #EAEAEA; border-radius: 12px; display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <i data-lucide="file-check" style="width: 18px; height: 18px; color: #7C3AED;"></i>
+                <span style="font-family: serif; font-size: 14px; color: #000;">Technical Audit</span>
+              </div>
+              <div style="width: 44px; height: 24px; background: #CBD5E1; border-radius: 9999px; position: relative; cursor: pointer; transition: background 0.3s;" onclick="this.style.background = this.style.background.includes('CBD5E1') ? '#7C3AED' : '#CBD5E1'; const thumb = this.children[0]; thumb.style.transform = thumb.style.transform.includes('20px') ? 'translateX(0)' : 'translateX(20px)';">
+                <div style="width: 18px; height: 18px; background: white; border-radius: 50%; position: absolute; top: 3px; left: 3px; transition: transform 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Main Content Area -->
+          <div style="min-width: 0;">
+            <!-- Top Search & Sort Bar -->
+            <div class="filters-bar" style="border-radius: 16px; padding: 14px 20px;">
+              <div class="search-field" style="background: white; border: 1px solid #E2E8F0; border-radius: 12px;">
+                <i data-lucide="search" style="width:16px;height:16px;flex-shrink:0;"></i>
+                <input type="text" placeholder="Search tasks..." id="taskSearch" style="width: 100%; border: none; outline: none; background: transparent; color: #0f172a; font-size: 14px;" />
+              </div>
+              <select class="filter-select" id="taskLevel" style="background: white; border: 1px solid #E2E8F0; border-radius: 10px;">
+                <option value="all">All Levels</option>
+                <option value="entry">Entry Level</option>
+                <option value="intermediate">Intermediate</option>
+                <option value="expert">Expert</option>
+              </select>
+              <div style="margin-left:auto;font-size:14px;color:var(--muted-foreground);">
+                <strong id="taskCount" style="color: #0f172a;">${tasks.length}</strong> tasks found
+              </div>
+            </div>
+
+            <!-- Task Cards -->
+            <div id="taskContainer">${renderTaskCards(tasks)}</div>
+          </div>
+        </div>
+      `;
+
+      const session = Auth.getCurrentUser();
+      initDashboard({
+        role: session?.role || 'worker',
+        activePath: 'browse-tasks.html',
+        pageTitle: 'Browse Tasks',
+        pageSubtitle: 'Find the perfect project that matches your skills',
+        content
+      });
+      lucide.createIcons();
+
+      // Live filtering
+      function filterAndRender() {
+        const q = (document.getElementById('taskSearch')?.value || '').toLowerCase();
+        const cat = (document.getElementById('taskCategory')?.value || 'all');
+        const lvl = (document.getElementById('taskLevel')?.value || 'all');
+
+        let filtered = tasks.filter(t => {
+          const matchQ = !q || t.title.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q) || t.tags.some(tag => tag.toLowerCase().includes(q));
+          const matchCat = cat === 'all' || t.category === cat;
+          const matchLvl = lvl === 'all' || t.level.toLowerCase() === lvl;
+          return matchQ && matchCat && matchLvl;
+        });
+
+        const container = document.getElementById('taskContainer');
+        const countEl = document.getElementById('taskCount');
+        if (container) container.innerHTML = renderTaskCards(filtered);
+        if (countEl) countEl.textContent = filtered.length;
+        lucide.createIcons();
+      }
+
+      document.getElementById('taskSearch')?.addEventListener('input', filterAndRender);
+      document.getElementById('taskCategory')?.addEventListener('change', filterAndRender);
+      document.getElementById('taskLevel')?.addEventListener('change', filterAndRender);
+    });
+  </script>
+</head>
+<body></body>
+</html>

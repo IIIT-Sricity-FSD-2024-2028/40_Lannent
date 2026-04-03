@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Performance Analytics — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    /* ── Grid helpers ──────────────────────────────────────── */
+    .pa-grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+    .pa-grid-3 { display:grid; grid-template-columns:2fr 1fr; gap:24px; }
+    .pa-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    .pa-grid-3col { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+
+    @media(max-width:1100px) {
+      .pa-grid-4 { grid-template-columns:repeat(2,1fr); }
+      .pa-grid-3 { grid-template-columns:1fr; }
+    }
+    @media(max-width:700px) {
+      .pa-grid-4 { grid-template-columns:1fr; }
+      .pa-grid-2 { grid-template-columns:1fr; }
+      .pa-grid-3col { grid-template-columns:1fr; }
+    }
+
+    /* ── Stat cards ────────────────────────────────────────── */
+    .pa-stat {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 10px 40px 5px rgba(194,194,194,.12);
+    }
+    .pa-stat-top { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; }
+    .pa-stat-icon { padding:10px; border-radius:10px; display:flex; align-items:center; justify-content:center; }
+    .pa-stat-val  { font-size:28px; font-weight:500; line-height:1.1; margin-bottom:4px; }
+    .pa-stat-label{ font-size:13px; color:var(--muted-foreground); }
+
+    /* ── Section cards ─────────────────────────────────────── */
+    .pa-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 40px 5px rgba(194,194,194,.12);
+    }
+    .pa-card-title    { font-size:17px; font-weight:500; margin-bottom:4px; }
+    .pa-card-subtitle { font-size:13px; color:var(--muted-foreground); margin-bottom:20px; }
+    .pa-card-header   { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; }
+
+    /* ── Chart wrappers ────────────────────────────────────── */
+    .pa-chart-tall   { position:relative; height:300px; }
+    .pa-chart-mid    { position:relative; height:250px; }
+    .pa-chart-donut  { position:relative; height:200px; }
+
+    /* ── Project performance cards ─────────────────────────── */
+    .pa-project-item {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      background: rgba(0,0,0,.015);
+      transition: background .15s;
+    }
+    .pa-project-item:last-child { margin-bottom:0; }
+    .pa-project-item:hover { background: rgba(0,0,0,.03); }
+    .pa-project-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; }
+    .pa-project-meta   { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+    .pa-project-meta-label { font-size:12px; color:var(--muted-foreground); margin-bottom:4px; }
+    .pa-project-meta-val   { font-size:13px; font-weight:500; }
+
+    .pa-progress-bg   { height:6px; border-radius:9999px; background:var(--secondary); overflow:hidden; margin-top:8px; }
+    .pa-progress-fill { height:100%; border-radius:9999px; }
+
+    .pa-badge {
+      display:inline-flex; align-items:center;
+      padding: 3px 10px; border-radius:6px; border:1px solid;
+      font-size:11px; font-weight:500;
+    }
+    .pa-badge-green  { background:#f0fdf4; border-color:#bbf7d0; color:#15803d; }
+    .pa-badge-blue   { background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8; }
+
+    /* ── Velocity mini cards ───────────────────────────────── */
+    .pa-mini-card {
+      border: 1px solid var(--border);
+      border-radius:12px;
+      padding:16px;
+      background: rgba(0,0,0,.015);
+    }
+    .pa-mini-card-label { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted-foreground); margin-bottom:8px; }
+    .pa-mini-card-val   { font-size:20px; font-weight:500; }
+
+    /* ── Client feedback ───────────────────────────────────── */
+    .pa-feedback-item {
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:16px;
+      margin-bottom:12px;
+      background:rgba(0,0,0,.015);
+    }
+    .pa-feedback-item:last-child { margin-bottom:0; }
+    .pa-feedback-header { display:flex; align-items:flex-start; gap:12px; margin-bottom:0; }
+    .pa-avatar {
+      width:40px; height:40px; border-radius:50%;
+      background:linear-gradient(135deg,#3b82f6,#8b5cf6);
+      display:flex; align-items:center; justify-content:center;
+      color:#fff; font-size:12px; font-weight:600; flex-shrink:0;
+    }
+    .pa-feedback-stars { display:flex; gap:2px; }
+    .pa-feedback-comment { font-size:13px; line-height:1.6; margin-top:8px; color:var(--foreground); }
+    .pa-feedback-date   { font-size:11px; color:var(--muted-foreground); margin-top:6px; }
+
+    /* ── Proposal section ──────────────────────────────────── */
+    .pa-proposal-row {
+      display:flex; align-items:center; justify-content:space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(0,0,0,.05);
+    }
+    .pa-proposal-row:last-of-type { border-bottom:none; }
+    .pa-proposal-icon-label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted-foreground); }
+    .pa-proposal-val { font-size:18px; font-weight:500; }
+    .pa-proposal-divider { height:1px; background:var(--border); margin:8px 0; }
+
+    .pa-insight-box {
+      border-radius:8px;
+      background:#f0fdf4;
+      border:1px solid #bbf7d0;
+      padding:12px;
+      margin-top:20px;
+    }
+    .pa-insight-inner { display:flex; align-items:flex-start; gap:8px; }
+    .pa-insight-title { font-size:12px; font-weight:600; color:#14532d; margin-bottom:4px; }
+    .pa-insight-body  { font-size:12px; color:#15803d; }
+
+    .pa-legend { display:flex; flex-direction:column; gap:8px; margin-top:16px; }
+    .pa-legend-row { display:flex; align-items:center; justify-content:space-between; }
+    .pa-legend-dot-label { display:flex; align-items:center; gap:8px; }
+    .pa-legend-dot { width:12px; height:12px; border-radius:50%; }
+    .pa-legend-text { font-size:12px; color:var(--muted-foreground); }
+    .pa-legend-val  { font-size:12px; font-weight:500; }
+
+    /* ── Star rating ───────────────────────────────────────── */
+    .pa-stars-badge {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:4px 10px; border-radius:8px;
+      background:#fffbeb; border:1px solid #fde68a;
+    }
+    .pa-earnings-avg { text-align:right; }
+    .pa-earnings-avg-label { font-size:12px; color:var(--muted-foreground); }
+    .pa-earnings-avg-val   { font-size:20px; font-weight:500; color:#16a34a; }
+  </style>
+</head>
+<body></body>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('worker')) return;
+
+  /* ═══════════════════════════════════════════════════════
+     DATA
+  ═══════════════════════════════════════════════════════ */
+  var overviewStats = {
+    totalEarnings: 45000,
+    projectsCompleted: 24,
+    activeProjects: 5,
+    successRate: 92,
+  };
+
+  var earningsData = [
+    { month:'Jan', earnings:3200 },
+    { month:'Feb', earnings:4100 },
+    { month:'Mar', earnings:3800 },
+    { month:'Apr', earnings:5200 },
+    { month:'May', earnings:4600 },
+    { month:'Jun', earnings:5800 },
+    { month:'Jul', earnings:6200 },
+    { month:'Aug', earnings:5500 },
+    { month:'Sep', earnings:6800 },
+    { month:'Oct', earnings:7100 },
+    { month:'Nov', earnings:6900 },
+    { month:'Dec', earnings:7200 },
+  ];
+
+  var projectPerformance = [
+    { project:'E-Commerce Mobile App',      client:'Sarah Johnson',   initials:'SJ', milestonesCompleted:8,  totalMilestones:8,  payment:12500, rating:5.0 },
+    { project:'SaaS Dashboard Redesign',    client:'Michael Brown',   initials:'MB', milestonesCompleted:6,  totalMilestones:6,  payment:8500,  rating:4.8 },
+    { project:'API Integration Project',    client:'Emma Davis',      initials:'ED', milestonesCompleted:5,  totalMilestones:7,  payment:6000,  rating:4.9 },
+    { project:'Mobile App Development',     client:'David Lee',       initials:'DL', milestonesCompleted:10, totalMilestones:10, payment:15000, rating:5.0 },
+    { project:'Website Redesign',           client:'Lisa Wang',       initials:'LW', milestonesCompleted:4,  totalMilestones:5,  payment:4200,  rating:4.7 },
+  ];
+
+  var milestoneVelocityData = [
+    { month:'Aug', avgDays:5.2 },
+    { month:'Sep', avgDays:4.8 },
+    { month:'Oct', avgDays:4.5 },
+    { month:'Nov', avgDays:5.0 },
+    { month:'Dec', avgDays:4.3 },
+    { month:'Jan', avgDays:4.6 },
+  ];
+
+  var velocityStats = {
+    avgCompletionTime: '4.7 days',
+    onTimeDeliveryRate: 88,
+    lateDeliveries: 3,
+  };
+
+  var clientFeedback = [
+    { client:'Sarah Johnson',  initials:'SJ', project:'E-Commerce Mobile App',   rating:5.0, comment:'Exceptional work! Delivered ahead of schedule with outstanding quality. Highly recommended.', date:'Mar 6, 2026' },
+    { client:'Michael Brown',  initials:'MB', project:'SaaS Dashboard Redesign', rating:4.8, comment:'Great attention to detail and excellent communication throughout the project.',                date:'Mar 4, 2026' },
+    { client:'Emma Davis',     initials:'ED', project:'API Integration Project',  rating:4.9, comment:'Professional and skilled developer. Would definitely work with again.',                       date:'Mar 2, 2026' },
+  ];
+
+  var proposalStats = { sent:60, accepted:46, successRate:77 };
+
+  /* ═══════════════════════════════════════════════════════
+     HELPERS
+  ═══════════════════════════════════════════════════════ */
+  function stars(rating) {
+    var s = '';
+    for (var i = 0; i < 5; i++) {
+      var filled = i < Math.floor(rating);
+      s += '<i data-lucide="star" style="width:12px;height:12px;' + (filled ? 'fill:#f59e0b;color:#f59e0b;' : 'color:#e5e7eb;') + '"></i>';
+    }
+    return s;
+  }
+
+  function bigStars(rating) {
+    var s = '';
+    for (var i = 0; i < 5; i++) {
+      var filled = i < Math.floor(rating);
+      s += '<i data-lucide="star" style="width:14px;height:14px;' + (filled ? 'fill:#f59e0b;color:#f59e0b;' : 'color:#e5e7eb;') + '"></i>';
+    }
+    return s;
+  }
+
+  function fmtMoney(n) { return '$' + n.toLocaleString(); }
+
+  /* ═══════════════════════════════════════════════════════
+     BUILD HTML SECTIONS
+  ═══════════════════════════════════════════════════════ */
+
+  /* ── 1. Stat Cards ──────────────────────────────────── */
+  var statCards = ''
+    + '<div class="pa-grid-4" style="margin-bottom:24px;">'
+
+    + '<div class="pa-stat">'
+    + '<div class="pa-stat-top">'
+    + '<div class="pa-stat-icon" style="background:#f0fdf4;border:1px solid #bbf7d0;">'
+    + '<i data-lucide="dollar-sign" style="width:20px;height:20px;color:#16a34a;"></i></div>'
+    + '<i data-lucide="trending-up" style="width:16px;height:16px;color:#16a34a;"></i>'
+    + '</div>'
+    + '<div class="pa-stat-val">' + fmtMoney(overviewStats.totalEarnings) + '</div>'
+    + '<div class="pa-stat-label">Total Earnings</div></div>'
+
+    + '<div class="pa-stat">'
+    + '<div class="pa-stat-top">'
+    + '<div class="pa-stat-icon" style="background:#eff6ff;border:1px solid #bfdbfe;">'
+    + '<i data-lucide="check-circle" style="width:20px;height:20px;color:#2563eb;"></i></div>'
+    + '<i data-lucide="award" style="width:16px;height:16px;color:#2563eb;"></i>'
+    + '</div>'
+    + '<div class="pa-stat-val">' + overviewStats.projectsCompleted + '</div>'
+    + '<div class="pa-stat-label">Projects Completed</div></div>'
+
+    + '<div class="pa-stat">'
+    + '<div class="pa-stat-top">'
+    + '<div class="pa-stat-icon" style="background:#fff7ed;border:1px solid #fed7aa;">'
+    + '<i data-lucide="activity" style="width:20px;height:20px;color:#ea580c;"></i></div>'
+    + '<i data-lucide="trending-up" style="width:16px;height:16px;color:#ea580c;"></i>'
+    + '</div>'
+    + '<div class="pa-stat-val">' + overviewStats.activeProjects + '</div>'
+    + '<div class="pa-stat-label">Active Projects</div></div>'
+
+    + '<div class="pa-stat">'
+    + '<div class="pa-stat-top">'
+    + '<div class="pa-stat-icon" style="background:#faf5ff;border:1px solid #ddd6fe;">'
+    + '<i data-lucide="target" style="width:20px;height:20px;color:#7c3aed;"></i></div>'
+    + '<i data-lucide="star" style="width:16px;height:16px;color:#7c3aed;"></i>'
+    + '</div>'
+    + '<div class="pa-stat-val">' + overviewStats.successRate + '%</div>'
+    + '<div class="pa-stat-label">Success Rate</div></div>'
+
+    + '</div>';
+
+  /* ── 2. Earnings Over Time ──────────────────────────── */
+  var avgMonthly = Math.round(earningsData.reduce(function(s, d) { return s + d.earnings; }, 0) / earningsData.length);
+
+  var earningsCard = ''
+    + '<div class="pa-card" style="margin-bottom:24px;">'
+    + '<div class="pa-card-header">'
+    + '<div>'
+    + '<div class="pa-card-title">Earnings Over Time</div>'
+    + '<div class="pa-card-subtitle" style="margin-bottom:0;">Monthly earnings trend for the past 12 months</div>'
+    + '</div>'
+    + '<div class="pa-earnings-avg">'
+    + '<div class="pa-earnings-avg-label">Average Monthly</div>'
+    + '<div class="pa-earnings-avg-val">' + fmtMoney(avgMonthly) + '</div>'
+    + '</div></div>'
+    + '<div class="pa-chart-tall"><canvas id="earningsChart"></canvas></div>'
+    + '</div>';
+
+  /* ── 3. Project Performance ─────────────────────────── */
+  var projectRows = projectPerformance.map(function(p) {
+    var pct = Math.round((p.milestonesCompleted / p.totalMilestones) * 100);
+    var isCompleted = p.milestonesCompleted === p.totalMilestones;
+    return '<div class="pa-project-item">'
+      + '<div class="pa-project-header">'
+      + '<div style="flex:1;min-width:0;">'
+      + '<div style="font-size:13px;font-weight:500;margin-bottom:6px;">' + p.project + '</div>'
+      + '<div style="display:flex;align-items:center;gap:6px;">'
+      + '<div class="pa-avatar" style="width:20px;height:20px;font-size:9px;">' + p.initials + '</div>'
+      + '<span style="font-size:12px;color:var(--muted-foreground);">' + p.client + '</span>'
+      + '</div></div>'
+      + '<div style="display:flex;align-items:center;gap:4px;margin-left:12px;">'
+      + '<i data-lucide="star" style="width:14px;height:14px;fill:#f59e0b;color:#f59e0b;"></i>'
+      + '<span style="font-size:13px;font-weight:500;">' + p.rating + '</span>'
+      + '</div></div>'
+      + '<div class="pa-project-meta">'
+      + '<div>'
+      + '<div class="pa-project-meta-label">Milestones</div>'
+      + '<div class="pa-project-meta-val">' + p.milestonesCompleted + '/' + p.totalMilestones + '</div>'
+      + '<div class="pa-progress-bg"><div class="pa-progress-fill" style="width:' + pct + '%;background:#16a34a;"></div></div>'
+      + '</div>'
+      + '<div>'
+      + '<div class="pa-project-meta-label">Payment</div>'
+      + '<div class="pa-project-meta-val" style="color:#16a34a;">' + fmtMoney(p.payment) + '</div>'
+      + '</div>'
+      + '<div>'
+      + '<div class="pa-project-meta-label">Status</div>'
+      + '<span class="pa-badge ' + (isCompleted ? 'pa-badge-green' : 'pa-badge-blue') + '">'
+      + (isCompleted ? 'Completed' : 'In Progress')
+      + '</span>'
+      + '</div>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+
+  var projectCard = ''
+    + '<div class="pa-card" style="margin-bottom:24px;">'
+    + '<div class="pa-card-title">Project Performance</div>'
+    + '<div style="height:12px;"></div>'
+    + projectRows
+    + '</div>';
+
+  /* ── 4. Milestone Velocity ──────────────────────────── */
+  var velocityCard = ''
+    + '<div class="pa-card" style="margin-bottom:24px;">'
+    + '<div class="pa-card-title">Milestone Velocity</div>'
+    + '<div style="height:16px;"></div>'
+    + '<div class="pa-grid-3col" style="margin-bottom:20px;">'
+
+    + '<div class="pa-mini-card">'
+    + '<div class="pa-mini-card-label"><i data-lucide="clock" style="width:16px;height:16px;color:#2563eb;"></i>Avg. Completion</div>'
+    + '<div class="pa-mini-card-val">' + velocityStats.avgCompletionTime + '</div>'
+    + '</div>'
+
+    + '<div class="pa-mini-card">'
+    + '<div class="pa-mini-card-label"><i data-lucide="check-circle" style="width:16px;height:16px;color:#16a34a;"></i>On-Time Rate</div>'
+    + '<div class="pa-mini-card-val" style="color:#16a34a;">' + velocityStats.onTimeDeliveryRate + '%</div>'
+    + '</div>'
+
+    + '<div class="pa-mini-card">'
+    + '<div class="pa-mini-card-label"><i data-lucide="calendar" style="width:16px;height:16px;color:#ea580c;"></i>Late Deliveries</div>'
+    + '<div class="pa-mini-card-val">' + velocityStats.lateDeliveries + '</div>'
+    + '</div>'
+
+    + '</div>'
+    + '<div class="pa-chart-mid"><canvas id="velocityChart"></canvas></div>'
+    + '</div>';
+
+  /* ── 5. Client Feedback ─────────────────────────────── */
+  var feedbackItems = clientFeedback.map(function(f) {
+    return '<div class="pa-feedback-item">'
+      + '<div class="pa-feedback-header">'
+      + '<div class="pa-avatar">' + f.initials + '</div>'
+      + '<div style="flex:1;min-width:0;">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">'
+      + '<span style="font-size:13px;font-weight:500;">' + f.client + '</span>'
+      + '<div class="pa-feedback-stars">' + stars(f.rating) + '</div>'
+      + '</div>'
+      + '<div style="font-size:12px;color:var(--muted-foreground);">' + f.project + '</div>'
+      + '</div></div>'
+      + '<div class="pa-feedback-comment">' + f.comment + '</div>'
+      + '<div class="pa-feedback-date">' + f.date + '</div>'
+      + '</div>';
+  }).join('');
+
+  var feedbackCard = ''
+    + '<div class="pa-card">'
+    + '<div class="pa-card-header">'
+    + '<div class="pa-card-title" style="margin-bottom:0;">Client Feedback</div>'
+    + '<div class="pa-stars-badge">'
+    + '<i data-lucide="star" style="width:14px;height:14px;fill:#ca8a04;color:#ca8a04;"></i>'
+    + '<span style="font-size:13px;font-weight:500;color:#854d0e;">4.9 Average</span>'
+    + '</div></div>'
+    + feedbackItems
+    + '</div>';
+
+  /* ── 6. Proposal Success Rate (right sidebar) ───────── */
+  var proposalCard = ''
+    + '<div class="pa-card">'
+    + '<div class="pa-card-title" style="margin-bottom:20px;">Proposal Success Rate</div>'
+
+    + '<div class="pa-proposal-row">'
+    + '<div class="pa-proposal-icon-label"><i data-lucide="send" style="width:16px;height:16px;color:#2563eb;"></i>Proposals Sent</div>'
+    + '<div class="pa-proposal-val">' + proposalStats.sent + '</div>'
+    + '</div>'
+
+    + '<div class="pa-proposal-row">'
+    + '<div class="pa-proposal-icon-label"><i data-lucide="check-circle" style="width:16px;height:16px;color:#16a34a;"></i>Accepted</div>'
+    + '<div class="pa-proposal-val" style="color:#16a34a;">' + proposalStats.accepted + '</div>'
+    + '</div>'
+
+    + '<div class="pa-proposal-divider"></div>'
+
+    + '<div class="pa-proposal-row">'
+    + '<div class="pa-proposal-icon-label" style="font-weight:500;color:var(--foreground);"><i data-lucide="target" style="width:16px;height:16px;color:#7c3aed;"></i>Success Rate</div>'
+    + '<div class="pa-proposal-val" style="font-size:24px;color:#7c3aed;">' + proposalStats.successRate + '%</div>'
+    + '</div>'
+
+    + '<div class="pa-chart-donut" style="margin-top:8px;"><canvas id="proposalChart"></canvas></div>'
+
+    + '<div class="pa-legend">'
+    + '<div class="pa-legend-row">'
+    + '<div class="pa-legend-dot-label"><div class="pa-legend-dot" style="background:#22c55e;"></div><span class="pa-legend-text">Accepted</span></div>'
+    + '<span class="pa-legend-val">46 (77%)</span>'
+    + '</div>'
+    + '<div class="pa-legend-row">'
+    + '<div class="pa-legend-dot-label"><div class="pa-legend-dot" style="background:#ef4444;"></div><span class="pa-legend-text">Rejected</span></div>'
+    + '<span class="pa-legend-val">14 (23%)</span>'
+    + '</div></div>'
+
+    + '<div class="pa-insight-box">'
+    + '<div class="pa-insight-inner">'
+    + '<i data-lucide="trending-up" style="width:16px;height:16px;color:#16a34a;flex-shrink:0;margin-top:2px;"></i>'
+    + '<div>'
+    + '<div class="pa-insight-title">Above Average</div>'
+    + '<div class="pa-insight-body">Your proposal success rate is 15% higher than the platform average.</div>'
+    + '</div></div></div>'
+    + '</div>';
+
+  /* ══════════════════════════════════════════════════════
+     ASSEMBLE FULL CONTENT
+  ══════════════════════════════════════════════════════ */
+  var leftCol = ''
+    + '<div style="display:flex;flex-direction:column;gap:24px;">'
+    + projectCard
+    + velocityCard
+    + feedbackCard
+    + '</div>';
+
+  var rightCol = proposalCard;
+
+  var mainGrid = ''
+    + '<div class="pa-grid-3">'
+    + '<div>' + leftCol + '</div>'
+    + '<div>' + rightCol + '</div>'
+    + '</div>';
+
+  var content = statCards + earningsCard + mainGrid;
+
+  /* ══════════════════════════════════════════════════════
+     INIT DASHBOARD
+  ══════════════════════════════════════════════════════ */
+  initDashboard({
+    role: 'worker',
+    activePath: 'performance-analytics.html',
+    pageTitle: 'Performance Analytics',
+    pageSubtitle: 'Track your earnings, project performance, and success rate.',
+    content: content,
+  });
+
+  /* ══════════════════════════════════════════════════════
+     CHARTS
+  ══════════════════════════════════════════════════════ */
+  var tooltipDefaults = {
+    backgroundColor: '#fff',
+    borderColor: '#e5e7eb',
+    borderWidth: 1,
+    titleColor: '#111827',
+    bodyColor: '#374151',
+    padding: 10,
+    cornerRadius: 8,
+    titleFont: { family: "'Geist','Inter',sans-serif", size: 12, weight: '500' },
+    bodyFont:  { family: "'Geist','Inter',sans-serif", size: 12 },
+  };
+  var tickStyle = { color:'#9ca3af', font:{ family:"'Geist','Inter',sans-serif", size:12 } };
+  var gridStyle  = { color:'#e5e7eb', drawBorder:false };
+
+  /* Earnings line chart */
+  var earningsCtx = document.getElementById('earningsChart');
+  if (earningsCtx) {
+    new Chart(earningsCtx, {
+      type: 'line',
+      data: {
+        labels: earningsData.map(function(d){ return d.month; }),
+        datasets: [{
+          label: 'Earnings',
+          data: earningsData.map(function(d){ return d.earnings; }),
+          borderColor: '#22c55e',
+          backgroundColor: 'rgba(34,197,94,.10)',
+          borderWidth: 2,
+          pointBackgroundColor: '#22c55e',
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          fill: true,
+          tension: 0.35,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: Object.assign({}, tooltipDefaults, {
+            callbacks: { label: function(ctx){ return ' $' + ctx.parsed.y.toLocaleString(); } }
+          }),
+        },
+        scales: {
+          x: { grid: gridStyle, ticks: tickStyle },
+          y: { grid: gridStyle, ticks: Object.assign({}, tickStyle, {
+            callback: function(v){ return '$' + (v/1000).toFixed(0) + 'k'; }
+          }) },
+        }
+      }
+    });
+  }
+
+  /* Milestone velocity bar chart */
+  var velCtx = document.getElementById('velocityChart');
+  if (velCtx) {
+    new Chart(velCtx, {
+      type: 'bar',
+      data: {
+        labels: milestoneVelocityData.map(function(d){ return d.month; }),
+        datasets: [{
+          label: 'Avg. Days',
+          data: milestoneVelocityData.map(function(d){ return d.avgDays; }),
+          backgroundColor: '#3b82f6',
+          borderRadius: 8,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: Object.assign({}, tooltipDefaults, {
+            callbacks: { label: function(ctx){ return ' ' + ctx.parsed.y + ' days'; } }
+          }),
+        },
+        scales: {
+          x: { grid: { display:false }, ticks: tickStyle },
+          y: { grid: gridStyle, ticks: tickStyle, min: 3, max: 7 },
+        }
+      }
+    });
+  }
+
+  /* Proposal donut chart */
+  var propCtx = document.getElementById('proposalChart');
+  if (propCtx) {
+    new Chart(propCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Accepted', 'Rejected'],
+        datasets: [{
+          data: [46, 14],
+          backgroundColor: ['#22c55e', '#ef4444'],
+          borderWidth: 0,
+          hoverOffset: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '62%',
+        plugins: {
+          legend: { display: false },
+          tooltip: Object.assign({}, tooltipDefaults),
+        }
+      }
+    });
+  }
+
+  lucide.createIcons();
+});
+</script>
+</html>
