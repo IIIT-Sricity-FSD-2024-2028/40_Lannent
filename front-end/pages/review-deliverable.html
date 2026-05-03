@@ -233,7 +233,6 @@
         try {
           Store.approveDeliverable(milestone.id);
           Store.addNotification({ userId: deliverable.workerId, type:'payment', text:`$${deliverable.budget.toLocaleString()} released from escrow`, subtext: deliverable.milestone + ' approved · just now', read:false });
-          Store.updateTask(milestone.taskId, { status:'completed', progress:100 });
         } catch(e) { console.warn('Store error:', e); }
         Validate.toast('✓ $' + deliverable.budget.toLocaleString() + ' released to ' + deliverable.worker, 'success');
         setTimeout(() => window.location.href = 'client-my-projects.html', 2000);
@@ -250,11 +249,7 @@
       };
 
       window.handleDispute = function() {
-        try {
-          Store.createDispute({ taskId: milestone.taskId, milestoneId: milestone.id, raisedBy: session.userId, raisedByName: session.name, againstId: deliverable.workerId, againstName: deliverable.worker, reason:'Client raised dispute on deliverable review', amount:'$'+deliverable.budget.toLocaleString(), project: deliverable.project, milestone: deliverable.milestone, status:'open' });
-          Validate.toast('Dispute raised. Expert will be notified.', 'success');
-          setTimeout(() => window.location.href = 'client-my-projects.html', 1800);
-        } catch(e) { Validate.toast('Error raising dispute: '+e.message,'error'); }
+        window.location.href = 'dispute.html?milestoneId=' + encodeURIComponent(milestone.id);
       };
     });
   </script>

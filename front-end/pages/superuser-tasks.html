@@ -54,7 +54,7 @@
     let editingTaskId = null;
 
     const statusBadge = s => {
-      const map = { 'open':'badge-orange','in-progress':'badge-blue','under-review':'badge-purple','completed':'badge-green','cancelled':'badge-red' };
+      const map = { 'open':'badge-orange','in-progress':'badge-blue','completed':'badge-green','cancelled':'badge-red' };
       return `<span class="badge ${map[s]||'badge-blue'}">${s.replace(/-/g,' ')}</span>`;
     };
 
@@ -196,7 +196,6 @@
             <option value="all">All Statuses</option>
             <option value="open">Open</option>
             <option value="in-progress">In Progress</option>
-            <option value="under-review">Under Review</option>
             <option value="completed">Completed</option>
           </select>
           <a href="superuser-create-task.html" class="btn-add" style="text-decoration:none;">
@@ -234,7 +233,7 @@
               <div class="form-group">
                 <label class="form-label">Status</label>
                 <select class="form-select" id="tStatus">
-                  <option value="open">Open</option><option value="in-progress">In Progress</option><option value="under-review">Under Review</option><option value="completed">Completed</option>
+                <option value="open">Open</option><option value="in-progress">In Progress</option><option value="completed">Completed</option>
                 </select>
               </div>
             </div>

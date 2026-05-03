@@ -31,25 +31,6 @@
     setTimeout(() => t.remove(), 3200);
   }
 
-  function getMilestonesFromStorage() {
-    try {
-      const stored = localStorage.getItem('milestonesData');
-      if (!stored) return [];
-      return JSON.parse(stored);
-    } catch(e) {
-      console.warn('localStorage unavailable for milestonesData', e);
-      return [];
-    }
-  }
-
-  function saveMilestonesToStorage(milestones) {
-    try {
-      localStorage.setItem('milestonesData', JSON.stringify(milestones));
-    } catch(e) {
-      console.warn('Could not save milestonesData to localStorage', e);
-    }
-  }
-
   function submitDispute() {
     let target;
     try {
@@ -72,41 +53,37 @@
       return;
     }
 
-    let disputes;
-    try {
-      disputes = JSON.parse(localStorage.getItem('disputes') || '[]');
-    } catch (e) {
-      console.warn('Could not get disputes from localStorage', e);
-      disputes = [];
-    }
-    disputes.push({
-      id: Date.now(),
+    const session = Auth.getCurrentUser();
+    const taskIdFromTarget = target.taskId || null;
+    const task = taskIdFromTarget ? Store.getTaskById(taskIdFromTarget) : Store.getMilestoneById(target.id)?.taskId ? Store.getTaskById(Store.getMilestoneById(target.id).taskId) : null;
+    const workerId = target.workerId || (task ? task.workerId : null);
+    const worker = workerId ? Store.getUserById(workerId) : null;
+
+    const disputeData = {
+      taskId: task?.id || target.taskId || null,
       milestoneId: target.id,
-      milestoneTitle: target.title,
+      project: task ? task.title : target.project || target.title || 'Project',
+      milestone: target.title || target.milestone || 'Milestone',
+      amount: target.amount ? (typeof target.amount === 'number' ? '$' + target.amount.toLocaleString() : target.amount) : '$0',
       reason,
       details,
       outcome,
-      timestamp: new Date().toISOString(),
+      raisedBy: session?.userId || null,
+      raisedByName: session?.name || session?.email || 'Client',
+      againstId: worker ? worker.id : target.workerId || null,
+      againstName: worker ? worker.name : target.workerName || target.worker || 'Worker',
       status: 'open'
-    });
+    };
+
     try {
-      localStorage.setItem('disputes', JSON.stringify(disputes));
+      Store.createDispute(disputeData);
+      showToast('Dispute submitted successfully.', 'success');
+      const redirectTaskId = disputeData.taskId ? `?id=${disputeData.taskId}` : '';
+      setTimeout(() => { window.location.href = `project-milestone-board.html${redirectTaskId}`; }, 1300);
     } catch (e) {
-      console.warn('Could not save disputes to localStorage', e);
+      console.error('Dispute submit error:', e);
+      showToast('Unable to submit dispute. Please try again.', 'error');
     }
-
-    const milestones = getMilestonesFromStorage();
-    const index = milestones.findIndex(m => m.id === target.id);
-    if (index !== -1) {
-      milestones[index].status = 'disputed';
-      milestones[index].statusLabel = 'Disputed';
-    } else {
-      milestones.push({ id: target.id, title: target.title, amount: target.amount || '$0', status: 'disputed', statusLabel: 'Disputed' });
-    }
-    saveMilestonesToStorage(milestones);
-
-    showToast('Dispute submitted successfully.', 'success');
-    setTimeout(() => { window.location.href = 'project-milestone-board.html'; }, 1300);
   }
 
   function initDisputeForm() {

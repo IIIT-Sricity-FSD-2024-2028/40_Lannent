@@ -254,19 +254,29 @@
       }
       
       const currentUser = (typeof Auth !== 'undefined') ? Auth.getCurrentUser() : null;
-      if (currentUser && typeof Store !== 'undefined') {
+      if (!currentUser) {
+        if (typeof Validate !== 'undefined') Validate.toast('Please log in to submit a proposal', 'error');
+        return;
+      }
+
+      const task = Store.getTaskById(window.currentTaskId);
+      const taskBudget = task ? (typeof task.budget === 'number' ? task.budget : parseInt(String(task.budget).replace(/[^0-9]/g, '')) || 1000) : 1000;
+
+      try {
         Store.createProposal({
           taskId: window.currentTaskId || 't1',
           workerId: currentUser.userId,
           workerName: currentUser.name || 'Worker',
           avatar: currentUser.avatar || 'WK',
           avatarColor: currentUser.avatarColor || '#6366f1',
-          bidPrice: '$' + parseInt(bidAmount).toLocaleString(),
+          bidPrice: '$' + taskBudget.toLocaleString(),
           timeline: timeline,
           coverLetter: coverLetter,
           skills: currentUser.skills || [],
           status: 'pending'
         });
+      } catch(e) {
+        console.error('[submitProposal] Error:', e);
       }
 
       document.getElementById('applyModal').style.display = 'none';

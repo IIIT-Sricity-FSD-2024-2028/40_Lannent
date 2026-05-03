@@ -23,93 +23,117 @@
     @media(max-width:768px){ .wallet-hero{ grid-template-columns:1fr; } }
   </style>
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      if (typeof Auth !== 'undefined' && !Auth.requireRole('worker')) return;
-      const session = Auth.getCurrentUser();
+    let _workerUserId = '';
+    let _currentFilter = 'all';
 
-      function getWalletData() {
-        const user = Store.getUserById(session.userId);
-        const txs = Store.getTransactionsByUser(session.userId);
-        
-        let released = 0;
-        let pending = 0;
-        let inEscrow = 0;
+    const RELEASED_MS = ['completed','approved','done','paid'];
+    const PENDING_MS = ['submitted','review','audit-requested','audit-passed','disputed'];
+    const ESCROW_MS = ['pending','todo','not-started','in-progress'];
 
-        const tasks = Store.getTasksByWorker(session.userId);
-        tasks.forEach(t => {
-          const msList = Store.getMilestonesByTask(t.id);
-          msList.forEach(m => {
-            if (m.status === 'completed' || m.status === 'paid' || m.status === 'approved') {
-               released += m.budget;
-            } else if (m.status === 'review' || m.status === 'audit-passed' || m.status === 'audit-requested') {
-               pending += m.budget;
-            } else if (m.status === 'in-progress' || m.status === 'not-started') {
-               inEscrow += m.budget;
-            }
-          });
+    const statusMap = {
+      'Released':          { cls:'badge-green',  icon:'check-circle', color:'#10b981' },
+      'In Escrow':         { cls:'badge-blue',   icon:'lock',         color:'#6366f1' },
+      'Pending Approval':  { cls:'badge-orange', icon:'clock',        color:'#f59e0b' },
+      'Withdrawn':         { cls:'badge-red',    icon:'arrow-up-circle', color:'#ef4444' },
+    };
+
+    function computeWorkerWalletData(userId) {
+      const user = Store.getUserById(userId);
+      const userTxs = Store.getTransactionsByUser(userId);
+      const allTxs = Store.getTransactions();
+      const tasks = Store.getTasksByWorker(userId);
+      const workerTaskIds = new Set(tasks.map(t => t.id));
+
+      const available = user ? (user.walletBalance || 0) : 0;
+
+      // Calculate from milestones
+      let totalEarned = 0;
+      let pending = 0;
+      let inEscrow = 0;
+
+      tasks.forEach(t => {
+        const msList = Store.getMilestonesByTask(t.id);
+        msList.forEach(m => {
+          if (RELEASED_MS.includes(m.status)) {
+            totalEarned += (m.budget || 0);
+          } else if (PENDING_MS.includes(m.status)) {
+            pending += (m.budget || 0);
+          } else if (ESCROW_MS.includes(m.status)) {
+            inEscrow += (m.budget || 0);
+          }
         });
+      });
 
+      // Build combined transactions: user's own txs + milestone-releases for their tasks
+      const releaseTxs = allTxs.filter(t => t.type === 'milestone-release' && workerTaskIds.has(t.taskId));
+      const escrowTxs = allTxs.filter(t => t.type === 'escrow-lock' && workerTaskIds.has(t.taskId));
+      const userTxIds = new Set(userTxs.map(t => t.id));
+      const combinedTxs = [
+        ...userTxs,
+        ...releaseTxs.filter(t => !userTxIds.has(t.id)),
+        ...escrowTxs.filter(t => !userTxIds.has(t.id)),
+      ];
+
+      // Map transactions for display
+      const transactions = combinedTxs.map(t => {
+        const task = Store.getTaskById(t.taskId);
+        let status = 'Released';
+        if (t.type === 'milestone-release' || t.type === 'escrow-release') status = 'Released';
+        else if (t.type === 'escrow-lock') status = 'In Escrow';
+        else if (t.type === 'pending') status = 'Pending Approval';
+        else if (t.type === 'withdrawal') status = 'Withdrawn';
+
+        const isWithdrawal = t.type === 'withdrawal';
         return {
-          available: user ? (user.walletBalance || 0) : 0,
-          escrow: inEscrow,
-          released,
-          pending,
-          transactions: txs
+          id: t.id,
+          project: task ? task.title : (t.description || 'Transaction'),
+          milestone: t.description || 'Payment',
+          amount: t.amount || 0,
+          isWithdrawal,
+          date: t.createdAt ? String(t.createdAt).slice(0, 10) : 'Recent',
+          status,
         };
-      }
+      });
 
-      function txStatus(t) {
-        if (t.type === 'milestone-release' || t.type === 'escrow-release') return 'Released';
-        if (t.type === 'escrow-lock') return 'In Escrow';
-        if (t.type === 'pending') return 'Pending Approval';
-        if (t.type === 'withdrawal') return 'Withdrawn';
-        return 'Released';
-      }
+      return { available, totalEarned, pending, inEscrow, transactions };
+    }
 
-      const statusClass = { Released:'badge-green', 'In Escrow':'badge-blue', 'Pending Approval':'badge-orange' };
-      const statusIcon  = { Released:'check-circle', 'In Escrow':'lock', 'Pending Approval':'clock' };
-      const statusColor = { Released:'#10b981', 'In Escrow':'#6366f1', 'Pending Approval':'#f59e0b' };
-
-      function renderEarnings(filter, txs) {
-        const all = txs || Store.getTransactionsByUser(session.userId);
-        const mapped = all.map(t => {
-          const task = Store.getTaskById(t.taskId);
-          const status = txStatus(t);
-          return { id:t.id, project: task ? task.title : (t.description || 'Transaction'), milestone: t.description || 'Payment', client: 'Platform', amount: t.type === 'withdrawal' ? '-' + t.amount : '+' + (t.amount || 0), isNavType: t.type === 'withdrawal', date: t.createdAt ? String(t.createdAt).slice(0, 10) : 'Recent', status };
-        });
-        const list = filter === 'all' ? mapped : mapped.filter(e => e.status === filter);
-        if (!list.length) return '<div style="padding:48px 24px;text-align:center;color:var(--muted-foreground);"><i data-lucide="wallet" style="width:40px;height:40px;opacity:0.3;margin:0 auto 12px;display:block;"></i><div>No transactions found.</div></div>';
-        return list.map(e => `
+    function renderTxRows(transactions, filter) {
+      const list = filter === 'all' ? transactions : transactions.filter(e => e.status === filter);
+      if (!list.length) return '<div style="padding:48px 24px;text-align:center;color:var(--muted-foreground);"><i data-lucide="wallet" style="width:40px;height:40px;opacity:0.3;margin:0 auto 12px;display:block;"></i><div>No transactions found.</div></div>';
+      return list.map(e => {
+        const s = statusMap[e.status] || { cls:'badge-gray', icon:'circle', color:'#6366f1' };
+        return `
           <div class="tx-row">
-            <div style="width:40px;height:40px;border-radius:12px;background:${statusColor[e.status] || '#6366f1'}20;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-              <i data-lucide="${statusIcon[e.status] || 'circle'}" style="width:18px;height:18px;color:${statusColor[e.status] || '#6366f1'};"></i>
+            <div style="width:40px;height:40px;border-radius:12px;background:${s.color}20;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <i data-lucide="${s.icon}" style="width:18px;height:18px;color:${s.color};"></i>
             </div>
             <div style="flex:1;min-width:0;">
               <div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.project}</div>
-              <div style="font-size:12px;color:var(--muted-foreground);">${e.milestone} · ${e.date}</div>
+              <div style="font-size:12px;color:var(--muted-foreground);">${e.milestone} \u00b7 ${e.date}</div>
             </div>
-            <span class="badge ${statusClass[e.status] || 'badge-gray'}">${e.status}</span>
+            <span class="badge ${s.cls}">${e.status}</span>
             <div style="text-align:right;flex-shrink:0;min-width:80px;">
-              <div style="font-weight:700;color:${e.isNavType ? '#ef4444' : (statusColor[e.status] || '#6366f1')};font-size:15px;">${e.isNavType ? '-' : '+'}$${Math.abs(e.isNavType ? parseFloat(String(e.amount).replace(/[-+]/g,'')) : (parseFloat(e.amount) || 0)).toLocaleString()}</div>
+              <div style="font-weight:700;color:${e.isWithdrawal ? '#ef4444' : s.color};font-size:15px;">${e.isWithdrawal ? '-' : '+'}$${Math.abs(e.amount).toLocaleString()}</div>
             </div>
-          </div>`).join('');
-      }
+          </div>`;
+      }).join('');
+    }
 
-      const wallet = getWalletData();
-
-      const content = `
+    function renderDynamicWorkerContent(d) {
+      return `
         <div class="wallet-hero">
           <div class="wallet-hero-card" style="background:linear-gradient(135deg,#10b981,#059669);">
             <div style="position:relative;z-index:1;">
               <div style="font-size:13px;font-weight:500;opacity:0.85;margin-bottom:8px;">Available Balance</div>
-              <div id="availableBalanceDisplay" style="font-size:38px;font-weight:900;letter-spacing:-0.03em;margin-bottom:20px;">$${wallet.available.toLocaleString()}</div>
+              <div id="availableBalanceDisplay" style="font-size:38px;font-weight:900;letter-spacing:-0.03em;margin-bottom:20px;">$${d.available.toLocaleString()}</div>
               <button onclick="showWithdrawModal()" style="padding:9px 22px;border-radius:10px;background:rgba(255,255,255,0.2);color:white;border:1px solid rgba(255,255,255,0.3);font-size:13px;font-weight:600;cursor:pointer;" onmouseenter="this.style.background='rgba(255,255,255,0.3)'" onmouseleave="this.style.background='rgba(255,255,255,0.2)'">Withdraw Funds</button>
             </div>
           </div>
           <div class="wallet-hero-card" style="background:linear-gradient(135deg,#6366f1,#4f46e5);">
             <div style="position:relative;z-index:1;">
               <div style="font-size:13px;font-weight:500;opacity:0.85;margin-bottom:8px;">Total Earned</div>
-              <div style="font-size:38px;font-weight:900;letter-spacing:-0.03em;margin-bottom:8px;">$${wallet.released.toLocaleString()}</div>
+              <div style="font-size:38px;font-weight:900;letter-spacing:-0.03em;margin-bottom:8px;">$${d.totalEarned.toLocaleString()}</div>
               <div style="display:flex;align-items:center;gap:8px;font-size:12px;opacity:0.9;">
                 <i data-lucide="shield-check" style="width:14px;height:14px;"></i>Secured by Lannent Escrow
               </div>
@@ -118,22 +142,42 @@
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
-          <div class="stat-card"><div><div class="stat-val" style="color:#10b981;">$${wallet.available.toLocaleString()}</div><div class="stat-label">Available</div></div><div class="stat-icon-wrap" style="background:#ecfdf5;"><i data-lucide="wallet" style="width:20px;height:20px;color:#10b981;"></i></div></div>
-          <div class="stat-card"><div><div class="stat-val" style="color:#6366f1;">$${wallet.released.toLocaleString()}</div><div class="stat-label">Total Earned</div></div><div class="stat-icon-wrap" style="background:#eef2ff;"><i data-lucide="trending-up" style="width:20px;height:20px;color:#6366f1;"></i></div></div>
-          <div class="stat-card"><div><div class="stat-val" style="color:#f59e0b;">5%</div><div class="stat-label">Platform Fee</div></div><div class="stat-icon-wrap" style="background:#fffbeb;"><i data-lucide="percent" style="width:20px;height:20px;color:#f59e0b;"></i></div></div>
-          <div class="stat-card"><div><div class="stat-val" style="color:#a855f7;">$${wallet.pending.toLocaleString()}</div><div class="stat-label">Pending</div></div><div class="stat-icon-wrap" style="background:#faf5ff;"><i data-lucide="clock" style="width:20px;height:20px;color:#a855f7;"></i></div></div>
+          <div class="stat-card"><div><div class="stat-val" style="color:#10b981;">$${d.available.toLocaleString()}</div><div class="stat-label">Available</div></div><div class="stat-icon-wrap" style="background:#ecfdf5;"><i data-lucide="wallet" style="width:20px;height:20px;color:#10b981;"></i></div></div>
+          <div class="stat-card"><div><div class="stat-val" style="color:#6366f1;">$${d.totalEarned.toLocaleString()}</div><div class="stat-label">Total Earned</div></div><div class="stat-icon-wrap" style="background:#eef2ff;"><i data-lucide="trending-up" style="width:20px;height:20px;color:#6366f1;"></i></div></div>
+          <div class="stat-card"><div><div class="stat-val" style="color:#f59e0b;">$${d.pending.toLocaleString()}</div><div class="stat-label">Pending</div></div><div class="stat-icon-wrap" style="background:#fffbeb;"><i data-lucide="clock" style="width:20px;height:20px;color:#f59e0b;"></i></div></div>
+          <div class="stat-card"><div><div class="stat-val" style="color:#a855f7;">$${d.inEscrow.toLocaleString()}</div><div class="stat-label">In Escrow</div></div><div class="stat-icon-wrap" style="background:#faf5ff;"><i data-lucide="lock" style="width:20px;height:20px;color:#a855f7;"></i></div></div>
         </div>
 
         <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;">
           <div style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
             <span style="font-weight:600;font-size:15px;">Transaction History</span>
             <div id="earningsFilterBar" style="display:flex;gap:4px;background:var(--input-bg);padding:4px;border-radius:12px;">
-              ${[['all','All'],['Released','Released'],['In Escrow','In Escrow'],['Pending Approval','Pending']].map(([val,label],i) =>
-                `<button onclick="filterEarnings('${val}',this)" style="padding:5px 12px;border-radius:9px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;border:none;background:${i===0?'var(--card)':'transparent'};color:${i===0?'var(--foreground)':'var(--muted-foreground)'};box-shadow:${i===0?'0 1px 4px rgba(0,0,0,0.08)':'none'};">${label}</button>`).join('')}
+              ${[['all','All'],['Released','Released'],['In Escrow','In Escrow'],['Pending Approval','Pending']].map(([val,label]) =>
+                `<button onclick="filterEarnings('${val}',this)" style="padding:5px 12px;border-radius:9px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;border:none;background:${val===_currentFilter?'var(--card)':'transparent'};color:${val===_currentFilter?'var(--foreground)':'var(--muted-foreground)'};box-shadow:${val===_currentFilter?'0 1px 4px rgba(0,0,0,0.08)':'none'};">${label}</button>`).join('')}
             </div>
           </div>
-          <div style="padding:0 24px;" id="earningsContainer">${renderEarnings('all', wallet.transactions)}</div>
-        </div>
+          <div style="padding:0 24px;" id="earningsContainer">${renderTxRows(d.transactions, _currentFilter)}</div>
+        </div>`;
+    }
+
+    function refreshWorkerWallet() {
+      const d = computeWorkerWalletData(_workerUserId);
+      const container = document.getElementById('workerWalletDynamic');
+      if (container) {
+        container.innerHTML = renderDynamicWorkerContent(d);
+        lucide.createIcons();
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('worker')) return;
+      const session = Auth.getCurrentUser();
+      _workerUserId = session.userId;
+
+      const d = computeWorkerWalletData(_workerUserId);
+
+      const content = `
+        <div id="workerWalletDynamic">${renderDynamicWorkerContent(d)}</div>
 
         <!-- Withdraw Modal -->
         <div id="withdrawModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(4px);overflow:auto;">
@@ -143,11 +187,11 @@
                 <h2 style="font-size:28px;font-weight:800;margin:0;color:#5f46ff;">Withdraw Funds</h2>
                 <p style="margin:6px 0 0;font-size:14px;color:#6b7280;">Securely transfer funds to your bank account</p>
               </div>
-              <button onclick="document.getElementById('withdrawModal').style.display='none'" style="width:34px;height:34px;border-radius:10px;border:none;background:#e9e7ff;color:#5f46ff;cursor:pointer;font-size:22px;line-height:1;">×</button>
+              <button onclick="document.getElementById('withdrawModal').style.display='none'" style="width:34px;height:34px;border-radius:10px;border:none;background:#e9e7ff;color:#5f46ff;cursor:pointer;font-size:22px;line-height:1;">\u00d7</button>
             </div>
             <div style="background:#f7f4ff;border:1px solid #e5dbff;border-radius:18px;padding:18px;margin-bottom:20px;">
               <div style="font-size:14px;font-weight:700;color:#6b46ff;margin-bottom:8px;">Available for Withdrawal</div>
-              <div id="availableBalanceDisplayLarge" style="font-size:40px;font-weight:800;color:#5f46ff;">$${wallet.available.toLocaleString()}</div>
+              <div id="availableBalanceDisplayLarge" style="font-size:40px;font-weight:800;color:#5f46ff;">$0</div>
             </div>
             <div style="margin-bottom:16px;">
               <label style="font-weight:700;font-size:14px;color:#111827;">Amount to withdraw</label>
@@ -156,7 +200,7 @@
                 <input id="withdrawAmount" type="number" min="50" step="1" placeholder="0.00" style="width:100%;padding:14px 14px 14px 40px;border:2px solid #e5e7eb;border-radius:14px;font-size:22px;font-weight:800;color:#111827;outline:none;box-sizing:border-box;" oninput="updateWithdrawPreview()" />
               </div>
               <div id="withdrawAmountErr" style="color:#ef4444;font-size:12px;margin-top:4px;display:none;"></div>
-              <div style="margin-top:8px;font-size:13px;color:#6b7280;">Minimum: $50 · Maximum: $<span id="withdrawMaxAmount">${wallet.available}</span></div>
+              <div style="margin-top:8px;font-size:13px;color:#6b7280;">Minimum: $50 \u00b7 Maximum: $<span id="withdrawMaxAmount">0</span></div>
             </div>
             <div style="margin-bottom:16px;">
               <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:8px;">Quick Amounts</div>
@@ -173,14 +217,14 @@
             <div style="margin-bottom:18px;">
               <label style="font-size:14px;font-weight:700;color:#111827;display:block;margin-bottom:8px;">Withdraw to</label>
               <select id="withdrawDestination" style="width:100%;padding:12px 14px;border:2px solid #e5e7eb;border-radius:12px;font-size:14px;color:#111827;">
-                <option>🏦 Chase Bank ••••5241</option>
-                <option>💳 PayPal ••••1234</option>
-                <option>₿ Crypto Wallet ••••ABCD</option>
+                <option>\ud83c\udfe6 Chase Bank \u2022\u2022\u2022\u20225241</option>
+                <option>\ud83d\udcb3 PayPal \u2022\u2022\u2022\u20221234</option>
+                <option>\u20bf Crypto Wallet \u2022\u2022\u2022\u2022ABCD</option>
               </select>
             </div>
             <div style="display:flex;gap:12px;">
               <button onclick="document.getElementById('withdrawModal').style.display='none'" style="flex:1;padding:14px;border:1px solid #dcd6ff;border-radius:12px;background:white;font-size:15px;font-weight:700;color:#5f46ff;">Cancel</button>
-              <button onclick="confirmWithdraw()" style="flex:1;padding:14px;border:none;border-radius:12px;background:#22c55e;color:white;font-size:15px;font-weight:800;">✓ Confirm</button>
+              <button onclick="confirmWithdraw()" style="flex:1;padding:14px;border:none;border-radius:12px;background:#22c55e;color:white;font-size:15px;font-weight:800;">\u2713 Confirm</button>
             </div>
           </div>
         </div>`;
@@ -189,14 +233,16 @@
       lucide.createIcons();
 
       window.filterEarnings = function(filter, btn) {
+        _currentFilter = filter;
+        const d = computeWorkerWalletData(_workerUserId);
         const c = document.getElementById('earningsContainer');
-        if (c) { c.innerHTML = renderEarnings(filter); lucide.createIcons(); }
+        if (c) { c.innerHTML = renderTxRows(d.transactions, filter); lucide.createIcons(); }
         document.querySelectorAll('#earningsFilterBar button').forEach(b => { b.style.background='transparent'; b.style.color='var(--muted-foreground)'; b.style.boxShadow='none'; });
         btn.style.background='var(--card)'; btn.style.color='var(--foreground)'; btn.style.boxShadow='0 1px 4px rgba(0,0,0,0.08)';
       };
 
       window.showWithdrawModal = function() {
-        const user = Store.getUserById(session.userId);
+        const user = Store.getUserById(_workerUserId);
         const bal = user ? (user.walletBalance || 0) : 0;
         const el = id => document.getElementById(id);
         if (el('availableBalanceDisplayLarge')) el('availableBalanceDisplayLarge').textContent = '$' + bal.toLocaleString();
@@ -224,7 +270,7 @@
 
       window.confirmWithdraw = function() {
         const amt = parseFloat(document.getElementById('withdrawAmount')?.value) || 0;
-        const user = Store.getUserById(session.userId);
+        const user = Store.getUserById(_workerUserId);
         const bal = user ? (user.walletBalance || 0) : 0;
         const errEl = document.getElementById('withdrawAmountErr');
         if (errEl) { errEl.style.display='none'; errEl.textContent=''; }
@@ -240,13 +286,15 @@
           document.getElementById('withdrawAmount').style.border = '2px solid #ef4444';
           return;
         }
-        Store.updateUser(session.userId, { walletBalance: bal - amt });
-        Store.createTransaction({ type:'withdrawal', amount:amt, fromId:session.userId, toId:'external', description:'Withdrawal request', status:'completed', createdAt:new Date().toISOString().slice(0,10) });
+
+        // Deduct wallet and create withdrawal transaction
+        Store.updateUser(_workerUserId, { walletBalance: bal - amt });
+        Store.createTransaction({ type:'withdrawal', amount:amt, fromId:_workerUserId, toId:'external', description:'Withdrawal request', status:'completed', createdAt:new Date().toISOString().slice(0,10) });
+
+        // Close modal and refresh all wallet data
         document.getElementById('withdrawModal').style.display = 'none';
-        const balDisplay = document.getElementById('availableBalanceDisplay');
-        if (balDisplay) balDisplay.textContent = '$' + (bal - amt).toLocaleString();
-        const earningsC = document.getElementById('earningsContainer');
-        if (earningsC) { earningsC.innerHTML = renderEarnings('all'); lucide.createIcons(); }
+        refreshWorkerWallet();
+
         Validate.toast('Withdrawal of $' + amt.toLocaleString() + ' submitted successfully.', 'success');
       };
     });

@@ -43,7 +43,7 @@
       const recentTasks = [...tasks].slice(-5).reverse();
 
       const statusBadge = s => {
-        const map = { 'open':'badge-orange','in-progress':'badge-blue','under-review':'badge-purple','completed':'badge-green','cancelled':'badge-red' };
+        const map = { 'open':'badge-orange','in-progress':'badge-blue','completed':'badge-green','cancelled':'badge-red' };
         return `<span class="badge ${map[s]||'badge-blue'}">${s.replace(/-/g,' ')}</span>`;
       };
 

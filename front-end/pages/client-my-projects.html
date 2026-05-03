@@ -46,9 +46,7 @@
         const map = {
           'open': ['badge-gray','Open'],
           'in-progress': ['badge-blue','In Progress'],
-          'under-review': ['badge-orange','Under Review'],
           'completed': ['badge-green','Completed'],
-          'disputed': ['badge-red','Disputed'],
         };
         const [cls, label] = map[status] || ['badge-gray', status];
         return `<span class="badge ${cls}">${label}</span>`;
@@ -107,11 +105,9 @@
 
         const escrowBg = p.category === 'completed'
           ? 'background:#d1fae5;border:1px solid #a7f3d0;color:#047857;'
-          : p.status === 'under-review'
-          ? 'background:#fed7aa;border:1px solid #fdba74;color:#b45309;'
           : 'background:#dbeafe;border:1px solid #bfdbfe;color:#0369a1;';
-        const escrowIcon = p.category === 'completed' ? 'check-circle' : p.status === 'under-review' ? 'clock' : 'lock';
-        const escrowLabel = p.category === 'completed' ? 'Funds Released' : p.status === 'under-review' ? 'Pending Approval' : 'Escrow Locked';
+        const escrowIcon = p.category === 'completed' ? 'check-circle' : 'lock';
+        const escrowLabel = p.category === 'completed' ? 'Funds Released' : 'Escrow Locked';
 
         return `
           <div class="project-card" style="display:flex;flex-direction:column;" id="card-${p.id}">
@@ -248,7 +244,6 @@
               <select id="editStatus">
                 <option value="open">Open</option>
                 <option value="in-progress">In Progress</option>
-                <option value="under-review">Under Review</option>
                 <option value="completed">Completed</option>
               </select>
             </div>

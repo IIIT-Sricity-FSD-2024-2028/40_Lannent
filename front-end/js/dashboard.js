@@ -176,12 +176,16 @@ function initDashboard(config = {}) {
     const action = e.target.closest('[data-action]')?.dataset?.action;
     if (!action) return;
 
+    const settingsPage = role === 'worker' ? 'worker-settings.html'
+                        : role === 'expert' ? 'expert-settings.html'
+                        : 'profile-settings.html';
+
     switch (action) {
       case 'profile':
-        window.location.href = 'profile-settings.html';
+        window.location.href = settingsPage;
         break;
       case 'settings':
-        window.location.href = 'profile-settings.html';
+        window.location.href = settingsPage;
         break;
       case 'help':
         window.location.href = 'help.html';

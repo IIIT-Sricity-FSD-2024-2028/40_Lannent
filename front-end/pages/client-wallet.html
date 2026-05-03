@@ -28,107 +28,92 @@
   </style>
   <script>
     let availableBalance = 0;
-    
-    document.addEventListener('DOMContentLoaded', () => {
-      if (typeof Auth !== 'undefined' && !Auth.requireRole('client')) return;
+    let _walletUserId = '';
 
-      // Live data from store
-      const session = typeof Auth !== "undefined" ? Auth.getCurrentUser() : null;
-      const userId = session?.userId || 'u1';
+    const TX_TYPE_MAP = {
+      'deposit':           { label:'Wallet Top-up',       icon:'arrow-down-circle', color:'#10b981', bg:'#ecfdf5', positive:true },
+      'escrow-lock':       { label:'Escrow Funded',       icon:'lock',              color:'#6366f1', bg:'#eef2ff', positive:false },
+      'milestone-release': { label:'Milestone Released',  icon:'unlock',            color:'#f59e0b', bg:'#fffbeb', positive:false },
+      'withdrawal':        { label:'Withdrawal',          icon:'arrow-up-circle',   color:'#ef4444', bg:'#fef2f2', positive:false },
+      'refund':            { label:'Partial Refund',      icon:'rotate-ccw',        color:'#a855f7', bg:'#faf5ff', positive:true },
+    };
+
+    const LOCKED_STATUSES = ['pending','submitted','todo','not-started','in-progress','review','audit-requested','audit-passed','disputed'];
+    const RELEASED_STATUSES = ['completed','approved','done','paid'];
+
+    function computeWalletData(userId) {
       const user = Store.getUserById(userId);
-      const storeTransactions = Store.getTransactionsByUser(userId);
-
-      const typeMap = {
-        'deposit':           { label:'Wallet Top-up',       icon:'arrow-down-circle', color:'#10b981', bg:'#ecfdf5', positive:true },
-        'escrow-lock':       { label:'Escrow Funded',       icon:'lock',              color:'#6366f1', bg:'#eef2ff', positive:false },
-        'milestone-release': { label:'Milestone Released',  icon:'unlock',            color:'#f59e0b', bg:'#fffbeb', positive:false },
-        'refund':            { label:'Partial Refund',      icon:'rotate-ccw',        color:'#a855f7', bg:'#faf5ff', positive:true },
-      };
-
-      const transactions = storeTransactions.map(tx => {
-        const cfg = typeMap[tx.type] || { label: tx.type, icon:'circle', color:'#64748b', bg:'#f1f5f9', positive:false };
-        const task = Store.getTaskById(tx.taskId);
-        return { type:tx.type, label:cfg.label, sub:(task?.title||'Platform') + ' • ' + (tx.createdAt || new Date().toISOString().slice(0,10)), amount:(cfg.positive?'+':'-') + '$' + tx.amount.toLocaleString(), positive:cfg.positive, icon:cfg.icon, color:cfg.color, bg:cfg.bg };
-      });
+      const userTxs = Store.getTransactionsByUser(userId);
+      const allTxs = Store.getTransactions();
+      const clientTasks = Store.getTasksByClient(userId);
+      const clientTaskIds = new Set(clientTasks.map(t => t.id));
 
       const walletBalance = user?.walletBalance || 0;
-      availableBalance = walletBalance;
+      const deposits = userTxs.filter(t => t.type==='deposit' && t.toId===userId).reduce((s,t)=>s+t.amount,0);
+      const spent = userTxs.filter(t => t.type==='escrow-lock' && t.fromId===userId).reduce((s,t)=>s+t.amount,0);
 
-      const deposits = storeTransactions.filter(t => t.type==='deposit' && t.toId===userId).reduce((s,t)=>s+t.amount,0);
-      const spent = storeTransactions.filter(t => t.type==='escrow-lock' && t.fromId===userId).reduce((s,t)=>s+t.amount,0);
-      const released = storeTransactions.filter(t => t.type==='milestone-release' && t.fromId===userId).reduce((s,t)=>s+t.amount,0);
-      
+      // Total released = milestone-release transactions for this client's tasks (from ALL transactions, not just user's)
+      const releaseTxs = allTxs.filter(t => t.type==='milestone-release' && clientTaskIds.has(t.taskId));
+      const released = releaseTxs.reduce((s,t)=>s+t.amount,0);
+
+      // Active escrow = sum of milestone budgets that are NOT yet released
       let activeEscrowAmount = 0;
-      Store.getTasksByClient(userId).forEach(t => {
-        Store.getMilestonesByTask(t.id).forEach(m => {
-          if (['in-progress', 'review', 'not-started', 'audit-passed', 'audit-requested'].includes(m.status)) {
-            activeEscrowAmount += m.budget || 0;
-          }
+      let activeEscrowCount = 0;
+      const escrowProjects = [];
+
+      clientTasks.filter(t => t.status==='in-progress' || t.status==='open').forEach(t => {
+        const msList = Store.getMilestonesByTask(t.id);
+        const releasedVal = msList.filter(m => RELEASED_STATUSES.includes(m.status)).reduce((s,m)=>s+(m.budget||0),0);
+        const lockedVal = msList.filter(m => LOCKED_STATUSES.includes(m.status)).reduce((s,m)=>s+(m.budget||0),0);
+        const total = msList.reduce((s,m)=>s+(m.budget||0),0) || t.budget;
+        const pct = total ? Math.round((releasedVal/total)*100) : 0;
+
+        if (lockedVal > 0) activeEscrowCount++;
+        activeEscrowAmount += lockedVal;
+
+        escrowProjects.push({
+          name: t.title,
+          worker: Store.getUserById(t.workerId)?.name || 'TBD',
+          locked: '$' + lockedVal.toLocaleString(),
+          released: '$' + releasedVal.toLocaleString(),
+          total: '$' + total.toLocaleString(),
+          progress: pct,
         });
       });
-      
-      const activeProjectsCount = Store.getTasksByClient(userId).filter(t => t.status==='in-progress').length;
 
-      const escrowProjects = Store.getTasksByClient(userId).filter(t=>t.status==='in-progress' || t.status==='open').map(t => {
-        const msList = Store.getMilestonesByTask(t.id);
-        const releasedVal = msList.filter(m=>m.status==='completed' || m.status==='paid' || m.status==='approved').reduce((s,m)=>s+m.budget,0);
-        const total = msList.reduce((s,m)=>s+m.budget,0) || t.budget;
-        const pct = total ? Math.round((releasedVal/total)*100) : 0;
-        return { name:t.title, worker: Store.getUserById(t.workerId)?.name||'TBD', locked:'$'+(total-releasedVal).toLocaleString(), released:'$'+releasedVal.toLocaleString(), total:'$'+total.toLocaleString(), progress:pct };
+      // Build combined transaction list: user's own txs + milestone-releases for their tasks
+      const userTxIds = new Set(userTxs.map(t => t.id));
+      const combinedTxs = [...userTxs, ...releaseTxs.filter(t => !userTxIds.has(t.id))];
+      const transactions = combinedTxs.map(tx => {
+        const cfg = TX_TYPE_MAP[tx.type] || { label: tx.type, icon:'circle', color:'#64748b', bg:'#f1f5f9', positive:false };
+        const task = Store.getTaskById(tx.taskId);
+        return { type:tx.type, label:cfg.label, sub:(task?.title||'Platform') + ' \u2022 ' + (tx.createdAt || new Date().toISOString().slice(0,10)), amount:(cfg.positive?'+':'-') + '$' + tx.amount.toLocaleString(), positive:cfg.positive, icon:cfg.icon, color:cfg.color, bg:cfg.bg };
       });
 
-      const content = `
-        <!-- Balance Cards -->
-        <div class="wallet-grid">
-          <div class="wallet-card" style="background:linear-gradient(135deg,#6366f1,#4f46e5);">
-            <div style="position:relative;z-index:1;">
-              <div style="font-size:13px;font-weight:500;opacity:0.8;margin-bottom:8px;">Available Balance</div>
-              <div style="font-size:36px;font-weight:900;letter-spacing:-0.03em;margin-bottom:20px;" id="availableBalanceDisplay">$${walletBalance.toLocaleString()}</div>
-              <div style="display:flex;gap:12px;">
-                <button onclick="showAddFunds()" style="padding:8px 20px;border-radius:10px;background:rgba(255,255,255,0.2);color:white;border:1px solid rgba(255,255,255,0.3);font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s;" onmouseenter="this.style.background='rgba(255,255,255,0.3)'" onmouseleave="this.style.background='rgba(255,255,255,0.2)'">
-                  + Add Funds
-                </button>
-                <button onclick="showWithdraw()" style="padding:8px 20px;border-radius:10px;background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.2);font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s;" onmouseenter="this.style.background='rgba(255,255,255,0.25)'" onmouseleave="this.style.background='rgba(255,255,255,0.15)'">
-                  Withdraw
-                </button>
-              </div>
-            </div>
-          </div>
-          <div class="wallet-card" style="background:linear-gradient(135deg,#10b981,#059669);">
-            <div style="position:relative;z-index:1;">
-              <div style="font-size:13px;font-weight:500;opacity:0.8;margin-bottom:8px;">Total in Escrow</div>
-              <div style="font-size:36px;font-weight:900;letter-spacing:-0.03em;margin-bottom:8px;">$${activeEscrowAmount.toLocaleString()}</div>
-              <div style="font-size:13px;opacity:0.8;margin-bottom:16px;">Across ${activeProjectsCount} active projects</div>
-              <div style="display:flex;align-items:center;gap:8px;font-size:12px;opacity:0.9;">
-                <i data-lucide="shield-check" style="width:14px;height:14px;"></i>
-                Secured & Protected
-              </div>
-            </div>
-          </div>
-        </div>
+      return { walletBalance, deposits, spent, released, activeEscrowAmount, activeEscrowCount, escrowProjects, transactions };
+    }
 
-        <!-- Stats Row -->
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
-          ${[
-            { label:'Total Deposited', val:'$'+deposits.toLocaleString(), color:'#6366f1', icon:'arrow-down-circle' },
-            { label:'Total Spent', val:'$'+spent.toLocaleString(), color:'#f97316', icon:'trending-up' },
-            { label:'Total Released', val:'$'+released.toLocaleString(), color:'#10b981', icon:'unlock' },
-            { label:'Active Escrows', val:activeProjectsCount.toString(), color:'#a855f7', icon:'lock' },
-          ].map(s => `
-            <div class="stat-card">
-              <div><div class="stat-val" style="color:${s.color};">${s.val}</div><div class="stat-label">${s.label}</div></div>
-              <div class="stat-icon-wrap" style="background:${s.color}20;">
-                <i data-lucide="${s.icon}" style="width:20px;height:20px;color:${s.color};"></i>
-              </div>
-            </div>`).join('')}
-        </div>
+    function renderDynamicWalletContent(d) {
+      const txRows = d.transactions.length === 0
+        ? `<div style="padding:48px 24px;text-align:center;color:var(--muted-foreground);">
+             <i data-lucide="wallet" style="width:40px;height:40px;opacity:0.3;margin:0 auto 12px;display:block;"></i>
+             <div style="font-weight:600;margin-bottom:4px;">No transactions yet</div>
+             <div style="font-size:13px;">Transactions will appear here once you fund a project.</div>
+           </div>`
+        : d.transactions.slice(-10).reverse().map(t => `
+              <div class="tx-row">
+                <div class="tx-icon" style="background:${t.bg};">
+                  <i data-lucide="${t.icon}" style="width:18px;height:18px;color:${t.color};"></i>
+                </div>
+                <div style="flex:1;">
+                  <div style="font-weight:600;font-size:14px;">${t.label}</div>
+                  <div style="font-size:12px;color:var(--muted-foreground);">${t.sub}</div>
+                </div>
+                <span class="${t.positive ? 'tx-amount-pos' : 'tx-amount-neg'}">${t.amount}</span>
+              </div>`).join('');
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-          <!-- Escrow by Project -->
-          <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px 24px;">
-            <h3 style="font-size:15px;font-weight:600;margin-bottom:20px;">Escrow by Project</h3>
-
-            ${escrowProjects.length ? escrowProjects.map(p => `
+      const escrowHtml = d.escrowProjects.length
+        ? d.escrowProjects.map(p => `
               <div class="escrow-project">
                 <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
                   <span style="font-weight:600;font-size:14px;">${p.name}</span>
@@ -142,34 +127,85 @@
                   <span style="color:#10b981;font-weight:500;">Released: ${p.released}</span>
                   <span style="color:#6366f1;font-weight:500;">Locked: ${p.locked}</span>
                 </div>
-              </div>`).join('') : '<div style="padding:20px;text-align:center;color:var(--muted-foreground);font-size:13px;">No active projects with escrow funded.</div>'}
-          </div>
+              </div>`).join('')
+        : '<div style="padding:20px;text-align:center;color:var(--muted-foreground);font-size:13px;">No active projects with escrow funded.</div>';
 
-          <!-- Transactions -->
+      const stats = [
+        { label:'Total Deposited', val:'$'+d.deposits.toLocaleString(), color:'#6366f1', icon:'arrow-down-circle' },
+        { label:'Total Spent', val:'$'+d.spent.toLocaleString(), color:'#f97316', icon:'trending-up' },
+        { label:'Total Released', val:'$'+d.released.toLocaleString(), color:'#10b981', icon:'unlock' },
+        { label:'Active Escrows', val:d.activeEscrowCount.toString(), color:'#a855f7', icon:'lock' },
+      ];
+
+      return `
+        <div class="wallet-grid">
+          <div class="wallet-card" style="background:linear-gradient(135deg,#6366f1,#4f46e5);">
+            <div style="position:relative;z-index:1;">
+              <div style="font-size:13px;font-weight:500;opacity:0.8;margin-bottom:8px;">Available Balance</div>
+              <div style="font-size:36px;font-weight:900;letter-spacing:-0.03em;margin-bottom:20px;" id="availableBalanceDisplay">$${d.walletBalance.toLocaleString()}</div>
+              <div style="display:flex;gap:12px;">
+                <button onclick="showAddFunds()" style="padding:8px 20px;border-radius:10px;background:rgba(255,255,255,0.2);color:white;border:1px solid rgba(255,255,255,0.3);font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s;" onmouseenter="this.style.background='rgba(255,255,255,0.3)'" onmouseleave="this.style.background='rgba(255,255,255,0.2)'">+ Add Funds</button>
+                <button onclick="showWithdraw()" style="padding:8px 20px;border-radius:10px;background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.2);font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s;" onmouseenter="this.style.background='rgba(255,255,255,0.25)'" onmouseleave="this.style.background='rgba(255,255,255,0.15)'">Withdraw</button>
+              </div>
+            </div>
+          </div>
+          <div class="wallet-card" style="background:linear-gradient(135deg,#10b981,#059669);">
+            <div style="position:relative;z-index:1;">
+              <div style="font-size:13px;font-weight:500;opacity:0.8;margin-bottom:8px;">Total in Escrow</div>
+              <div style="font-size:36px;font-weight:900;letter-spacing:-0.03em;margin-bottom:8px;">$${d.activeEscrowAmount.toLocaleString()}</div>
+              <div style="font-size:13px;opacity:0.8;margin-bottom:16px;">Across ${d.activeEscrowCount} active project${d.activeEscrowCount!==1?'s':''}</div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:12px;opacity:0.9;">
+                <i data-lucide="shield-check" style="width:14px;height:14px;"></i> Secured & Protected
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
+          ${stats.map(s => `
+            <div class="stat-card">
+              <div><div class="stat-val" style="color:${s.color};">${s.val}</div><div class="stat-label">${s.label}</div></div>
+              <div class="stat-icon-wrap" style="background:${s.color}20;">
+                <i data-lucide="${s.icon}" style="width:20px;height:20px;color:${s.color};"></i>
+              </div>
+            </div>`).join('')}
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px 24px;">
+            <h3 style="font-size:15px;font-weight:600;margin-bottom:20px;">Escrow by Project</h3>
+            ${escrowHtml}
+          </div>
           <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px 24px;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
               <h3 style="font-size:15px;font-weight:600;">Recent Transactions</h3>
               <button class="btn-outline" style="font-size:13px;padding:5px 12px;" onclick="showAllTransactions()">View All</button>
             </div>
-            ${transactions.length === 0 ? `
-              <div style="padding:48px 24px;text-align:center;color:var(--muted-foreground);">
-                <i data-lucide="wallet" style="width:40px;height:40px;opacity:0.3;margin:0 auto 12px;display:block;"></i>
-                <div style="font-weight:600;margin-bottom:4px;">No transactions yet</div>
-                <div style="font-size:13px;">Transactions will appear here once you fund a project.</div>
-              </div>` :
-            transactions.map(t => `
-              <div class="tx-row">
-                <div class="tx-icon" style="background:${t.bg};">
-                  <i data-lucide="${t.icon}" style="width:18px;height:18px;color:${t.color};"></i>
-                </div>
-                <div style="flex:1;">
-                  <div style="font-weight:600;font-size:14px;">${t.label}</div>
-                  <div style="font-size:12px;color:var(--muted-foreground);">${t.sub}</div>
-                </div>
-                <span class="${t.positive ? 'tx-amount-pos' : 'tx-amount-neg'}">${t.amount}</span>
-              </div>`).join('')}
+            ${txRows}
           </div>
-        </div>
+        </div>`;
+    }
+
+    function refreshWallet() {
+      const d = computeWalletData(_walletUserId);
+      availableBalance = d.walletBalance;
+      const container = document.getElementById('walletDynamicContent');
+      if (container) {
+        container.innerHTML = renderDynamicWalletContent(d);
+        lucide.createIcons();
+      }
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('client')) return;
+
+      const session = typeof Auth !== "undefined" ? Auth.getCurrentUser() : null;
+      _walletUserId = session?.userId || 'u1';
+      const d = computeWalletData(_walletUserId);
+      availableBalance = d.walletBalance;
+
+      const content = `
+        <div id="walletDynamicContent">${renderDynamicWalletContent(d)}</div>
 
         <!-- Add Funds Modal -->
         <div id="addFundsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-start;justify-content:center;backdrop-filter:blur(4px);overflow-y:auto;padding:24px 0;">
@@ -396,19 +432,8 @@
             </div>
 
             <!-- Transactions List -->
-            <div style="padding:24px 32px;max-height:600px;overflow-y:auto;">
-              ${transactions.map((t, idx) => `
-                <div style="display:flex;align-items:center;gap:14px;padding:16px;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:12px;transition:all 0.2s;" onmouseover="this.style.background='#f9fafb';this.style.borderColor='#d1d5db'" onmouseout="this.style.background='white';this.style.borderColor='#e5e7eb'">
-                  <div class="tx-icon" style="background:${t.bg};flex-shrink:0;">
-                    <i data-lucide="${t.icon}" style="width:18px;height:18px;color:${t.color};"></i>
-                  </div>
-                  <div style="flex:1;">
-                    <div style="font-weight:600;font-size:14px;color:#111827;">${t.label}</div>
-                    <div style="font-size:12px;color:#6b7280;margin-top:4px;">${t.sub}</div>
-                  </div>
-                  <span class="${t.positive ? 'tx-amount-pos' : 'tx-amount-neg'}" style="font-size:16px;font-weight:700;">${t.amount}</span>
-                </div>
-              `).join('')}
+            <div style="padding:24px 32px;max-height:600px;overflow-y:auto;" id="allTransactionsListContainer">
+              <div style="padding:20px;text-align:center;color:#6b7280;">Loading transactions...</div>
             </div>
 
             <!-- Footer -->
@@ -585,18 +610,13 @@
 
       // Save deposit to store
       try {
-        const session = typeof Auth !== "undefined" ? Auth.getCurrentUser() : null;
-        const userId = session?.userId || 'u1';
-        Store.createTransaction({ type: 'deposit', amount, fromId: 'external', toId: userId, taskId: null, milestoneId: null, description: 'Wallet top-up via payment', status: 'completed' });
-        Store.updateUser(userId, { walletBalance: (Store.getUserById(userId)?.walletBalance || 0) + amount });
+        Store.createTransaction({ type: 'deposit', amount, fromId: 'external', toId: _walletUserId, taskId: null, milestoneId: null, description: 'Wallet top-up via payment', status: 'completed' });
+        Store.updateUser(_walletUserId, { walletBalance: (Store.getUserById(_walletUserId)?.walletBalance || 0) + amount });
       } catch(e) { console.warn('Store deposit failed', e); }
 
-      // Add to available balance display
-      availableBalance += amount;
-      document.getElementById('availableBalanceDisplay').textContent = '$' + availableBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-      // Close modal
+      // Close modal and refresh all wallet data
       document.getElementById('addFundsModal').style.display = 'none';
+      refreshWallet();
 
       Validate.toast('✓ $' + amount.toFixed(2) + ' added to your wallet successfully!', 'success');
     }
@@ -645,6 +665,24 @@
     }
 
     function showAllTransactions() {
+      const d = computeWalletData(_walletUserId);
+      const container = document.getElementById('allTransactionsListContainer');
+      if (container) {
+        const allTx = d.transactions.slice().reverse();
+        container.innerHTML = allTx.length === 0
+          ? '<div style="padding:20px;text-align:center;color:#6b7280;">No transactions found.</div>'
+          : allTx.map(t => `
+              <div style="display:flex;align-items:center;gap:14px;padding:16px;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:12px;transition:all 0.2s;" onmouseover="this.style.background='#f9fafb';this.style.borderColor='#d1d5db'" onmouseout="this.style.background='white';this.style.borderColor='#e5e7eb'">
+                <div class="tx-icon" style="background:${t.bg};flex-shrink:0;">
+                  <i data-lucide="${t.icon}" style="width:18px;height:18px;color:${t.color};"></i>
+                </div>
+                <div style="flex:1;">
+                  <div style="font-weight:600;font-size:14px;color:#111827;">${t.label}</div>
+                  <div style="font-size:12px;color:#6b7280;margin-top:4px;">${t.sub}</div>
+                </div>
+                <span class="${t.positive ? 'tx-amount-pos' : 'tx-amount-neg'}" style="font-size:16px;font-weight:700;">${t.amount}</span>
+              </div>`).join('');
+      }
       document.getElementById('allTransactionsModal').style.display = 'flex';
       lucide.createIcons();
     }
@@ -695,16 +733,16 @@
         return;
       }
       
-      // Deduct from available balance
-      availableBalance -= amount;
+      // Create withdrawal transaction and deduct from wallet
+      try {
+        Store.createTransaction({ type: 'withdrawal', amount, fromId: _walletUserId, toId: 'external', taskId: null, milestoneId: null, description: 'Withdrawal to bank account', status: 'completed' });
+        Store.updateUser(_walletUserId, { walletBalance: (Store.getUserById(_walletUserId)?.walletBalance || 0) - amount });
+      } catch(e) { console.warn('Store withdrawal failed', e); }
       
-      // Update display
-      document.getElementById('availableBalanceDisplay').textContent = '$' + availableBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      
-      // Close modal
+      // Close modal and refresh all wallet data
       document.getElementById('withdrawModal').style.display = 'none';
+      refreshWallet();
       
-      // Show success notification
       showNotification('✓ Withdrawal of $' + amount.toFixed(2) + ' processed successfully! Funds will arrive in 1-2 business days.', 'success');
     }
 

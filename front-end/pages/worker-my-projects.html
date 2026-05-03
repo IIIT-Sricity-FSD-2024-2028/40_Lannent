@@ -32,7 +32,7 @@
         try { return new Date(d).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}); } catch(e){ return d; }
       }
       function statusBadge(status) {
-        const map = { 'open':['badge-gray','Open'], 'in-progress':['badge-blue','In Progress'], 'under-review':['badge-orange','Under Review'], 'completed':['badge-green','Completed'], 'disputed':['badge-red','Disputed'] };
+        const map = { 'open':['badge-gray','Open'], 'in-progress':['badge-blue','In Progress'], 'completed':['badge-green','Completed'] };
         const [cls, label] = map[status] || ['badge-gray', status];
         return `<span class="badge ${cls}">${label}</span>`;
       }

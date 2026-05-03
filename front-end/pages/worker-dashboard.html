@@ -141,7 +141,7 @@
                      onmouseenter="this.style.background='#f8f9fb'" onmouseleave="this.style.background='transparent'" onclick="window.location.href='worker-workroom.html?id=${t.id}'">
                   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
                     <span style="font-size:14px;font-weight:600;">${t.title}</span>
-                    <span class="badge ${badgeClass}" style="text-transform:capitalize;">${t.status.replace(/-/g, ' ')}</span>
+                    <span class="badge ${badgeClass}" style="text-transform:capitalize;">${(t.status || 'unknown').replace(/-/g, ' ')}</span>
                   </div>
                   <div style="font-size:12px;color:var(--muted-foreground);margin-bottom:8px;">Client: ${clientName} · Due ${dueText}</div>
                   <div style="display:flex;align-items:center;gap:8px;">

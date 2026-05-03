@@ -1,21 +1,46 @@
 /**
- * LANNENT — Auth Module
- * Session management: login, logout, getCurrentUser, role guards.
- * Depends on store.js being loaded first.
+ * LANNENT — Auth Module (API-backed)
+ * Session management: login via backend API, logout, getCurrentUser, role guards.
  */
 
 const Auth = (() => {
   const SESSION_KEY = 'lannent_session';
+  const API = 'http://localhost:3000/api';
 
   function login(email, password) {
-    const user = Store.getUserByEmail(email);
-    if (!user) return { success: false, error: 'No account found with this email address.' };
-    if (user.password !== password) return { success: false, error: 'Incorrect password. Please try again.' };
-    if (user.status === 'suspended') return { success: false, error: 'This account has been suspended. Contact support.' };
+    // Synchronous wrapper: try API first, fall back to Store
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API}/users/login`, false); // synchronous
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.send(JSON.stringify({ email, password }));
 
-    const session = { userId: user.id, role: user.role, name: user.name, email: user.email, avatar: user.avatar, avatarColor: user.avatarColor };
-    try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch(e) {}
-    return { success: true, user, session };
+      if (xhr.status === 200 || xhr.status === 201) {
+        const result = JSON.parse(xhr.responseText);
+        const data = result.data || result;
+        const user = data.user;
+        const session = data.session;
+        if (user && session) {
+          try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch(e) {}
+          return { success: true, user, session };
+        }
+      } else {
+        const err = JSON.parse(xhr.responseText);
+        return { success: false, error: err.message || 'Login failed.' };
+      }
+    } catch(e) {
+      // API unavailable — fall back to Store lookup
+      const user = Store.getUserByEmail(email);
+      if (!user) return { success: false, error: 'No account found with this email address.' };
+      if (user.password !== password) return { success: false, error: 'Incorrect password. Please try again.' };
+      if (user.status === 'suspended') return { success: false, error: 'This account has been suspended. Contact support.' };
+
+      const session = { userId: user.id, role: user.role, name: user.name, email: user.email, avatar: user.avatar, avatarColor: user.avatarColor };
+      try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch(e2) {}
+      return { success: true, user, session };
+    }
+
+    return { success: false, error: 'Login failed. Please try again.' };
   }
 
   function logout() {

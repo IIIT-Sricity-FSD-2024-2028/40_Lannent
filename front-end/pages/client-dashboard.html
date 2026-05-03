@@ -165,8 +165,8 @@
                       <div class="progress-track-sm"><div class="progress-fill-sm" style="width:${prog}%;"></div></div>
                     </td>
                     <td style="color:var(--muted-foreground);font-size:13px;">${t.deadline ? new Date(t.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'TBD'}</td>
-                    <td><span class="badge ${badgeClass}" style="text-transform:capitalize;">${t.status.replace(/-/g, ' ')}</span></td>
-                    <td style="font-weight:600;">$${t.budget.toLocaleString()}</td>
+                    <td><span class="badge ${badgeClass}" style="text-transform:capitalize;">${(t.status || 'unknown').replace(/-/g, ' ')}</span></td>
+                    <td style="font-weight:600;">$${(t.budget || 0).toLocaleString()}</td>
                     <td><a href="project-workroom.html?id=${t.id}" class="btn-sm">View</a></td>
                   </tr>`;
                 }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted-foreground);padding:24px;">No active projects right now. Start by posting a task!</td></tr>'}

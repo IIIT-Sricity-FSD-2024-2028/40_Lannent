@@ -298,12 +298,18 @@
       const auditId = params.get('id') || params.get('reportId');
       const role = params.get('role') || (session ? session.role : 'expert');
 
+      console.log('[DEBUG] auditId from URL:', auditId);
+
       // Load audit request + linked objects
       let req = auditId ? Store.getAuditRequestById(auditId) : null;
+      console.log('[DEBUG] req from Store.getAuditRequestById:', req);
+
       // Fallback: load first pending/in-review request assigned to this expert
       if (!req) {
         const all = Store.getAuditRequests();
+        console.log('[DEBUG] Fallback: all audit requests:', all.map(a => ({ id: a.id, status: a.status })));
         req = all.find(a => a.status !== 'Completed' && (a.expertId === session.userId || !a.expertId)) || all[0] || null;
+        console.log('[DEBUG] Fallback req:', req);
       }
 
       if (!req) {
@@ -316,6 +322,9 @@
       const client = Store.getUserById(req.clientId);
       const milestone = Store.getMilestoneById(req.milestoneId);
       const existingReport = Store.getAuditReportByRequest(req.id);
+
+      console.log('[DEBUG] existingReport:', existingReport);
+      console.log('[DEBUG] All audit reports in cache:', Store.getAuditReports().map(r => ({ id: r.id, auditRequestId: r.auditRequestId, verdict: r.verdict })));
 
       // ── State ─────────────────────────────────────────────────────
       let checklist = [
@@ -334,7 +343,8 @@
         scores = { codequality: existingReport.codequality||0, security: existingReport.security||0, performance: existingReport.performance||0, documentation: existingReport.documentation||0 };
       }
 
-      const isCompleted = req.status === 'Completed' || (existingReport && existingReport.verdict);
+      const isCompleted = (req.status === 'Completed') || (existingReport && existingReport.verdict);
+      console.log('[DEBUG] isCompleted:', isCompleted, '| req.status:', req.status, '| verdict:', existingReport ? existingReport.verdict : 'no report');
 
       function renderStars(category, val) {
         return [1,2,3,4,5].map(n => `
@@ -352,8 +362,8 @@
       }
 
       function buildContent() {
-        return `
-          <!-- Header info -->
+        // ── Header info (always shown) ──
+        const header = `
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px;">
             <div class="stat-card">
               <div>
@@ -376,17 +386,125 @@
               </div>
               <div class="stat-icon-wrap" style="background:#faf5ff;"><i data-lucide="user" style="width:18px;height:18px;color:#a855f7;"></i></div>
             </div>
-          </div>
+          </div>`;
 
-          ${isCompleted && existingReport ? `
-          <div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:14px;padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;gap:12px;">
-            <i data-lucide="check-circle-2" style="width:22px;height:22px;color:#065f46;flex-shrink:0;"></i>
-            <div>
-              <div style="font-weight:600;color:#065f46;">Report Already Submitted</div>
-              <div style="font-size:13px;color:#047857;">Verdict: <strong>${existingReport.verdict === 'pass' ? 'PASS ✓' : 'FAIL ✗'}</strong> — submitted on ${existingReport.createdAt || 'N/A'}</div>
+        // ── COMPLETED: Read-only report view ──
+        if (isCompleted) {
+          // Guard: if report data is missing, show a simple completed state
+          if (!existingReport || !existingReport.verdict) {
+            return header + `
+              <div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:14px;padding:24px;text-align:center;">
+                <i data-lucide="check-circle-2" style="width:40px;height:40px;color:#065f46;margin:0 auto 12px;display:block;"></i>
+                <div style="font-size:16px;font-weight:600;color:#065f46;margin-bottom:6px;">Audit Completed</div>
+                <div style="font-size:14px;color:#047857;">This audit request has been completed. Report data is not available.</div>
+                <a href="expert-audit-requests.html" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:10px 20px;border-radius:10px;background:#065f46;color:#fff;font-size:13px;font-weight:500;text-decoration:none;">← Back to Audit Requests</a>
+              </div>`;
+          }
+
+          const vPass = existingReport.verdict === 'pass';
+          const expertUser = Store.getUserById(existingReport.expertId);
+          const expertName = expertUser ? expertUser.name : 'Expert Reviewer';
+          const expertInitials = expertName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+          function scoreBar(label, val) {
+            const pct = ((val || 0) / 5) * 100;
+            const color = (val || 0) >= 4 ? '#10b981' : (val || 0) >= 3 ? '#f59e0b' : '#ef4444';
+            return `
+              <div style="margin-bottom:14px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                  <span style="font-size:13px;font-weight:500;">${label}</span>
+                  <span style="font-size:13px;font-weight:700;color:${color};">${val || 0}/5</span>
+                </div>
+                <div style="height:8px;background:#e5e7eb;border-radius:99px;overflow:hidden;">
+                  <div style="height:100%;width:${pct}%;background:${color};border-radius:99px;transition:width 0.3s;"></div>
+                </div>
+              </div>`;
+          }
+
+          return header + `
+            <!-- Verdict Banner -->
+            <div class="verdict-banner ${vPass ? 'verdict-approved' : 'verdict-rejected'}" style="margin-bottom:24px;">
+              <div class="verdict-icon-wrap">
+                <i data-lucide="${vPass ? 'check-circle-2' : 'x-circle'}" style="width:22px;height:22px;color:#fff;"></i>
+              </div>
+              <div>
+                <div class="verdict-label">${vPass ? 'APPROVED' : 'REJECTED'}</div>
+                <div class="verdict-text">${vPass ? 'This deliverable meets all quality standards and has been approved.' : 'This deliverable does not meet quality standards and needs revision.'}</div>
+              </div>
             </div>
-          </div>` : ''}
 
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+              <!-- Left column -->
+              <div>
+                <!-- Quality Scores -->
+                <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
+                  <h3 style="font-size:15px;font-weight:600;margin-bottom:20px;display:flex;align-items:center;gap:8px;">
+                    <i data-lucide="bar-chart-2" style="width:16px;height:16px;color:#6366f1;"></i> Quality Scores
+                  </h3>
+                  ${scoreBar('Code Quality', existingReport.codequality)}
+                  ${scoreBar('Security', existingReport.security)}
+                  ${scoreBar('Performance', existingReport.performance)}
+                  ${scoreBar('Documentation', existingReport.documentation)}
+                  <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:13px;font-weight:600;">Overall Average</span>
+                    <span style="font-size:18px;font-weight:700;color:#6366f1;">${(((existingReport.codequality||0)+(existingReport.security||0)+(existingReport.performance||0)+(existingReport.documentation||0))/4).toFixed(1)}/5</span>
+                  </div>
+                </div>
+
+                <!-- Expert Signature -->
+                <div class="expert-sig">
+                  <div class="expert-avatar">${expertInitials}</div>
+                  <div class="expert-name">${expertName}</div>
+                  <div class="expert-role">Technical Expert Reviewer</div>
+                  <div style="font-size:12px;color:#7c3aed;margin-top:8px;">Report submitted on ${existingReport.createdAt || 'N/A'}</div>
+                </div>
+              </div>
+
+              <!-- Right column -->
+              <div>
+                <!-- Technical Findings -->
+                <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
+                  <h3 style="font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+                    <i data-lucide="file-text" style="width:16px;height:16px;color:#6366f1;"></i> Technical Findings
+                  </h3>
+                  <div class="summary-box" style="min-height:120px;white-space:pre-wrap;">${existingReport.findings || 'No findings recorded.'}</div>
+                </div>
+
+                <!-- Report Details -->
+                <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
+                  <h3 style="font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+                    <i data-lucide="info" style="width:16px;height:16px;color:#6366f1;"></i> Report Details
+                  </h3>
+                  <div class="info-grid">
+                    <div class="info-cell">
+                      <span class="info-label">Report ID</span>
+                      <span class="info-value mono">${existingReport.id}</span>
+                    </div>
+                    <div class="info-cell">
+                      <span class="info-label">Audit Request</span>
+                      <span class="info-value mono">${existingReport.auditRequestId}</span>
+                    </div>
+                    <div class="info-cell">
+                      <span class="info-label">Verdict</span>
+                      <span class="info-value"><span class="badge ${vPass ? 'badge-green' : 'badge-red'}">${vPass ? 'PASS' : 'FAIL'}</span></span>
+                    </div>
+                    <div class="info-cell">
+                      <span class="info-label">Date</span>
+                      <span class="info-value">${existingReport.createdAt || 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Print Button -->
+                <button onclick="window.print()" class="btn-print" style="width:100%;">
+                  <i data-lucide="printer" style="width:15px;height:15px;"></i> Print Report
+                </button>
+              </div>
+            </div>`;
+        }
+
+        // ── NOT COMPLETED: Show editable form ──
+        return header + `
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
             <!-- Left: Deliverable info + checklist -->
             <div>
@@ -423,23 +541,22 @@
 
               <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
                 <h3 style="font-size:15px;font-weight:600;margin-bottom:12px;">Findings & Verdict</h3>
-                <textarea id="findingsText" rows="5" ${isCompleted?'readonly':''} placeholder="Describe your technical findings, issues found, and overall assessment..." style="width:100%;padding:12px;border:1px solid var(--border);border-radius:10px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box;background:${isCompleted?'var(--secondary)':'var(--input-bg)'};">${existingReport ? (existingReport.findings||'') : ''}</textarea>
+                <textarea id="findingsText" rows="5" placeholder="Describe your technical findings, issues found, and overall assessment..." style="width:100%;padding:12px;border:1px solid var(--border);border-radius:10px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box;background:var(--input-bg);"></textarea>
                 <div id="findingsErr" style="font-size:12px;color:#ef4444;margin-top:4px;display:none;"></div>
 
                 <div style="margin-top:16px;">
                   <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Verdict</div>
                   <div style="display:flex;gap:10px;">
-                    <button id="verdictPass" onclick="setVerdict('pass')" style="flex:1;padding:10px;border-radius:10px;border:2px solid ${verdict==='pass'?'#10b981':'var(--border)'};background:${verdict==='pass'?'#d1fae5':'white'};font-weight:600;font-size:13px;cursor:${isCompleted?'default':'pointer'};color:${verdict==='pass'?'#065f46':'var(--foreground)'};">✓ Pass</button>
-                    <button id="verdictFail" onclick="setVerdict('fail')" style="flex:1;padding:10px;border-radius:10px;border:2px solid ${verdict==='fail'?'#ef4444':'var(--border)'};background:${verdict==='fail'?'#fee2e2':'white'};font-weight:600;font-size:13px;cursor:${isCompleted?'default':'pointer'};color:${verdict==='fail'?'#b91c1c':'var(--foreground)'};">✗ Fail</button>
+                    <button id="verdictPass" onclick="setVerdict('pass')" style="flex:1;padding:10px;border-radius:10px;border:2px solid var(--border);background:white;font-weight:600;font-size:13px;cursor:pointer;color:var(--foreground);">✓ Pass</button>
+                    <button id="verdictFail" onclick="setVerdict('fail')" style="flex:1;padding:10px;border-radius:10px;border:2px solid var(--border);background:white;font-weight:600;font-size:13px;cursor:pointer;color:var(--foreground);">✗ Fail</button>
                   </div>
                   <div id="verdictErr" style="font-size:12px;color:#ef4444;margin-top:4px;display:none;"></div>
                 </div>
               </div>
 
-              ${!isCompleted ? `
               <button onclick="submitAuditReport()" class="btn-primary" style="width:100%;padding:14px;border-radius:12px;font-size:15px;font-weight:600;">
                 Submit Audit Report
-              </button>` : ''}
+              </button>
             </div>
           </div>`;
       }
@@ -541,13 +658,7 @@
           // Update audit request status
           Store.updateAuditRequest(req.id, { status: 'Completed', expertId: session.userId });
 
-          // Update milestone status based on verdict
-          if (req.milestoneId) {
-            Store.updateMilestone(req.milestoneId, {
-              status: verdict === 'pass' ? 'review' : 'todo',
-              auditStatus: verdict
-            });
-          }
+          // Note: Expert audit report does not change milestone status - that's for client approval or dispute resolution only
 
           // Notify client and worker
           if (req.clientId) Store.addNotification({ userId: req.clientId, type: 'audit-complete', text: `Audit ${verdict === 'pass' ? 'passed' : 'failed'}: ${req.milestone}`, subtext: req.project + ' · just now', read: false });

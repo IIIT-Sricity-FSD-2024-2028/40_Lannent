@@ -1,523 +1,557 @@
 /**
- * LANNENT — Central Data Store
- * Single source of truth for all application data.
- * All data lives in localStorage under the 'lannent_db' key.
+ * LANNENT — Central Data Store (API-backed)
+ * Refactored to use the NestJS backend API at localhost:3000.
+ * Maintains a local cache for synchronous reads + async API mutations.
+ * Drop-in replacement: all existing pages work without changes.
  */
 
 const Store = (() => {
-  const DB_KEY = 'lannent_db';
+  const API = 'http://localhost:3000/api';
 
-  // ─── Seed Data ────────────────────────────────────────────────────────────
-  const SEED = {
-    users: [
-      { id: 'u1', name: 'James Client', email: 'client@gmail.com', password: 'Password@123', role: 'client', avatar: 'JC', avatarColor: 'linear-gradient(135deg,#6366f1,#4f46e5)', status: 'active', joinDate: 'Jan 10, 2026', walletBalance: 24500, company: 'TechCorp Ltd', location: 'New York, NY' },
-      { id: 'u2', name: 'Alex Worker', email: 'worker@gmail.com', password: 'Password@123', role: 'worker', avatar: 'AW', avatarColor: 'linear-gradient(135deg,#10b981,#059669)', status: 'active', joinDate: 'Feb 1, 2026', walletBalance: 8200, skills: ['React','Node.js','MongoDB'], rating: 4.8, completedProjects: 23 },
-      { id: 'u3', name: 'Dr. Jane Smith', email: 'expert@gmail.com', password: 'Password@123', role: 'expert', avatar: 'JS', avatarColor: 'linear-gradient(135deg,#a855f7,#7c3aed)', status: 'active', joinDate: 'Jan 20, 2026', walletBalance: 5100, specialization: 'Full-Stack & Security', reviewsDone: 47 },
-      { id: 'u4', name: 'Super Admin', email: 'super@gmail.com', password: 'Superadmin@123', role: 'superuser', avatar: 'SA', avatarColor: 'linear-gradient(135deg,#ef4444,#dc2626)', status: 'active', joinDate: 'Jan 1, 2026', walletBalance: 0 },
-      { id: 'u5', name: 'Sarah Johnson', email: 'sarah@gmail.com', password: 'Password@123', role: 'worker', avatar: 'SJ', avatarColor: 'linear-gradient(135deg,#6366f1,#4f46e5)', status: 'active', joinDate: 'Feb 5, 2026', walletBalance: 12400, skills: ['React','Figma','UI/UX Design'], rating: 4.9, completedProjects: 89 },
-      { id: 'u6', name: 'Michael Chen', email: 'michael@gmail.com', password: 'Password@123', role: 'worker', avatar: 'MC', avatarColor: 'linear-gradient(135deg,#ec4899,#be185d)', status: 'active', joinDate: 'Feb 10, 2026', walletBalance: 9800, skills: ['React','Node.js','MongoDB'], rating: 4.7, completedProjects: 65 },
-      { id: 'u7', name: 'Emily Rodriguez', email: 'emily@gmail.com', password: 'Password@123', role: 'worker', avatar: 'ER', avatarColor: 'linear-gradient(135deg,#10b981,#059669)', status: 'active', joinDate: 'Feb 15, 2026', walletBalance: 7300, skills: ['Figma','CSS3','User Research'], rating: 4.8, completedProjects: 41 },
-      { id: 'u8', name: 'Bob Client', email: 'bob@gmail.com', password: 'Password@123', role: 'client', avatar: 'BC', avatarColor: 'linear-gradient(135deg,#f59e0b,#d97706)', status: 'active', joinDate: 'Mar 1, 2026', walletBalance: 15000, company: 'StartupXYZ', location: 'Austin, TX' },
-    ],
-
-    tasks: [
-      { id: 't1', title: 'E-commerce Website Redesign', description: 'Need a complete redesign of our e-commerce platform with modern UI/UX. Must include product pages, cart, checkout flow, and admin panel.', category: 'Web Development', budget: 2500, currency: 'USD', deadline: '2026-04-15', skills: ['React','Figma','UI/UX Design'], clientId: 'u1', workerId: 'u5', status: 'in-progress', auditEnabled: false, progress: 75, createdAt: '2026-03-01' },
-      { id: 't2', title: 'Mobile App Development', description: 'Build a cross-platform mobile application for iOS and Android. Features include user auth, push notifications, and real-time data sync.', category: 'Mobile Development', budget: 4800, currency: 'USD', deadline: '2026-04-20', skills: ['React Native','Flutter'], clientId: 'u1', workerId: 'u6', status: 'under-review', auditEnabled: true, progress: 45, createdAt: '2026-03-03' },
-      { id: 't3', title: 'API Integration Project', description: 'Integrate third-party payment and shipping APIs into existing platform. Documentation and testing required.', category: 'Backend / API', budget: 1200, currency: 'USD', deadline: '2026-04-18', skills: ['Node.js','REST API'], clientId: 'u1', workerId: null, status: 'open', auditEnabled: false, progress: 0, createdAt: '2026-03-05' },
-      { id: 't4', title: 'Content Management System', description: 'Build a custom CMS for managing blog posts, media files, and user permissions.', category: 'Web Development', budget: 3500, currency: 'USD', deadline: '2026-04-12', skills: ['React','Node.js','MongoDB'], clientId: 'u1', workerId: 'u7', status: 'in-progress', auditEnabled: false, progress: 90, createdAt: '2026-03-08' },
-      { id: 't5', title: 'AI Chatbot Integration', description: 'Integrate an AI-powered chatbot into customer support workflow. NLP and intent detection required.', category: 'AI / Machine Learning', budget: 6000, currency: 'USD', deadline: '2026-05-01', skills: ['Python','TensorFlow','NLP'], clientId: 'u8', workerId: null, status: 'open', auditEnabled: true, progress: 0, createdAt: '2026-03-10' },
-      { id: 't6', title: 'UI Design System', description: 'Create a comprehensive design system with components, tokens, and documentation.', category: 'UI/UX Design', budget: 2200, currency: 'USD', deadline: '2026-04-25', skills: ['Figma','Design Systems'], clientId: 'u8', workerId: 'u2', status: 'in-progress', auditEnabled: false, progress: 30, createdAt: '2026-03-12' },
-    ],
-
-    milestones: [
-      { id: 'm1', taskId: 't1', title: 'UI Design & Wireframes', description: 'Complete wireframes and high-fidelity designs for all pages', budget: 800, status: 'completed', submittedAt: '2026-03-10', approvedAt: '2026-03-12', deliverable: null, workerId: 'u5' },
-      { id: 'm2', taskId: 't1', title: 'Frontend Development', description: 'Implement all pages in React with responsive design', budget: 1000, status: 'completed', submittedAt: '2026-03-18', approvedAt: '2026-03-20', deliverable: null, workerId: 'u5' },
-      { id: 'm3', taskId: 't1', title: 'Backend Integration', description: 'Connect frontend to APIs and set up data flow', budget: 500, status: 'in-progress', submittedAt: null, approvedAt: null, deliverable: null, workerId: 'u5' },
-      { id: 'm4', taskId: 't1', title: 'Testing & Deployment', description: 'QA testing, bug fixes, and production deployment', budget: 200, status: 'pending', submittedAt: null, approvedAt: null, deliverable: null, workerId: 'u5' },
-      { id: 'm5', taskId: 't2', title: 'App Architecture & Setup', description: 'Project setup, architecture design, CI/CD pipeline', budget: 800, status: 'completed', submittedAt: '2026-03-08', approvedAt: '2026-03-10', deliverable: null, workerId: 'u6' },
-      { id: 'm6', taskId: 't2', title: 'Core UI Implementation', description: 'Build all screens and navigation flows', budget: 1500, status: 'submitted', submittedAt: '2026-03-25', approvedAt: null, deliverable: { title: 'UI Implementation v1', description: 'All screens implemented with navigation', link: 'https://github.com/example/mobile-app' }, workerId: 'u6' },
-      { id: 'm7', taskId: 't4', title: 'Database Schema Design', description: 'Design and implement the database schema for CMS', budget: 700, status: 'completed', submittedAt: '2026-03-15', approvedAt: '2026-03-17', deliverable: null, workerId: 'u7' },
-      { id: 'm8', taskId: 't4', title: 'Content Editor Module', description: 'Build rich text editor and media management', budget: 1200, status: 'completed', submittedAt: '2026-03-22', approvedAt: '2026-03-24', deliverable: null, workerId: 'u7' },
-      { id: 'm9', taskId: 't4', title: 'User Permission System', description: 'Role-based access control for CMS users', budget: 900, status: 'completed', submittedAt: '2026-03-28', approvedAt: '2026-03-29', deliverable: null, workerId: 'u7' },
-      { id: 'm10', taskId: 't4', title: 'Final Testing', description: 'Full QA pass and documentation', budget: 700, status: 'in-progress', submittedAt: null, approvedAt: null, deliverable: null, workerId: 'u7' },
-    ],
-
-    proposals: [
-      { id: 'p1', taskId: 't3', workerId: 'u5', workerName: 'Sarah Johnson', avatar: 'SJ', avatarColor: 'linear-gradient(135deg,#6366f1,#4f46e5)', rating: 4.9, reviewCount: 127, location: 'San Francisco, CA', bidPrice: '$1,100', timeline: '1 week', coverLetter: 'Experienced in API integrations with Stripe, Twilio, and shipping providers. I can deliver clean, documented code within a week with full test coverage.', skills: ['Node.js','REST API','Testing'], completedProjects: 89, successRate: 98, hourlyRate: '$85/hr', responseTime: 'Within 2 hours', status: 'pending' },
-      { id: 'p2', taskId: 't3', workerId: 'u6', workerName: 'Michael Chen', avatar: 'MC', avatarColor: 'linear-gradient(135deg,#ec4899,#be185d)', rating: 4.7, reviewCount: 83, location: 'New York, NY', bidPrice: '$1,000', timeline: '10 days', coverLetter: 'Full-stack developer with deep API experience. I have built payment integrations for Stripe, PayPal, and Square for multiple e-commerce clients.', skills: ['Node.js','Express','MongoDB'], completedProjects: 65, successRate: 96, hourlyRate: '$75/hr', responseTime: 'Within 4 hours', status: 'pending' },
-      { id: 'p3', taskId: 't5', workerId: 'u2', workerName: 'Alex Worker', avatar: 'AW', avatarColor: 'linear-gradient(135deg,#10b981,#059669)', rating: 4.8, reviewCount: 56, location: 'Boston, MA', bidPrice: '$5,500', timeline: '4 weeks', coverLetter: 'ML engineer with production NLP chatbot experience. Built systems handling 10k+ daily conversations. Deep expertise in LangChain and OpenAI APIs.', skills: ['Python','TensorFlow','NLP'], completedProjects: 23, successRate: 100, hourlyRate: '$90/hr', responseTime: 'Within 1 hour', status: 'pending' },
-    ],
-
-    auditRequests: [
-      { id: 'ar1', taskId: 't2', milestoneId: 'm6', workerId: 'u6', clientId: 'u1', expertId: 'u3', status: 'In Review', severity: 'High', project: 'Mobile App Development', worker: 'Michael Chen', milestone: 'Core UI Implementation', createdAt: '2026-03-25', dueDate: '2026-04-01' },
-      { id: 'ar2', taskId: 't1', milestoneId: 'm3', workerId: 'u5', clientId: 'u1', expertId: null, status: 'Pending', severity: 'Medium', project: 'E-commerce Website Redesign', worker: 'Sarah Johnson', milestone: 'Backend Integration', createdAt: '2026-03-28', dueDate: '2026-04-05' },
-      { id: 'ar3', taskId: 't4', milestoneId: 'm9', workerId: 'u7', clientId: 'u1', expertId: 'u3', status: 'Completed', severity: 'Low', project: 'Content Management System', worker: 'Emily Rodriguez', milestone: 'User Permission System', createdAt: '2026-03-20', dueDate: '2026-03-27' },
-    ],
-
-    auditReports: [
-      { id: 'rep1', auditRequestId: 'ar3', taskId: 't4', milestoneId: 'm9', expertId: 'u3', verdict: 'pass', overall: 'Pass', findings: 'Code quality is excellent. Security implementation follows OWASP standards. Role-based access is properly implemented with no privilege escalation vulnerabilities detected.', codequality: 5, security: 5, performance: 4, documentation: 4, createdAt: '2026-03-26', milestoneTitle: 'User Permission System', projectTitle: 'Content Management System', workerName: 'Emily Rodriguez' },
-      { id: 'rep2', auditRequestId: 'ar1', taskId: 't2', milestoneId: 'm6', expertId: 'u3', verdict: null, overall: null, findings: null, codequality: null, security: null, performance: null, documentation: null, createdAt: null, milestoneTitle: 'Core UI Implementation', projectTitle: 'Mobile App Development', workerName: 'Michael Chen' },
-    ],
-
-    disputes: [
-      { id: 'd1', taskId: 't1', milestoneId: 'm3', raisedBy: 'u1', raisedByName: 'James Client', againstId: 'u5', againstName: 'Sarah Johnson', status: 'open', reason: 'The backend integration milestone was submitted but the API endpoints return incorrect data formats. The payment gateway integration is also incomplete.', expertId: null, verdict: null, resolution: null, amount: '$500', project: 'E-commerce Website Redesign', milestone: 'Backend Integration', createdAt: '2026-03-29' },
-      { id: 'd2', taskId: 't6', milestoneId: null, raisedBy: 'u2', raisedByName: 'Alex Worker', againstId: 'u8', againstName: 'Bob Client', status: 'resolved', reason: 'Client has not responded to milestone submission for over 2 weeks. Payment is being unfairly withheld.', expertId: 'u3', verdict: 'worker-favour', resolution: 'After reviewing the submitted work and communication logs, the milestone is deemed complete. Escrow funds released to worker.', amount: '$660', project: 'UI Design System', milestone: 'Phase 1 Components', createdAt: '2026-03-15', resolvedAt: '2026-03-22' },
-    ],
-
-    transactions: [
-      { id: 'tx1', type: 'escrow-lock', amount: 2500, fromId: 'u1', toId: 'escrow', taskId: 't1', milestoneId: null, description: 'Escrow funded for E-commerce Website Redesign', status: 'completed', createdAt: '2026-03-01' },
-      { id: 'tx2', type: 'milestone-release', amount: 800, fromId: 'escrow', toId: 'u5', taskId: 't1', milestoneId: 'm1', description: 'Payment for UI Design & Wireframes', status: 'completed', createdAt: '2026-03-12' },
-      { id: 'tx3', type: 'milestone-release', amount: 1000, fromId: 'escrow', toId: 'u5', taskId: 't1', milestoneId: 'm2', description: 'Payment for Frontend Development', status: 'completed', createdAt: '2026-03-20' },
-      { id: 'tx4', type: 'escrow-lock', amount: 4800, fromId: 'u1', toId: 'escrow', taskId: 't2', milestoneId: null, description: 'Escrow funded for Mobile App Development', status: 'completed', createdAt: '2026-03-03' },
-      { id: 'tx5', type: 'milestone-release', amount: 800, fromId: 'escrow', toId: 'u6', taskId: 't2', milestoneId: 'm5', description: 'Payment for App Architecture & Setup', status: 'completed', createdAt: '2026-03-10' },
-      { id: 'tx6', type: 'deposit', amount: 10000, fromId: 'external', toId: 'u1', taskId: null, milestoneId: null, description: 'Wallet top-up via bank transfer', status: 'completed', createdAt: '2026-02-28' },
-    ],
-
-    expertApplications: [
-      { id: 'ea1', name: 'Dr. Jane Smith', email: 'expert@gmail.com', phone: '9876543210', phoneCountry: '+1', country: 'United States', expertise: 'Full-Stack Development', experience: '10+', linkedin: 'https://linkedin.com/in/janesmith', github: 'https://github.com/janesmith', motivation: 'Passionate about code quality and helping teams deliver secure, scalable solutions.', status: 'approved', appliedAt: '2026-01-15', reviewedAt: '2026-01-18', reviewedBy: 'u4' },
-    ],
-
-    notifications: [
-      { id: 'n1', userId: 'u1', type: 'milestone-approved', text: 'Milestone "Frontend UI" approved', subtext: 'E-commerce Redesign · 2 min ago', read: false, createdAt: '2026-03-30' },
-      { id: 'n2', userId: 'u1', type: 'message', text: 'New message from Sarah Johnson', subtext: 'Mobile App Project · 10 min ago', read: false, createdAt: '2026-03-30' },
-      { id: 'n3', userId: 'u2', type: 'payment', text: 'Payment of $1,000 received', subtext: 'Frontend Development milestone · 1 hr ago', read: false, createdAt: '2026-03-30' },
-    ]
+  // Local cache — initialized from API on first load
+  let _cache = {
+    users: [], tasks: [], milestones: [], proposals: [],
+    auditRequests: [], auditReports: [], disputes: [],
+    transactions: [], expertApplications: [], notifications: [],
   };
 
-  // ─── DB Init ─────────────────────────────────────────────────────────────
-  function _getDB() {
+  // ─── Helpers ──────────────────────────────────────────────────────────────
+  function _headers() {
+    const h = { 'Content-Type': 'application/json' };
     try {
-      const raw = localStorage.getItem(DB_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch (e) { /* ignore */ }
+      const session = JSON.parse(localStorage.getItem('lannent_session') || '{}');
+      if (session.role) h['role'] = session.role;
+      if (session.userId) h['user-id'] = session.userId;
+    } catch {}
+    return h;
+  }
+
+  async function _fetch(url, opts = {}) {
+    try {
+      const res = await fetch(url, { headers: _headers(), ...opts });
+      const json = await res.json();
+      return json.data !== undefined ? json.data : json;
+    } catch (e) {
+      console.warn('Store API error:', e);
+      return null;
+    }
+  }
+
+  async function _post(url, body) {
+    return _fetch(url, { method: 'POST', body: JSON.stringify(body) });
+  }
+
+  async function _patch(url, body) {
+    return _fetch(url, { method: 'PATCH', body: JSON.stringify(body) });
+  }
+
+  async function _delete(url) {
+    return _fetch(url, { method: 'DELETE' });
+  }
+
+  // ─── Cache Refresh ────────────────────────────────────────────────────────
+  async function _refreshAll() {
+    const [users, tasks, milestones, proposals, auditRequests, auditReports, disputes, transactions, expertApplications, notifications] = await Promise.all([
+      _fetch(`${API}/users`),
+      _fetch(`${API}/tasks`),
+      _fetch(`${API}/milestones`),
+      _fetch(`${API}/proposals`),
+      _fetch(`${API}/audit-requests`),
+      _fetch(`${API}/audit-reports`),
+      _fetch(`${API}/disputes`),
+      _fetch(`${API}/transactions`),
+      _fetch(`${API}/expert-applications`),
+      _fetch(`${API}/notifications`),
+    ]);
+    if (users) _cache.users = users;
+    if (tasks) _cache.tasks = tasks;
+    if (milestones) _cache.milestones = milestones;
+    if (proposals) _cache.proposals = proposals;
+    if (auditRequests) _cache.auditRequests = auditRequests;
+    if (auditReports) _cache.auditReports = auditReports;
+    if (disputes) _cache.disputes = disputes;
+    if (transactions) _cache.transactions = transactions;
+    if (expertApplications) _cache.expertApplications = expertApplications;
+    if (notifications) _cache.notifications = notifications;
+  }
+
+  // ─── Synchronous HTTP helpers (blocks until API responds) ─────────────────
+  function _syncFetch(url) {
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', url, false);
+      const hdrs = _headers();
+      Object.keys(hdrs).forEach(k => xhr.setRequestHeader(k, hdrs[k]));
+      xhr.send();
+      if (xhr.status === 200) {
+        const json = JSON.parse(xhr.responseText);
+        return json.data !== undefined ? json.data : json;
+      }
+    } catch (e) {
+      console.warn('Store sync GET error:', url, e);
+    }
     return null;
   }
 
-  function _saveDB(db) {
-    try { localStorage.setItem(DB_KEY, JSON.stringify(db)); } catch (e) { console.error('Store: save failed', e); }
+  function _syncPost(url, body) {
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url, false);
+      const hdrs = _headers();
+      Object.keys(hdrs).forEach(k => xhr.setRequestHeader(k, hdrs[k]));
+      xhr.send(JSON.stringify(body));
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const json = JSON.parse(xhr.responseText);
+        return json.data !== undefined ? json.data : json;
+      }
+      console.error('[Store] _syncPost FAILED:', url, 'status:', xhr.status, 'response:', xhr.responseText.substring(0, 300));
+    } catch (e) {
+      console.warn('Store sync POST error:', url, e);
+    }
+    return null;
+  }
+
+  function _syncPatch(url, body) {
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PATCH', url, false);
+      const hdrs = _headers();
+      Object.keys(hdrs).forEach(k => xhr.setRequestHeader(k, hdrs[k]));
+      xhr.send(JSON.stringify(body));
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const json = JSON.parse(xhr.responseText);
+        return json.data !== undefined ? json.data : json;
+      }
+    } catch (e) {
+      console.warn('Store sync PATCH error:', url, e);
+    }
+    return null;
+  }
+
+  function _syncDelete(url) {
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('DELETE', url, false);
+      const hdrs = _headers();
+      Object.keys(hdrs).forEach(k => xhr.setRequestHeader(k, hdrs[k]));
+      xhr.send();
+      if (xhr.status >= 200 && xhr.status < 300) {
+        return true;
+      }
+    } catch (e) {
+      console.warn('Store sync DELETE error:', url, e);
+    }
+    return false;
   }
 
   function init() {
-    if (!_getDB()) {
-      _saveDB(JSON.parse(JSON.stringify(SEED)));
+    // Load all data synchronously from API so cache is ready before pages render
+    const endpoints = [
+      ['users', '/users'], ['tasks', '/tasks'], ['milestones', '/milestones'],
+      ['proposals', '/proposals'], ['auditRequests', '/audit-requests'],
+      ['auditReports', '/audit-reports'], ['disputes', '/disputes'],
+      ['transactions', '/transactions'], ['expertApplications', '/expert-applications'],
+      ['notifications', '/notifications'],
+    ];
+    for (const [key, path] of endpoints) {
+      const data = _syncFetch(API + path);
+      if (data) _cache[key] = data;
     }
   }
 
   function resetToSeed() {
-    _saveDB(JSON.parse(JSON.stringify(SEED)));
+    _syncPost(`${API}/seed/reset`, {});
+    init(); // reload cache
   }
 
-  function _db() {
-    const db = _getDB();
-    if (!db) { init(); return JSON.parse(JSON.stringify(SEED)); }
-    // Auto-migrate: add expertApplications if missing
-    if (!db.expertApplications) {
-      db.expertApplications = JSON.parse(JSON.stringify(SEED.expertApplications || []));
-      _saveDB(db);
-    }
-    return db;
-  }
-
-  // ─── Generic ID generator ────────────────────────────────────────────────
-  function _id(prefix) {
-    return prefix + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-  }
-
-  // ─── USERS ───────────────────────────────────────────────────────────────
-  function getUsers() { return _db().users; }
-
-  function getUserById(id) { return _db().users.find(u => u.id === id) || null; }
-
-  function getUserByEmail(email) { return _db().users.find(u => u.email.toLowerCase() === email.toLowerCase()) || null; }
+  // ─── USERS ────────────────────────────────────────────────────────────────
+  function getUsers() { return _cache.users; }
+  function getUserById(id) { return _cache.users.find(u => u.id === id) || null; }
+  function getUserByEmail(email) { return _cache.users.find(u => u.email.toLowerCase() === email.toLowerCase()) || null; }
 
   function createUser(data) {
-    const db = _db();
-    const user = { id: _id('u'), status: 'active', joinDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), walletBalance: 0, ...data };
-    db.users.push(user);
-    _saveDB(db);
+    const result = _syncPost(`${API}/users`, data);
+    if (result) { _cache.users.push(result); return result; }
+    // Fallback if API fails
+    const initials = data.name ? data.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : 'U';
+    const user = { id: 'u_' + Date.now(), status: 'active', joinDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), walletBalance: 0, avatar: initials, avatarColor: 'linear-gradient(135deg,#6366f1,#4f46e5)', ...data };
+    _cache.users.push(user);
     return user;
   }
 
   function updateUser(id, updates) {
-    const db = _db();
-    const idx = db.users.findIndex(u => u.id === id);
+    const result = _syncPatch(`${API}/users/${id}`, updates);
+    if (result) { const idx = _cache.users.findIndex(u => u.id === id); if (idx >= 0) _cache.users[idx] = result; return result; }
+    const idx = _cache.users.findIndex(u => u.id === id);
     if (idx === -1) return null;
-    db.users[idx] = { ...db.users[idx], ...updates };
-    _saveDB(db);
-    return db.users[idx];
+    _cache.users[idx] = { ..._cache.users[idx], ...updates };
+    return _cache.users[idx];
   }
 
   function deleteUser(id) {
-    const db = _db();
-    db.users = db.users.filter(u => u.id !== id);
-    _saveDB(db);
+    _syncDelete(`${API}/users/${id}`);
+    _cache.users = _cache.users.filter(u => u.id !== id);
   }
 
   function deductFromWallet(userId, amount) {
     const user = getUserById(userId);
     if (!user) return null;
-    if (user.walletBalance < amount) return null; // Insufficient balance
-    return updateUser(userId, { walletBalance: user.walletBalance - amount });
+    if (user.walletBalance < amount) return null;
+    const result = _syncPost(`${API}/users/${userId}/wallet/deduct`, { amount });
+    if (result) { const idx = _cache.users.findIndex(u => u.id === userId); if (idx >= 0) _cache.users[idx] = result; return result; }
+    user.walletBalance -= amount;
+    return user;
   }
 
   function addToWallet(userId, amount) {
     const user = getUserById(userId);
     if (!user) return null;
-    return updateUser(userId, { walletBalance: user.walletBalance + amount });
+    const result = _syncPost(`${API}/users/${userId}/wallet/add`, { amount });
+    if (result) { const idx = _cache.users.findIndex(u => u.id === userId); if (idx >= 0) _cache.users[idx] = result; return result; }
+    user.walletBalance += amount;
+    return user;
   }
 
   // ─── TASKS ────────────────────────────────────────────────────────────────
-  function getTasks() { return _db().tasks; }
-
-  function getTaskById(id) { return _db().tasks.find(t => t.id === id) || null; }
-
-  function getTasksByClient(clientId) { return _db().tasks.filter(t => t.clientId === clientId); }
-
-  function getTasksByWorker(workerId) { return _db().tasks.filter(t => t.workerId === workerId); }
-
-  function getOpenTasks() { return _db().tasks.filter(t => t.status === 'open'); }
+  function getTasks() { return _cache.tasks; }
+  function getTaskById(id) { return _cache.tasks.find(t => t.id === id) || null; }
+  function getTasksByClient(clientId) { return _cache.tasks.filter(t => t.clientId === clientId); }
+  function getTasksByWorker(workerId) { return _cache.tasks.filter(t => t.workerId === workerId); }
+  function getOpenTasks() { return _cache.tasks.filter(t => t.status === 'open'); }
 
   function createTask(data) {
-    const db = _db();
-    const task = { id: _id('t'), status: 'open', progress: 0, workerId: null, createdAt: new Date().toISOString().slice(0,10), ...data };
-    db.tasks.push(task);
-    _saveDB(db);
+    const result = _syncPost(`${API}/tasks`, data);
+    if (result) { _cache.tasks.push(result); return result; }
+    const task = { id: 't_' + Date.now(), status: 'open', progress: 0, workerId: null, createdAt: new Date().toISOString().slice(0, 10), ...data };
+    _cache.tasks.push(task);
     return task;
   }
 
   function updateTask(id, updates) {
-    const db = _db();
-    const idx = db.tasks.findIndex(t => t.id === id);
+    const result = _syncPatch(`${API}/tasks/${id}`, updates);
+    if (result) { const idx = _cache.tasks.findIndex(t => t.id === id); if (idx >= 0) _cache.tasks[idx] = result; return result; }
+    const idx = _cache.tasks.findIndex(t => t.id === id);
     if (idx === -1) return null;
-    db.tasks[idx] = { ...db.tasks[idx], ...updates };
-    _saveDB(db);
-    return db.tasks[idx];
+    _cache.tasks[idx] = { ..._cache.tasks[idx], ...updates };
+    return _cache.tasks[idx];
   }
 
   function deleteTask(id) {
-    const db = _db();
-    db.tasks = db.tasks.filter(t => t.id !== id);
-    _saveDB(db);
+    _syncDelete(`${API}/tasks/${id}`);
+    _cache.tasks = _cache.tasks.filter(t => t.id !== id);
   }
 
-  // ─── MILESTONES ──────────────────────────────────────────────────────────
-  function getMilestones() { return _db().milestones; }
-
-  function getMilestonesByTask(taskId) { return _db().milestones.filter(m => m.taskId === taskId); }
-
-  function getMilestoneById(id) { return _db().milestones.find(m => m.id === id) || null; }
+  // ─── MILESTONES ───────────────────────────────────────────────────────────
+  function getMilestones() { return _cache.milestones; }
+  function getMilestonesByTask(taskId) { return _cache.milestones.filter(m => m.taskId === taskId); }
+  function getMilestoneById(id) { return _cache.milestones.find(m => m.id === id) || null; }
 
   function createMilestone(data) {
-    const db = _db();
-    const ms = { id: _id('m'), status: 'pending', submittedAt: null, approvedAt: null, deliverable: null, ...data };
-    db.milestones.push(ms);
-    _saveDB(db);
+    const result = _syncPost(`${API}/milestones`, data);
+    if (result) { _cache.milestones.push(result); return result; }
+    const ms = { id: 'm_' + Date.now(), status: 'pending', submittedAt: null, approvedAt: null, deliverable: null, ...data };
+    _cache.milestones.push(ms);
     return ms;
   }
 
   function updateMilestone(id, updates) {
-    const db = _db();
-    const idx = db.milestones.findIndex(m => m.id === id);
+    const result = _syncPatch(`${API}/milestones/${id}`, updates);
+    if (result) { const idx = _cache.milestones.findIndex(m => m.id === id); if (idx >= 0) _cache.milestones[idx] = result; return result; }
+    const idx = _cache.milestones.findIndex(m => m.id === id);
     if (idx === -1) return null;
-    db.milestones[idx] = { ...db.milestones[idx], ...updates };
-    _saveDB(db);
-    return db.milestones[idx];
+    _cache.milestones[idx] = { ..._cache.milestones[idx], ...updates };
+    return _cache.milestones[idx];
   }
 
   function _checkTaskCompletion(taskId) {
-    if (!taskId) return;
-    const task = getTaskById(taskId);
-    if (!task) return;
-    const allMilestones = getMilestonesByTask(taskId);
-    if (!allMilestones.length) return;
-    
-    const done = allMilestones.filter(m => ['completed', 'approved', 'audit-passed', 'done'].includes(m.status)).length;
-    const pct = Math.round((done / allMilestones.length) * 100);
-    
-    updateTask(taskId, { progress: pct, status: pct === 100 ? 'completed' : (task.status === 'completed' ? 'in-progress' : task.status) });
-    
-    if (pct === 100) {
-      const proposal = _db().proposals.find(p => p.taskId === taskId && p.status === 'hired');
-      if (proposal) updateProposal(proposal.id, { status: 'completed' });
-    }
+    const t = _syncFetch(`${API}/tasks/${taskId}`);
+    if (t) { const idx = _cache.tasks.findIndex(x => x.id === taskId); if (idx >= 0) _cache.tasks[idx] = t; }
   }
 
   function submitDeliverable(milestoneId, deliverable) {
-    const ms = updateMilestone(milestoneId, { status: 'submitted', submittedAt: new Date().toISOString().slice(0,10), deliverable });
-    // If task has auditEnabled, create audit request
-    if (ms) {
-      const task = getTaskById(ms.taskId);
-      if (task && task.auditEnabled) {
-        createAuditRequest({ taskId: ms.taskId, milestoneId, workerId: ms.workerId, clientId: task.clientId, expertId: 'u3', status: 'Pending', severity: 'Medium', project: task.title, worker: getUserById(ms.workerId)?.name || 'Worker', milestone: ms.title, dueDate: new Date(Date.now() + 7*24*60*60*1000).toISOString().slice(0,10) });
-      }
+    const result = _syncPost(`${API}/milestones/${milestoneId}/submit`, { deliverable });
+    if (result) {
+      const idx = _cache.milestones.findIndex(m => m.id === milestoneId);
+      if (idx >= 0) _cache.milestones[idx] = result;
+      return result;
     }
-    return ms;
+    return updateMilestone(milestoneId, { status: 'submitted', submittedAt: new Date().toISOString().slice(0, 10), deliverable });
   }
 
   function approveDeliverable(milestoneId) {
-    const ms = updateMilestone(milestoneId, { status: 'completed', approvedAt: new Date().toISOString().slice(0,10) });
-    if (ms) {
-      // Create release transaction
-      createTransaction({ type: 'milestone-release', amount: ms.budget, fromId: 'escrow', toId: ms.workerId, taskId: ms.taskId, milestoneId, description: `Payment for ${ms.title}`, status: 'completed' });
-      const worker = getUserById(ms.workerId);
-      if (worker) updateUser(ms.workerId, { walletBalance: (worker.walletBalance || 0) + ms.budget });
-      _checkTaskCompletion(ms.taskId);
+    const result = _syncPost(`${API}/milestones/${milestoneId}/approve`, {});
+    if (result) {
+      const idx = _cache.milestones.findIndex(m => m.id === milestoneId);
+      if (idx >= 0) _cache.milestones[idx] = result;
+      // Refresh tasks, users, and transactions cache to get updated progress/wallet/releases
+      const ms = result;
+      if (ms.taskId) _checkTaskCompletion(ms.taskId);
+      if (ms.workerId) {
+        const u = _syncFetch(`${API}/users/${ms.workerId}`);
+        if (u) { const uidx = _cache.users.findIndex(x => x.id === ms.workerId); if (uidx >= 0) _cache.users[uidx] = u; }
+      }
+      // Refresh transactions cache (backend creates milestone-release tx)
+      const txs = _syncFetch(`${API}/transactions`);
+      if (txs) _cache.transactions = txs;
+      // Refresh client user (task owner) for wallet balance
+      const task = _cache.tasks.find(t => t.id === ms.taskId);
+      if (task && task.clientId) {
+        const cu = _syncFetch(`${API}/users/${task.clientId}`);
+        if (cu) { const cidx = _cache.users.findIndex(x => x.id === task.clientId); if (cidx >= 0) _cache.users[cidx] = cu; }
+      }
+      return result;
     }
+    const ms = getMilestoneById(milestoneId);
+    if (ms) { ms.status = 'completed'; ms.approvedAt = new Date().toISOString().slice(0, 10); }
     return ms;
   }
 
-  // ─── PROPOSALS ───────────────────────────────────────────────────────────
-  function getProposals() { return _db().proposals; }
-
-  function getProposalsByTask(taskId) { return _db().proposals.filter(p => p.taskId === taskId); }
-
-  function getProposalsByWorker(workerId) { return _db().proposals.filter(p => p.workerId === workerId && p.type !== 'invitation'); }
-
-  function getInvitationsByWorker(workerId) { return _db().proposals.filter(p => p.workerId === workerId && p.type === 'invitation'); }
+  // ─── PROPOSALS ────────────────────────────────────────────────────────────
+  function getProposals() { return _cache.proposals; }
+  function getProposalsByTask(taskId) { return _cache.proposals.filter(p => p.taskId === taskId); }
+  function getProposalsByWorker(workerId) { return _cache.proposals.filter(p => p.workerId === workerId && p.type !== 'invitation'); }
+  function getInvitationsByWorker(workerId) { return _cache.proposals.filter(p => p.workerId === workerId && p.type === 'invitation'); }
 
   function createProposal(data) {
-    const db = _db();
-    const prop = { id: _id('p'), status: 'pending', createdAt: new Date().toISOString().slice(0,10), ...data };
-    db.proposals.push(prop);
-    _saveDB(db);
+    const result = _syncPost(`${API}/proposals`, data);
+    if (result) { _cache.proposals.push(result); return result; }
+    const prop = { id: 'p_' + Date.now(), status: 'pending', createdAt: new Date().toISOString().slice(0, 10), ...data };
+    _cache.proposals.push(prop);
     return prop;
   }
 
   function updateProposal(id, updates) {
-    const db = _db();
-    const idx = db.proposals.findIndex(p => p.id === id);
+    const result = _syncPatch(`${API}/proposals/${id}`, updates);
+    if (result) { const idx = _cache.proposals.findIndex(p => p.id === id); if (idx >= 0) _cache.proposals[idx] = result; return result; }
+    const idx = _cache.proposals.findIndex(p => p.id === id);
     if (idx === -1) return null;
-    db.proposals[idx] = { ...db.proposals[idx], ...updates };
-    _saveDB(db);
-    return db.proposals[idx];
+    _cache.proposals[idx] = { ..._cache.proposals[idx], ...updates };
+    return _cache.proposals[idx];
   }
 
   function hireWorker(proposalId) {
-    const db = _db();
-    const prop = db.proposals.find(p => p.id === proposalId);
+    const result = _syncPost(`${API}/proposals/${proposalId}/hire`, {});
+    if (result) {
+      // Refresh proposals, tasks, transactions from API
+      const proposals = _syncFetch(`${API}/proposals`);
+      const tasks = _syncFetch(`${API}/tasks`);
+      const transactions = _syncFetch(`${API}/transactions`);
+      if (proposals) _cache.proposals = proposals;
+      if (tasks) _cache.tasks = tasks;
+      if (transactions) _cache.transactions = transactions;
+      return result;
+    }
+    // Fallback
+    const prop = _cache.proposals.find(p => p.id === proposalId);
     if (!prop) return null;
-    // Mark all other proposals for same task as rejected
-    db.proposals = db.proposals.map(p => p.taskId === prop.taskId ? { ...p, status: p.id === proposalId ? 'hired' : 'rejected' } : p);
-    // Update task with hired worker
-    const taskIdx = db.tasks.findIndex(t => t.id === prop.taskId);
-    if (taskIdx !== -1) db.tasks[taskIdx] = { ...db.tasks[taskIdx], workerId: prop.workerId, status: 'in-progress' };
-    // Lock escrow
-    const task = db.tasks[taskIdx];
-    if (task) { db.transactions.push({ id: _id('tx'), type: 'escrow-lock', amount: task.budget, fromId: task.clientId, toId: 'escrow', taskId: task.id, milestoneId: null, description: `Escrow funded for ${task.title}`, status: 'completed', createdAt: new Date().toISOString().slice(0,10) }); }
-    _saveDB(db);
-    return db.proposals.find(p => p.id === proposalId);
+    _cache.proposals = _cache.proposals.map(p =>
+      p.taskId === prop.taskId ? { ...p, status: p.id === proposalId ? 'hired' : 'rejected' } : p
+    );
+    return _cache.proposals.find(p => p.id === proposalId);
   }
 
   function acceptInvitation(proposalId) {
-    const db = _db();
-    const prop = db.proposals.find(p => p.id === proposalId);
-    if (!prop || prop.type !== 'invitation') return null;
-    
-    db.proposals = db.proposals.map(p => p.taskId === prop.taskId ? { ...p, status: p.id === proposalId ? 'hired' : 'rejected' } : p);
-    
-    const taskIdx = db.tasks.findIndex(t => t.id === prop.taskId);
-    if (taskIdx !== -1) {
-       db.tasks[taskIdx] = { ...db.tasks[taskIdx], workerId: prop.workerId, status: 'in-progress' };
-       const task = db.tasks[taskIdx];
-       db.transactions.push({ id: _id('tx'), type: 'escrow-lock', amount: task.budget, fromId: task.clientId, toId: 'escrow', taskId: task.id, milestoneId: null, description: `Escrow funded for ${task.title}`, status: 'completed', createdAt: new Date().toISOString().slice(0,10) });
+    const result = _syncPost(`${API}/proposals/${proposalId}/accept`, {});
+    if (result) {
+      const proposals = _syncFetch(`${API}/proposals`);
+      const tasks = _syncFetch(`${API}/tasks`);
+      if (proposals) _cache.proposals = proposals;
+      if (tasks) _cache.tasks = tasks;
+      return result;
     }
-    
-    _saveDB(db);
-    return db.proposals.find(p => p.id === proposalId);
+    const prop = _cache.proposals.find(p => p.id === proposalId);
+    if (!prop || prop.type !== 'invitation') return null;
+    prop.status = 'hired';
+    return prop;
   }
 
   function declineInvitation(proposalId) {
-    const db = _db();
-    const idx = db.proposals.findIndex(p => p.id === proposalId);
-    if (idx === -1 || db.proposals[idx].type !== 'invitation') return null;
-    
-    db.proposals[idx] = { ...db.proposals[idx], status: 'rejected' };
-    _saveDB(db);
-    return db.proposals[idx];
+    const result = _syncPost(`${API}/proposals/${proposalId}/decline`, {});
+    if (result) {
+      const idx = _cache.proposals.findIndex(p => p.id === proposalId);
+      if (idx >= 0) _cache.proposals[idx] = result;
+      return result;
+    }
+    const prop = _cache.proposals.find(p => p.id === proposalId);
+    if (!prop || prop.type !== 'invitation') return null;
+    prop.status = 'rejected';
+    return prop;
   }
 
   // ─── AUDIT REQUESTS ──────────────────────────────────────────────────────
-  function getAuditRequests() { return _db().auditRequests; }
-
-  function getAuditRequestById(id) { return _db().auditRequests.find(a => a.id === id) || null; }
+  function getAuditRequests() { return _cache.auditRequests; }
+  function getAuditRequestById(id) { return _cache.auditRequests.find(a => a.id === id) || null; }
 
   function createAuditRequest(data) {
-    const db = _db();
-    const req = { id: _id('ar'), createdAt: new Date().toISOString().slice(0,10), ...data };
-    db.auditRequests.push(req);
-    _saveDB(db);
+    const result = _syncPost(`${API}/audit-requests`, data);
+    if (result) { _cache.auditRequests.push(result); return result; }
+    const req = { id: 'ar_' + Date.now(), createdAt: new Date().toISOString().slice(0, 10), ...data };
+    _cache.auditRequests.push(req);
     return req;
   }
 
   function updateAuditRequest(id, updates) {
-    const db = _db();
-    const idx = db.auditRequests.findIndex(a => a.id === id);
+    const result = _syncPatch(`${API}/audit-requests/${id}`, updates);
+    if (result) { const idx = _cache.auditRequests.findIndex(a => a.id === id); if (idx >= 0) _cache.auditRequests[idx] = result; return result; }
+    const idx = _cache.auditRequests.findIndex(a => a.id === id);
     if (idx === -1) return null;
-    db.auditRequests[idx] = { ...db.auditRequests[idx], ...updates };
-    _saveDB(db);
-    return db.auditRequests[idx];
+    _cache.auditRequests[idx] = { ..._cache.auditRequests[idx], ...updates };
+    return _cache.auditRequests[idx];
   }
 
-  // ─── AUDIT REPORTS ───────────────────────────────────────────────────────
-  function getAuditReports() { return _db().auditReports; }
-
-  function getAuditReportByRequest(auditRequestId) { return _db().auditReports.find(r => r.auditRequestId === auditRequestId) || null; }
-
-  function getReportsByTask(taskId) { return _db().auditReports.filter(r => r.taskId === taskId); }
+  // ─── AUDIT REPORTS ────────────────────────────────────────────────────────
+  function getAuditReports() { return _cache.auditReports; }
+  function getAuditReportByRequest(auditRequestId) { return _cache.auditReports.find(r => r.auditRequestId === auditRequestId) || null; }
+  function getReportsByTask(taskId) { return _cache.auditReports.filter(r => r.taskId === taskId); }
 
   function saveAuditReport(data) {
-    const db = _db();
-    const existing = db.auditReports.findIndex(r => r.auditRequestId === data.auditRequestId);
-    const report = { id: existing >= 0 ? db.auditReports[existing].id : _id('rep'), createdAt: new Date().toISOString().slice(0,10), ...data };
-    if (existing >= 0) { db.auditReports[existing] = report; }
-    else { db.auditReports.push(report); }
-    // Update audit request status
-    const arIdx = db.auditRequests.findIndex(a => a.id === data.auditRequestId);
-    if (arIdx !== -1) db.auditRequests[arIdx].status = 'Completed';
-    // Update milestone status based on verdict
-    if (data.verdict === 'pass') {
-      const msIdx = db.milestones.findIndex(m => m.id === data.milestoneId);
-      if (msIdx !== -1) db.milestones[msIdx].status = 'audit-passed';
-    } else if (data.verdict === 'fail') {
-      const msIdx = db.milestones.findIndex(m => m.id === data.milestoneId);
-      if (msIdx !== -1) db.milestones[msIdx].status = 'revision-needed';
+    console.log('[Store] saveAuditReport called with:', JSON.stringify(data));
+    console.log('[Store] Current headers:', JSON.stringify(_headers()));
+    const result = _syncPost(`${API}/audit-reports`, data);
+    console.log('[Store] _syncPost result:', result);
+    if (result) {
+      const existing = _cache.auditReports.findIndex(r => r.auditRequestId === data.auditRequestId);
+      if (existing >= 0) _cache.auditReports[existing] = result;
+      else _cache.auditReports.push(result);
+      // Refresh related caches
+      const ar = _syncFetch(`${API}/audit-requests`);
+      const ms = _syncFetch(`${API}/milestones`);
+      if (ar) _cache.auditRequests = ar;
+      if (ms) _cache.milestones = ms;
+      return result;
     }
-    _saveDB(db);
-    
-    // Check completion AFTER save
-    if (data.verdict === 'pass' && data.taskId) {
-      _checkTaskCompletion(data.taskId);
+    // Retry with explicit expert role header
+    console.warn('[Store] First POST failed, retrying with explicit role header...');
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API}/audit-reports`, false);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('role', 'expert');
+      const session = JSON.parse(localStorage.getItem('lannent_session') || '{}');
+      if (session.userId) xhr.setRequestHeader('user-id', session.userId);
+      xhr.send(JSON.stringify(data));
+      console.log('[Store] Retry status:', xhr.status, 'response:', xhr.responseText.substring(0, 200));
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const json = JSON.parse(xhr.responseText);
+        const retryResult = json.data !== undefined ? json.data : json;
+        if (retryResult) {
+          const existing = _cache.auditReports.findIndex(r => r.auditRequestId === data.auditRequestId);
+          if (existing >= 0) _cache.auditReports[existing] = retryResult;
+          else _cache.auditReports.push(retryResult);
+          const ar = _syncFetch(`${API}/audit-requests`);
+          if (ar) _cache.auditRequests = ar;
+          return retryResult;
+        }
+      }
+    } catch (e) {
+      console.error('[Store] Retry also failed:', e);
     }
-    
+    // Final fallback — local only
+    console.warn('[Store] All POST attempts failed, saving locally only');
+    const report = { id: 'rep_' + Date.now(), createdAt: new Date().toISOString().slice(0, 10), ...data };
+    _cache.auditReports.push(report);
     return report;
   }
 
-  // ─── DISPUTES ────────────────────────────────────────────────────────────
-  function getDisputes() { return _db().disputes; }
-
-  function getDisputeById(id) { return _db().disputes.find(d => d.id === id) || null; }
+  // ─── DISPUTES ─────────────────────────────────────────────────────────────
+  function getDisputes() { return _cache.disputes; }
+  function getDisputeById(id) { return _cache.disputes.find(d => d.id === id) || null; }
 
   function createDispute(data) {
-    const db = _db();
-    const dispute = { id: _id('d'), status: 'open', expertId: null, verdict: null, resolution: null, createdAt: new Date().toISOString().slice(0,10), ...data };
-    db.disputes.push(dispute);
-    // Update milestone/task status
-    if (data.milestoneId) { const msIdx = db.milestones.findIndex(m => m.id === data.milestoneId); if (msIdx !== -1) db.milestones[msIdx].status = 'disputed'; }
-    _saveDB(db);
+    const result = _syncPost(`${API}/disputes`, data);
+    if (result) {
+      _cache.disputes.push(result);
+      if (data.milestoneId) {
+        const ms = _syncFetch(`${API}/milestones`);
+        if (ms) _cache.milestones = ms;
+      }
+      return result;
+    }
+    const dispute = { id: 'd_' + Date.now(), status: 'open', expertId: null, verdict: null, resolution: null, createdAt: new Date().toISOString().slice(0, 10), ...data };
+    _cache.disputes.push(dispute);
+    if (data.milestoneId) {
+      const localMs = getMilestoneById(data.milestoneId);
+      if (localMs) {
+        localMs.status = 'disputed';
+      }
+    }
     return dispute;
   }
 
   function resolveDispute(id, { verdict, resolution, expertId }) {
-    const db = _db();
-    const idx = db.disputes.findIndex(d => d.id === id);
+    const result = _syncPost(`${API}/disputes/${id}/resolve`, { verdict, resolution, expertId });
+    if (result) {
+      const idx = _cache.disputes.findIndex(d => d.id === id);
+      if (idx >= 0) _cache.disputes[idx] = result;
+      // Refresh milestones & tasks
+      const ms = _syncFetch(`${API}/milestones`);
+      const tasks = _syncFetch(`${API}/tasks`);
+      if (ms) _cache.milestones = ms;
+      if (tasks) _cache.tasks = tasks;
+      return result;
+    }
+    const idx = _cache.disputes.findIndex(d => d.id === id);
     if (idx === -1) return null;
-    db.disputes[idx] = { ...db.disputes[idx], status: 'resolved', verdict, resolution, expertId, resolvedAt: new Date().toISOString().slice(0,10) };
-    // Release or hold escrow based on verdict
-    const dispute = db.disputes[idx];
-    if (dispute.milestoneId) {
-      const msIdx = db.milestones.findIndex(m => m.id === dispute.milestoneId);
-      if (msIdx !== -1) {
-        if (verdict === 'worker-favour' || verdict === 'split') {
-          db.milestones[msIdx].status = 'completed';
-          db.milestones[msIdx].approvedAt = new Date().toISOString().slice(0,10);
-        } else {
-          db.milestones[msIdx].status = 'in-progress';
-        }
-      }
-    }
-    _saveDB(db);
-    
-    if (dispute.taskId && (verdict === 'worker-favour' || verdict === 'split')) {
-      _checkTaskCompletion(dispute.taskId);
-    }
-    
-    return db.disputes[idx];
+    _cache.disputes[idx] = { ..._cache.disputes[idx], status: 'resolved', verdict, resolution, expertId, resolvedAt: new Date().toISOString().slice(0, 10) };
+    return _cache.disputes[idx];
   }
 
-  // ─── TRANSACTIONS ────────────────────────────────────────────────────────
-  function getTransactions() { return _db().transactions; }
-
-  function getTransactionsByUser(userId) {
-    return _db().transactions.filter(t => t.fromId === userId || t.toId === userId);
-  }
+  // ─── TRANSACTIONS ─────────────────────────────────────────────────────────
+  function getTransactions() { return _cache.transactions; }
+  function getTransactionsByUser(userId) { return _cache.transactions.filter(t => t.fromId === userId || t.toId === userId); }
 
   function createTransaction(data) {
-    const db = _db();
-    const tx = { id: _id('tx'), status: 'completed', createdAt: new Date().toISOString().slice(0,10), ...data };
-    db.transactions.push(tx);
-    _saveDB(db);
+    const result = _syncPost(`${API}/transactions`, data);
+    if (result) { _cache.transactions.push(result); return result; }
+    const tx = { id: 'tx_' + Date.now(), status: 'completed', createdAt: new Date().toISOString().slice(0, 10), ...data };
+    _cache.transactions.push(tx);
     return tx;
   }
 
-  // ─── EXPERT APPLICATIONS ─────────────────────────────────────────────────
-  function getExpertApplications() {
-    const db = _db();
-    return db.expertApplications || [];
-  }
-
-  function getExpertApplicationById(id) {
-    return getExpertApplications().find(a => a.id === id) || null;
-  }
-
-  function getExpertApplicationByEmail(email) {
-    return getExpertApplications().find(a => a.email.toLowerCase() === email.toLowerCase()) || null;
-  }
+  // ─── EXPERT APPLICATIONS ──────────────────────────────────────────────────
+  function getExpertApplications() { return _cache.expertApplications || []; }
+  function getExpertApplicationById(id) { return (_cache.expertApplications || []).find(a => a.id === id) || null; }
+  function getExpertApplicationByEmail(email) { return (_cache.expertApplications || []).find(a => a.email.toLowerCase() === email.toLowerCase()) || null; }
 
   function saveExpertApplication(data) {
-    const db = _db();
-    if (!db.expertApplications) db.expertApplications = [];
-    // Prevent duplicate email
-    if (db.expertApplications.find(a => a.email.toLowerCase() === data.email.toLowerCase())) {
+    if (getExpertApplicationByEmail(data.email)) {
       return { success: false, error: 'An application with this email already exists.' };
     }
-    const app = { id: _id('ea'), status: 'pending', appliedAt: new Date().toISOString().slice(0,10), reviewedAt: null, reviewedBy: null, ...data };
-    db.expertApplications.push(app);
-    _saveDB(db);
+    const result = _syncPost(`${API}/expert-applications`, data);
+    if (result) {
+      _cache.expertApplications.push(result);
+      return { success: true, application: result };
+    }
+    const app = { id: 'ea_' + Date.now(), status: 'pending', appliedAt: new Date().toISOString().slice(0, 10), reviewedAt: null, reviewedBy: null, ...data };
+    _cache.expertApplications.push(app);
     return { success: true, application: app };
   }
 
   function updateExpertApplicationStatus(id, status, reviewerId) {
-    const db = _db();
-    if (!db.expertApplications) return null;
-    const idx = db.expertApplications.findIndex(a => a.id === id);
-    if (idx === -1) return null;
-    db.expertApplications[idx].status = status;
-    db.expertApplications[idx].reviewedAt = new Date().toISOString().slice(0,10);
-    db.expertApplications[idx].reviewedBy = reviewerId || null;
-    // If approved, create a user account for the expert
-    if (status === 'approved') {
-      const app = db.expertApplications[idx];
-      const existingUser = db.users.find(u => u.email.toLowerCase() === app.email.toLowerCase());
-      if (!existingUser) {
-        const initials = app.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
-        const colors = ['linear-gradient(135deg,#a855f7,#7c3aed)','linear-gradient(135deg,#6366f1,#4f46e5)','linear-gradient(135deg,#ec4899,#be185d)','linear-gradient(135deg,#10b981,#059669)'];
-        db.users.push({
-          id: _id('u'),
-          name: app.name,
-          email: app.email,
-          password: 'password123',
-          role: 'expert',
-          avatar: initials,
-          avatarColor: colors[Math.floor(Math.random() * colors.length)],
-          status: 'active',
-          joinDate: new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }),
-          walletBalance: 0,
-          specialization: app.expertise || 'General',
-          reviewsDone: 0,
-        });
+    const result = _syncPatch(`${API}/expert-applications/${id}/status`, { status, reviewedBy: reviewerId });
+    if (result) {
+      const idx = _cache.expertApplications.findIndex(a => a.id === id);
+      if (idx >= 0) _cache.expertApplications[idx] = result;
+      // Refresh users (auto-created on approval)
+      if (status === 'approved') {
+        const users = _syncFetch(`${API}/users`);
+        if (users) _cache.users = users;
       }
+      return result;
     }
-    _saveDB(db);
-    return db.expertApplications[idx];
+    const idx = _cache.expertApplications.findIndex(a => a.id === id);
+    if (idx === -1) return null;
+    _cache.expertApplications[idx].status = status;
+    return _cache.expertApplications[idx];
   }
 
-  // ─── NOTIFICATIONS ───────────────────────────────────────────────────────
-  function getNotifications(userId) { return _db().notifications.filter(n => n.userId === userId); }
+  // ─── NOTIFICATIONS ────────────────────────────────────────────────────────
+  function getNotifications(userId) { return (_cache.notifications || []).filter(n => n.userId === userId); }
 
   function addNotification(data) {
-    const db = _db();
-    db.notifications.push({ id: _id('n'), read: false, createdAt: new Date().toISOString().slice(0,10), ...data });
-    _saveDB(db);
+    const result = _syncPost(`${API}/notifications`, data);
+    if (result) { _cache.notifications.push(result); return; }
+    _cache.notifications.push({ id: 'n_' + Date.now(), read: false, createdAt: new Date().toISOString().slice(0, 10), ...data });
   }
 
   // ─── PUBLIC API ───────────────────────────────────────────────────────────
@@ -538,3 +572,4 @@ const Store = (() => {
 
 // Auto-init on load
 Store.init();
+

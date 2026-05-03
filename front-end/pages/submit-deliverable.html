@@ -706,6 +706,12 @@
       // Clear draft
       try { localStorage.removeItem('deliverableDraft'); } catch(e) {}
 
+      // Resolve taskId for workroom link
+      let _taskId = params.get('taskId') || '';
+      if (!_taskId && milestoneId && typeof Store !== 'undefined') {
+        try { const _m = Store.getMilestoneById(milestoneId); if (_m) _taskId = _m.taskId || ''; } catch(e) {}
+      }
+
       document.getElementById('confirmModal').style.display = 'none';
       setTimeout(() => {
         const overlay = document.createElement('div');
@@ -719,7 +725,7 @@
             <p style="color:var(--muted-foreground);font-size:14px;line-height:1.6;margin-bottom:24px;">The client has been notified and will review your work. You'll be notified once they provide feedback.</p>
             <div style="display:flex;gap:12px;">
               <a href="worker-my-projects.html" class="btn-outline" style="flex:1;padding:12px;border-radius:12px;text-align:center;text-decoration:none;">My Projects</a>
-              <a href="worker-workroom.html" class="btn-primary" style="flex:1;padding:12px;border-radius:12px;text-align:center;text-decoration:none;">Open Workroom</a>
+              <a href="worker-workroom.html?id=${_taskId}" class="btn-primary" style="flex:1;padding:12px;border-radius:12px;text-align:center;text-decoration:none;">Open Workroom</a>
             </div>
           </div>`;
         document.body.appendChild(overlay);

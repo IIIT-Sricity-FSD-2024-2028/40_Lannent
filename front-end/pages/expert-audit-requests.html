@@ -230,16 +230,9 @@
   </style>
 
   <script>
-    // Build audit requests from store + static extras
-    const staticAuditRequests = [
-      { id:'s1', milestoneId:'9382', project:'E-commerce Platform Redesign', worker:'Sarah Chen', milestone:'Frontend Development', submitted:'Mar 7, 2026', status:'Awaiting Review', priority:'high', severity:'critical', severityLabel:'Critical Issues' },
-      { id:'s2', milestoneId:'9383', project:'Mobile App Development', worker:'James Wilson', milestone:'Final Testing', submitted:'Mar 6, 2026', status:'In Review', priority:'normal', severity:'minor', severityLabel:'Minor Issues' },
-      { id:'s3', milestoneId:'9384', project:'API Integration & Backend', worker:'Maria Garcia', milestone:'Database Setup', submitted:'Mar 5, 2026', status:'Awaiting Review', priority:'urgent', severity:'major', severityLabel:'Major Issues' },
-      { id:'s4', milestoneId:'9385', project:'SaaS Dashboard Design', worker:'David Kim', milestone:'UI/UX Delivery', submitted:'Mar 4, 2026', status:'Completed', priority:'normal', severity:'suggestion', severityLabel:'Suggestions Only' },
-    ];
-
+    // Build audit requests from store
     function getAuditRequests() {
-      const storeReqs = Store.getAuditRequests().map(a => ({
+      return Store.getAuditRequests().map(a => ({
         id: a.id,
         milestoneId: a.milestoneId,
         project: a.project,
@@ -252,7 +245,6 @@
         severityLabel: a.severity + ' Priority',
         fromStore: true,
       }));
-      return [...storeReqs, ...staticAuditRequests];
     }
 
     let auditRequests = [];

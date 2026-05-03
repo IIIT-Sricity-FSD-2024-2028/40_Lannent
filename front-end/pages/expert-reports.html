@@ -163,8 +163,9 @@
       const session = Auth.getCurrentUser();
 
       function loadReports() {
-        const auditReports = Store.getAuditReports().map(r => ({
+        const auditReports = Store.getAuditReports().filter(r => r.verdict).map(r => ({
           id: r.id,
+          auditRequestId: r.auditRequestId,
           type: 'Technical Audit',
           project: r.projectTitle || 'Unknown Project',
           milestone: r.milestoneTitle || 'Milestone',
@@ -173,7 +174,7 @@
           verdict: r.verdict === 'pass' ? 'Pass' : r.verdict === 'fail' ? 'Fail' : 'Pending',
           worker: r.workerName || 'Worker',
           summary: r.findings ? r.findings.substring(0, 100) + '...' : 'Report pending.',
-          status: r.verdict ? 'Published' : 'Draft',
+          status: 'Published',
           raw: r
         }));
 
@@ -230,10 +231,9 @@
         if (tbody) {
           tbody.innerHTML = list.map(r => {
             // Build the correct link for the report type
-            const rawId = r.raw ? r.raw.id : '';
             const viewUrl = r.type === 'Technical Audit'
-              ? 'expert-report-audit.html?id=' + rawId
-              : 'expert-report-dispute.html?id=' + rawId;
+              ? 'expert-report-audit.html?id=' + (r.auditRequestId || (r.raw ? r.raw.auditRequestId : ''))
+              : 'expert-report-dispute.html?id=' + (r.raw ? r.raw.id : '');
             return `
             <tr>
               <td style="padding:14px 16px;font-weight:600;font-size:13px;">${r.reportId}</td>
