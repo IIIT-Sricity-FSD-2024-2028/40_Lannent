@@ -13,6 +13,7 @@ const Store = (() => {
     users: [], tasks: [], milestones: [], proposals: [],
     auditRequests: [], auditReports: [], disputes: [],
     transactions: [], expertApplications: [], notifications: [],
+    messages: [],
   };
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -152,6 +153,7 @@ const Store = (() => {
       ['auditReports', '/audit-reports'], ['disputes', '/disputes'],
       ['transactions', '/transactions'], ['expertApplications', '/expert-applications'],
       ['notifications', '/notifications'],
+      ['messages', '/messages'],
     ];
     for (const [key, path] of endpoints) {
       const data = _syncFetch(API + path);
@@ -562,6 +564,28 @@ const Store = (() => {
     });
   }
 
+  // ─── MESSAGES ──────────────────────────────────────────────────────────────
+  function getMessagesByTask(taskId) { return (_cache.messages || []).filter(m => m.taskId === taskId); }
+  function getMessagesByUser(userId) { return (_cache.messages || []).filter(m => m.senderId === userId || m.receiverId === userId); }
+
+  function sendMessage(data) {
+    const result = _syncPost(`${API}/messages`, data);
+    if (result) {
+      _cache.messages.push(result);
+    } else {
+      _cache.messages.push({ id: 'msg_' + Date.now(), createdAt: new Date().toISOString(), ...data });
+    }
+    // Auto-generate notification for the receiver
+    const sender = getUserById(data.senderId);
+    const senderName = sender ? sender.name : (data.senderName || 'Someone');
+    addNotification({
+      userId: data.receiverId,
+      type: 'message',
+      text: `New message from ${senderName}`,
+      subtext: data.content.length > 50 ? data.content.substring(0, 50) + '...' : data.content,
+    });
+  }
+
   // ─── PUBLIC API ───────────────────────────────────────────────────────────
   return {
     init, resetToSeed,
@@ -574,6 +598,7 @@ const Store = (() => {
     getDisputes, getDisputeById, createDispute, resolveDispute,
     getTransactions, getTransactionsByUser, createTransaction,
     getNotifications, addNotification, markNotificationsRead,
+    getMessagesByTask, getMessagesByUser, sendMessage,
     getExpertApplications, getExpertApplicationById, getExpertApplicationByEmail, saveExpertApplication, updateExpertApplicationStatus,
   };
 })();

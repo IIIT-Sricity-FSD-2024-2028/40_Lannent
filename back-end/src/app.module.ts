@@ -9,6 +9,7 @@ import { DisputesModule } from './modules/disputes/disputes.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
 import { ExpertApplicationsModule } from './modules/expert-applications/expert-applications.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { MessagesModule } from './modules/messages/messages.module';
 import { SeedModule } from './modules/seed/seed.module';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 
@@ -24,6 +25,7 @@ import { LoggerMiddleware } from './common/middleware/logger.middleware';
     TransactionsModule,
     ExpertApplicationsModule,
     NotificationsModule,
+    MessagesModule,
     SeedModule,
   ],
 })

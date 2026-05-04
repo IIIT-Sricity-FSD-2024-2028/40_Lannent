@@ -26,49 +26,77 @@
     .bubble-sent { background:#6366f1; color:white; border-bottom-right-radius:4px; }
     .bubble-received { background:white; border:1px solid var(--border); color:var(--foreground); border-bottom-left-radius:4px; }
     .msg-time { font-size:11px; color:var(--muted-foreground); margin-top:4px; text-align:right; }
+    .empty-chat { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:var(--muted-foreground); text-align:center; padding:40px; }
     @media(max-width:640px){ .convos-list{ display:none; } }
   </style>
   <script>
-    const conversations = [
-      { id:1, name:'Sarah Johnson', avatar:'SJ', color:'linear-gradient(135deg,#6366f1,#4f46e5)', project:'E-commerce Redesign', lastMsg:'Sounds great! I\'ll push the updated wireframes today.', time:'2m ago', unread:2, online:true,
-        messages:[
-          { from:'them', text:'Hi! I\'ve completed the initial wireframes for the homepage and product listing pages.', time:'9:30 AM' },
-          { from:'me', text:'Great work Sarah! The layouts look clean. Can you also add the mobile breakpoints?', time:'9:35 AM' },
-          { from:'them', text:'Of course! I\'ll update the Figma file with responsive layouts for all screens.', time:'9:38 AM' },
-          { from:'me', text:'Perfect. Also please make sure the cart button is more prominent on mobile.', time:'9:40 AM' },
-          { from:'them', text:'Sounds great! I\'ll push the updated wireframes today.', time:'9:42 AM' },
-        ]
-      },
-      { id:2, name:'Michael Chen', avatar:'MC', color:'linear-gradient(135deg,#ec4899,#be185d)', project:'Mobile App Development', lastMsg:'The authentication module is ready for review.', time:'15m ago', unread:1, online:true,
-        messages:[
-          { from:'them', text:'Hey! I\'ve finished implementing the JWT authentication flow.', time:'8:00 AM' },
-          { from:'me', text:'How does token refresh work? We need it to handle expired tokens gracefully.', time:'8:10 AM' },
-          { from:'them', text:'I\'ve implemented a silent token refresh using interceptors. It automatically renews before expiry.', time:'8:15 AM' },
-          { from:'them', text:'The authentication module is ready for review.', time:'8:20 AM' },
-        ]
-      },
-      { id:3, name:'Emily Rodriguez', avatar:'ER', color:'linear-gradient(135deg,#10b981,#059669)', project:'Content Management System', lastMsg:'All tests passing ✓', time:'1h ago', unread:0, online:false,
-        messages:[
-          { from:'me', text:'Can you run the full test suite before we deploy?', time:'Yesterday' },
-          { from:'them', text:'Sure! Running now...', time:'Yesterday' },
-          { from:'them', text:'All tests passing ✓', time:'Yesterday' },
-        ]
-      },
-      { id:4, name:'David Park', avatar:'DP', color:'linear-gradient(135deg,#f59e0b,#d97706)', project:'API Integration', lastMsg:'I\'ll send the revised timeline by EOD.', time:'3h ago', unread:0, online:false,
-        messages:[
-          { from:'me', text:'When can we expect the rate limiting feature?', time:'Yesterday' },
-          { from:'them', text:'I\'ll send the revised timeline by EOD.', time:'Yesterday' },
-        ]
-      },
-    ];
-
-    let activeConvoId = 1;
+    let conversations = [];
+    let activeConvoIdx = 0;
 
     document.addEventListener('DOMContentLoaded', () => {
       if (typeof Auth !== 'undefined' && !Auth.requireRole('client', 'worker', 'expert')) return;
+
+      const session = Auth.getCurrentUser();
+      const currentUserId = session?.userId || '';
+      const currentRole = session?.role || 'client';
+
+      // Build conversations from real project data
+      // For clients: show conversations with workers on their projects
+      // For workers: show conversations with clients on their projects
+      const allTasks = Store.getTasks();
+      const myTasks = allTasks.filter(t => {
+        if (currentRole === 'client') return t.clientId === currentUserId && t.workerId;
+        if (currentRole === 'worker') return t.workerId === currentUserId && t.clientId;
+        return false;
+      });
+
+      conversations = myTasks.map(task => {
+        const otherId = currentRole === 'client' ? task.workerId : task.clientId;
+        const otherUser = Store.getUserById(otherId) || { name: 'Unknown', avatar: '??', avatarColor: 'linear-gradient(135deg,#94a3b8,#64748b)' };
+        const taskMessages = Store.getMessagesByTask(task.id);
+
+        // Build message list for this conversation
+        const msgs = taskMessages.map(m => ({
+          from: m.senderId === currentUserId ? 'me' : 'them',
+          text: m.content,
+          time: new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }));
+
+        const lastMsg = msgs.length ? msgs[msgs.length - 1] : null;
+
+        return {
+          taskId: task.id,
+          otherId: otherId,
+          name: otherUser.name,
+          avatar: otherUser.avatar || '??',
+          color: otherUser.avatarColor || 'linear-gradient(135deg,#94a3b8,#64748b)',
+          project: task.title,
+          lastMsg: lastMsg ? lastMsg.text : 'No messages yet',
+          time: lastMsg ? lastMsg.time : '',
+          unread: 0,
+          online: true,
+          messages: msgs,
+        };
+      });
+
+      // If no conversations, show empty state
+      if (!conversations.length) {
+        const content = `
+          <div class="messages-wrap">
+            <div class="empty-chat" style="width:100%;">
+              <i data-lucide="message-square-off" style="width:48px;height:48px;margin-bottom:12px;opacity:0.3;"></i>
+              <div style="font-size:16px;font-weight:600;margin-bottom:4px;">No conversations yet</div>
+              <div style="font-size:13px;">Messages from your project workrooms will appear here.</div>
+            </div>
+          </div>`;
+        initDashboard({ role: currentRole, activePath: 'messages.html', pageTitle: 'Messages', pageSubtitle: '', content });
+        lucide.createIcons();
+        return;
+      }
+
       function renderConversations() {
-        return conversations.map(c => `
-          <div class="conversation-item${c.id === activeConvoId ? ' active' : ''}" onclick="selectConvo(${c.id})">
+        return conversations.map((c, i) => `
+          <div class="conversation-item${i === activeConvoIdx ? ' active' : ''}" onclick="selectConvo(${i})">
             <div style="position:relative;">
               <div style="width:44px;height:44px;border-radius:50%;background:${c.color};display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:700;flex-shrink:0;">${c.avatar}</div>
               ${c.online ? '<div style="position:absolute;bottom:1px;right:1px;width:10px;height:10px;border-radius:50%;background:#22c55e;border:2px solid white;"></div>' : ''}
@@ -86,6 +114,9 @@
       }
 
       function renderMessages(convo) {
+        if (!convo.messages.length) {
+          return `<div class="empty-chat"><i data-lucide="message-square" style="width:36px;height:36px;margin-bottom:8px;opacity:0.3;"></i><div style="font-size:14px;">No messages yet</div><div style="font-size:12px;">Send a message from the <a href="project-workroom.html?id=${convo.taskId}" style="color:#6366f1;">project workroom</a>.</div></div>`;
+        }
         return convo.messages.map(m => `
           <div class="${m.from === 'me' ? 'msg-sent' : 'msg-received'}">
             ${m.from === 'them' ? `<div style="width:30px;height:30px;border-radius:50%;background:${convo.color};display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;flex-shrink:0;">${convo.avatar}</div>` : ''}
@@ -96,6 +127,7 @@
           </div>`).join('');
       }
 
+      const firstConvo = conversations[0];
       const content = `
         <div class="messages-wrap">
           <!-- Conversations list -->
@@ -103,7 +135,7 @@
             <div class="convos-header">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
                 <span style="font-weight:600;font-size:15px;">Messages</span>
-                <span style="font-size:12px;color:var(--muted-foreground);">${conversations.reduce((a,c)=>a+c.unread,0)} unread</span>
+                <span style="font-size:12px;color:var(--muted-foreground);">${conversations.length} conversation${conversations.length !== 1 ? 's' : ''}</span>
               </div>
               <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:var(--input-bg);">
                 <i data-lucide="search" style="width:14px;height:14px;color:var(--muted-foreground);flex-shrink:0;"></i>
@@ -116,18 +148,18 @@
           <!-- Chat area -->
           <div class="chat-area">
             <div class="chat-header-bar" id="chatHeader">
-              <div style="width:38px;height:38px;border-radius:50%;background:${conversations[0].color};display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:700;">${conversations[0].avatar}</div>
+              <div style="width:38px;height:38px;border-radius:50%;background:${firstConvo.color};display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:700;">${firstConvo.avatar}</div>
               <div style="flex:1;">
-                <div style="font-weight:600;font-size:14px;" id="chatName">${conversations[0].name}</div>
-                <div style="font-size:12px;color:#22c55e;">● Online · ${conversations[0].project}</div>
+                <div style="font-weight:600;font-size:14px;" id="chatName">${firstConvo.name}</div>
+                <div style="font-size:12px;color:#22c55e;">● Online · ${firstConvo.project}</div>
               </div>
-              <button class="topnav-btn" title="Project details">
-                <i data-lucide="info" style="width:16px;height:16px;"></i>
-              </button>
+              <a href="project-workroom.html?id=${firstConvo.taskId}" class="topnav-btn" title="Open Workroom" id="workroomLink">
+                <i data-lucide="external-link" style="width:16px;height:16px;"></i>
+              </a>
             </div>
 
             <div class="chat-body" id="chatBody">
-              ${renderMessages(conversations[0])}
+              ${renderMessages(firstConvo)}
             </div>
 
             <div class="chat-footer">
@@ -141,9 +173,8 @@
         </div>
       `;
 
-      const session = Auth.getCurrentUser();
       initDashboard({
-        role: session?.role || 'client',
+        role: currentRole,
         activePath: 'messages.html',
         pageTitle: 'Messages',
         pageSubtitle: '',
@@ -151,29 +182,30 @@
       });
       lucide.createIcons();
 
-      // Send message
+      // Send message from messages page
       document.getElementById('sendBtn')?.addEventListener('click', sendMsg);
       document.getElementById('chatInput')?.addEventListener('keydown', e => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
       });
-
-      // Auto-resize textarea
       document.getElementById('chatInput')?.addEventListener('input', function() {
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 120) + 'px';
       });
+
+      const chatBody = document.getElementById('chatBody');
+      if (chatBody) chatBody.scrollTop = chatBody.scrollHeight;
     });
 
-    function selectConvo(id) {
-      activeConvoId = id;
-      const convo = conversations.find(c => c.id === id);
+    function selectConvo(idx) {
+      activeConvoIdx = idx;
+      const convo = conversations[idx];
       if (!convo) return;
 
       // Re-render list highlighting
       const list = document.getElementById('convosList');
       if (list) {
         list.querySelectorAll('.conversation-item').forEach((el, i) => {
-          el.classList.toggle('active', conversations[i].id === id);
+          el.classList.toggle('active', i === idx);
         });
       }
 
@@ -186,22 +218,28 @@
             <div style="font-weight:600;font-size:14px;">${convo.name}</div>
             <div style="font-size:12px;color:${convo.online ? '#22c55e' : 'var(--muted-foreground)'};">${convo.online ? '● Online' : '● Offline'} · ${convo.project}</div>
           </div>
-          <button class="topnav-btn"><i data-lucide="info" style="width:16px;height:16px;"></i></button>
+          <a href="project-workroom.html?id=${convo.taskId}" class="topnav-btn" title="Open Workroom">
+            <i data-lucide="external-link" style="width:16px;height:16px;"></i>
+          </a>
         `;
       }
 
       // Render messages
       const body = document.getElementById('chatBody');
       if (body) {
-        body.innerHTML = conversations.find(c => c.id === id).messages.map(m => `
-          <div class="${m.from === 'me' ? 'msg-sent' : 'msg-received'}">
-            ${m.from === 'them' ? `<div style="width:30px;height:30px;border-radius:50%;background:${convo.color};display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;flex-shrink:0;">${convo.avatar}</div>` : ''}
-            <div>
-              <div class="bubble ${m.from === 'me' ? 'bubble-sent' : 'bubble-received'}">${m.text}</div>
-              <div class="msg-time">${m.time}</div>
-            </div>
-          </div>`).join('');
-        body.scrollTop = body.scrollHeight;
+        if (!convo.messages.length) {
+          body.innerHTML = `<div class="empty-chat"><i data-lucide="message-square" style="width:36px;height:36px;margin-bottom:8px;opacity:0.3;"></i><div style="font-size:14px;">No messages yet</div><div style="font-size:12px;">Send a message from the <a href="project-workroom.html?id=${convo.taskId}" style="color:#6366f1;">project workroom</a>.</div></div>`;
+        } else {
+          body.innerHTML = convo.messages.map(m => `
+            <div class="${m.from === 'me' ? 'msg-sent' : 'msg-received'}">
+              ${m.from === 'them' ? `<div style="width:30px;height:30px;border-radius:50%;background:${convo.color};display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;flex-shrink:0;">${convo.avatar}</div>` : ''}
+              <div>
+                <div class="bubble ${m.from === 'me' ? 'bubble-sent' : 'bubble-received'}">${m.text}</div>
+                <div class="msg-time">${m.time}</div>
+              </div>
+            </div>`).join('');
+          body.scrollTop = body.scrollHeight;
+        }
       }
       lucide.createIcons();
     }
@@ -212,6 +250,30 @@
       if (!input || !body) return;
       const text = input.value.trim();
       if (!text) return;
+
+      const convo = conversations[activeConvoIdx];
+      if (!convo) return;
+
+      const session = (typeof Auth !== 'undefined') ? Auth.getCurrentUser() : null;
+      const currentUserId = session?.userId || '';
+
+      // Persist via Store (also generates notification)
+      Store.sendMessage({
+        taskId: convo.taskId,
+        senderId: currentUserId,
+        receiverId: convo.otherId,
+        content: text,
+        senderName: session?.name || '',
+        senderAvatar: session?.avatar || '',
+        senderAvatarColor: session?.avatarColor || '',
+      });
+
+      // Add to local conversation
+      convo.messages.push({ from: 'me', text: text, time: 'Just now' });
+      convo.lastMsg = text;
+      convo.time = 'Just now';
+
+      // Render the new message
       const msgEl = document.createElement('div');
       msgEl.className = 'msg-sent';
       msgEl.innerHTML = `<div><div class="bubble bubble-sent">${text}</div><div class="msg-time">Just now</div></div>`;

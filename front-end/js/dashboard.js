@@ -24,7 +24,6 @@ function initDashboard(config = {}) {
     { icon: 'plus-circle', label: 'Post Task', path: 'post-task.html' },
     { icon: 'user-plus', label: 'Hire Workers', path: 'hire-gig-workers.html' },
     { icon: 'users', label: 'Worker Applications', path: 'worker-applications.html' },
-    { icon: 'message-square', label: 'Messages', path: 'messages.html', badge: 3, iconBadge: 3 },
     { icon: 'wallet', label: 'Wallet', path: 'client-wallet.html' },
     { icon: 'settings', label: 'Settings', path: 'profile-settings.html' },
   ];
@@ -34,7 +33,6 @@ function initDashboard(config = {}) {
     { icon: 'folder-kanban', label: 'My Projects', path: 'worker-my-projects.html' },
     { icon: 'mail', label: 'Invitations', path: 'worker-invitations.html' },
     { icon: 'file-text', label: 'My Proposals', path: 'my-proposals.html' },
-    { icon: 'message-square', label: 'Messages', path: 'messages.html', badge: 2 },
     { icon: 'wallet', label: 'Wallet', path: 'worker-wallet.html' },
     { icon: 'settings', label: 'Settings', path: 'worker-settings.html' },
   ];
@@ -43,7 +41,6 @@ function initDashboard(config = {}) {
     { icon: 'clipboard-check', label: 'Audit Requests', path: 'expert-audit-requests.html' },
     { icon: 'scale', label: 'Dispute Cases', path: 'expert-dispute-cases.html' },
     { icon: 'file-text', label: 'Reports', path: 'expert-reports.html' },
-    { icon: 'message-square', label: 'Messages', path: 'expert-messages.html', badge: 1 },
     { icon: 'settings', label: 'Settings', path: 'expert-settings.html' },
   ];
 

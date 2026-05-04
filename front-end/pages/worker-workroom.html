@@ -36,6 +36,7 @@
     let project = null;
     let initialMessages = [];
     let milestones = [];
+    let task = null;
 
     function formatAmount(amount) {
       if (typeof amount === 'number') return '$' + amount.toLocaleString();
@@ -189,7 +190,7 @@
 
       const params = new URLSearchParams(window.location.search);
       const taskId = params.get('id');
-      const task = taskId ? Store.getTaskById(taskId) : null;
+      task = taskId ? Store.getTaskById(taskId) : null;
       if (!task) {
         document.body.innerHTML = '<div style="padding:80px;text-align:center;color:#6b7280;font-size:16px;">No project selected for this workroom. Please choose a project from your <a href="worker-my-projects.html">My Projects</a> page.</div>';
         return;
@@ -223,9 +224,19 @@
         ];
       }
 
-      initialMessages = JSON.parse(localStorage.getItem('workroomMessages_' + task.id) || 'null') || [
-        { id:'1', sender:'client', avatar:client.avatar||'CL', color:client.avatarColor||'linear-gradient(135deg,#6366f1,#4f46e5)', content:'Welcome to the workspace for “'+project.name+'”.', time:'Just now' }
-      ];
+      initialMessages = Store.getMessagesByTask(task.id).map(m => ({
+        id: m.id,
+        sender: m.senderId === task.clientId ? 'client' : 'worker',
+        avatar: m.senderAvatar || (m.senderId === task.clientId ? (client.avatar||'CL') : (worker.avatar||'WK')),
+        color: m.senderAvatarColor || (m.senderId === task.clientId ? (client.avatarColor||'linear-gradient(135deg,#6366f1,#4f46e5)') : (worker.avatarColor||'linear-gradient(135deg,#10b981,#059669)')),
+        content: m.content,
+        time: new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})
+      }));
+      if (!initialMessages.length) {
+        initialMessages = [
+          { id:'1', sender:'client', avatar:client.avatar||'CL', color:client.avatarColor||'linear-gradient(135deg,#6366f1,#4f46e5)', content:'Welcome to the workspace for "'+project.name+'".', time:'Just now' }
+        ];
+      }
 
       function renderMsg(m) {
         const isMe = (role === 'client' && m.sender === 'client') || (role === 'worker' && m.sender === 'worker');
@@ -373,12 +384,30 @@
       if (!input || !msgs) return;
       const text = input.value.trim();
       if (!text) return;
-      const role = localStorage.getItem('userRole') || 'worker';
-      const isClient = role === 'client';
+      const curRole = localStorage.getItem('userRole') || 'worker';
+      const isClient = curRole === 'client';
+      const session = (typeof Auth !== 'undefined') ? Auth.getCurrentUser() : null;
+      const senderId = isClient ? task.clientId : task.workerId;
+      const receiverId = isClient ? task.workerId : task.clientId;
+      const senderUser = senderId ? Store.getUserById(senderId) : null;
+
+      // Persist to backend + auto-notification
+      Store.sendMessage({
+        taskId: task.id,
+        senderId: senderId,
+        receiverId: receiverId,
+        content: text,
+        senderName: senderUser?.name || (session?.name || ''),
+        senderAvatar: senderUser?.avatar || (session?.avatar || ''),
+        senderAvatarColor: senderUser?.avatarColor || '',
+      });
+
+      const avatar = senderUser?.avatar || (isClient ? 'CL' : 'WK');
+      const color = senderUser?.avatarColor || (isClient ? 'linear-gradient(135deg,#6366f1,#4f46e5)' : 'linear-gradient(135deg,#10b981,#059669)');
       const div = document.createElement('div');
       div.style.cssText = `display:flex;flex-direction:${isClient ? 'row-reverse' : 'row'};gap:10px;max-width:75%;${isClient ? 'margin-left:auto;' : ''}`;
       div.innerHTML = `
-        <div style="width:32px;height:32px;border-radius:50%;background:${isClient ? 'linear-gradient(135deg,#6366f1,#4f46e5)' : 'linear-gradient(135deg,#10b981,#059669)'};display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;flex-shrink:0;">${isClient ? 'TC' : 'SJ'}</div>
+        <div style="width:32px;height:32px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;flex-shrink:0;">${avatar}</div>
         <div>
           <div style="padding:10px 14px;border-radius:16px;${isClient ? 'background:#6366f1;color:white;border-bottom-right-radius:4px;' : 'background:var(--card);border:1px solid var(--border);border-bottom-left-radius:4px;'}font-size:14px;line-height:1.5;">${text}</div>
           <div style="font-size:11px;color:var(--muted-foreground);margin-top:4px;${isClient ? 'text-align:right;' : ''}">Just now</div>
