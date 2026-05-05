@@ -1,19 +1,23 @@
 import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
-import { SEED_MILESTONES } from '../seed/seed.data';
 import { CreateMilestoneDto } from './dto/create-milestone.dto';
 import { UpdateMilestoneDto } from './dto/update-milestone.dto';
+import { MilestonesRepository } from './milestones.repository';
 import { TasksService } from '../tasks/tasks.service';
 import { UsersService } from '../users/users.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { AuditRequestsService } from '../audit-requests/audit-requests.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
+/**
+ * MilestonesService — Business Logic Layer
+ *
+ * Handles submission, approval, audit-request creation, and task-completion checks.
+ * Delegates all data-access operations to MilestonesRepository.
+ */
 @Injectable()
 export class MilestonesService {
-  private milestones: any[] = JSON.parse(JSON.stringify(SEED_MILESTONES));
-  private counter = 100;
-
   constructor(
+    private readonly milestonesRepository: MilestonesRepository,
     @Inject(forwardRef(() => TasksService)) private tasksService: TasksService,
     @Inject(forwardRef(() => UsersService)) private usersService: UsersService,
     @Inject(forwardRef(() => TransactionsService)) private transactionsService: TransactionsService,
@@ -21,25 +25,19 @@ export class MilestonesService {
     @Inject(forwardRef(() => NotificationsService)) private notificationsService: NotificationsService,
   ) {}
 
-  private generateId(): string {
-    return 'm_' + Date.now() + '_' + (this.counter++);
-  }
-
   findAll(query?: { taskId?: string }) {
-    let result = this.milestones;
-    if (query?.taskId) result = result.filter(m => m.taskId === query.taskId);
-    return result;
+    return this.milestonesRepository.findAll(query);
   }
 
   findById(id: string) {
-    const ms = this.milestones.find(m => m.id === id);
+    const ms = this.milestonesRepository.findById(id);
     if (!ms) throw new NotFoundException(`Milestone with id "${id}" not found`);
     return ms;
   }
 
   create(dto: CreateMilestoneDto) {
     const ms = {
-      id: this.generateId(),
+      id: this.milestonesRepository.generateId(),
       status: 'pending',
       submittedAt: null,
       approvedAt: null,
@@ -49,15 +47,13 @@ export class MilestonesService {
       dueDate: dto.dueDate || null,
       ...dto,
     };
-    this.milestones.push(ms);
-    return ms;
+    return this.milestonesRepository.insert(ms);
   }
 
   update(id: string, dto: UpdateMilestoneDto) {
-    const idx = this.milestones.findIndex(m => m.id === id);
-    if (idx === -1) throw new NotFoundException(`Milestone with id "${id}" not found`);
-    this.milestones[idx] = { ...this.milestones[idx], ...dto };
-    return this.milestones[idx];
+    const updated = this.milestonesRepository.update(id, dto);
+    if (!updated) throw new NotFoundException(`Milestone with id "${id}" not found`);
+    return updated;
   }
 
   submitDeliverable(id: string, deliverable?: any) {
@@ -122,7 +118,7 @@ export class MilestonesService {
     if (!taskId) return;
     try {
       const task = this.tasksService.findById(taskId);
-      const allMilestones = this.milestones.filter(m => m.taskId === taskId);
+      const allMilestones = this.milestonesRepository.filterByTaskId(taskId);
       if (!allMilestones.length) return;
 
       const done = allMilestones.filter(m =>
@@ -138,6 +134,6 @@ export class MilestonesService {
   }
 
   resetToSeed() {
-    this.milestones = JSON.parse(JSON.stringify(SEED_MILESTONES));
+    this.milestonesRepository.resetToSeed();
   }
 }

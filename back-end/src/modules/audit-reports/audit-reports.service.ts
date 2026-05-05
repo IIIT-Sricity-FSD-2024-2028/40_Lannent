@@ -1,60 +1,56 @@
 import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
-import { SEED_AUDIT_REPORTS } from '../seed/seed.data';
 import { CreateAuditReportDto } from './dto/create-audit-report.dto';
+import { AuditReportsRepository } from './audit-reports.repository';
 import { AuditRequestsService } from '../audit-requests/audit-requests.service';
 import { MilestonesService } from '../milestones/milestones.service';
 
+/**
+ * AuditReportsService — Business Logic Layer
+ *
+ * Handles report creation/upsert and audit-request status updates.
+ * Delegates all data-access operations to AuditReportsRepository.
+ */
 @Injectable()
 export class AuditReportsService {
-  private reports: any[] = JSON.parse(JSON.stringify(SEED_AUDIT_REPORTS));
-  private counter = 100;
-
   constructor(
+    private readonly auditReportsRepository: AuditReportsRepository,
     @Inject(forwardRef(() => AuditRequestsService)) private auditRequestsService: AuditRequestsService,
     @Inject(forwardRef(() => MilestonesService)) private milestonesService: MilestonesService,
   ) {}
 
-  private generateId(): string {
-    return 'rep_' + Date.now() + '_' + (this.counter++);
-  }
-
   findAll(query?: { taskId?: string; auditRequestId?: string }) {
-    let result = this.reports;
-    if (query?.taskId) result = result.filter(r => r.taskId === query.taskId);
-    if (query?.auditRequestId) result = result.filter(r => r.auditRequestId === query.auditRequestId);
-    return result;
+    return this.auditReportsRepository.findAll(query);
   }
 
   findById(id: string) {
-    const report = this.reports.find(r => r.id === id);
+    const report = this.auditReportsRepository.findById(id);
     if (!report) throw new NotFoundException(`Audit report with id "${id}" not found`);
     return report;
   }
 
   create(dto: CreateAuditReportDto) {
     // Upsert: if a report for this auditRequestId already exists, update it
-    const existingIdx = this.reports.findIndex(r => r.auditRequestId === dto.auditRequestId);
-    if (existingIdx >= 0) {
-      this.reports[existingIdx] = {
-        ...this.reports[existingIdx],
+    const existing = this.auditReportsRepository.findByAuditRequestId(dto.auditRequestId);
+    if (existing) {
+      const updated = this.auditReportsRepository.updateByIndex(dto.auditRequestId, {
         ...dto,
         createdAt: new Date().toISOString().slice(0, 10),
-      };
+      });
       // Update audit request status
       try {
         this.auditRequestsService.update(dto.auditRequestId, { status: 'Completed' });
       } catch {}
       // Note: Expert audit reports do not change milestone status - that's for client approval only
-      return this.reports[existingIdx];
+      return updated;
     }
 
     // Create new report
     const report = {
-      id: this.generateId(),
+      id: this.auditReportsRepository.generateId(),
       createdAt: new Date().toISOString().slice(0, 10),
       ...dto,
     };
-    this.reports.push(report);
+    this.auditReportsRepository.insert(report);
 
     // Update audit request status
     try {
@@ -67,6 +63,6 @@ export class AuditReportsService {
   }
 
   resetToSeed() {
-    this.reports = JSON.parse(JSON.stringify(SEED_AUDIT_REPORTS));
+    this.auditReportsRepository.resetToSeed();
   }
 }

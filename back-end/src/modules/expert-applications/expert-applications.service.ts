@@ -1,43 +1,42 @@
 import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
-import { SEED_EXPERT_APPLICATIONS } from '../seed/seed.data';
 import { CreateExpertApplicationDto } from './dto/create-expert-application.dto';
 import { UpdateExpertApplicationStatusDto } from './dto/update-expert-application.dto';
+import { ExpertApplicationsRepository } from './expert-applications.repository';
 import { UsersService } from '../users/users.service';
 
+/**
+ * ExpertApplicationsService — Business Logic Layer
+ *
+ * Handles application review and auto-creation of expert user accounts.
+ * Delegates all data-access operations to ExpertApplicationsRepository.
+ */
 @Injectable()
 export class ExpertApplicationsService {
-  private applications: any[] = JSON.parse(JSON.stringify(SEED_EXPERT_APPLICATIONS));
-  private counter = 100;
-
   constructor(
+    private readonly expertApplicationsRepository: ExpertApplicationsRepository,
     @Inject(forwardRef(() => UsersService)) private usersService: UsersService,
   ) {}
 
-  private generateId(): string {
-    return 'ea_' + Date.now() + '_' + (this.counter++);
-  }
-
   findAll() {
-    return this.applications;
+    return this.expertApplicationsRepository.findAll();
   }
 
   findById(id: string) {
-    const app = this.applications.find(a => a.id === id);
+    const app = this.expertApplicationsRepository.findById(id);
     if (!app) throw new NotFoundException(`Expert application with id "${id}" not found`);
     return app;
   }
 
   create(dto: CreateExpertApplicationDto) {
     const app = {
-      id: this.generateId(),
+      id: this.expertApplicationsRepository.generateId(),
       status: 'pending',
       appliedAt: new Date().toISOString().slice(0, 10),
       reviewedAt: null,
       reviewedBy: null,
       ...dto,
     };
-    this.applications.push(app);
-    return app;
+    return this.expertApplicationsRepository.insert(app);
   }
 
   updateStatus(id: string, dto: UpdateExpertApplicationStatusDto) {
@@ -66,6 +65,6 @@ export class ExpertApplicationsService {
   }
 
   resetToSeed() {
-    this.applications = JSON.parse(JSON.stringify(SEED_EXPERT_APPLICATIONS));
+    this.expertApplicationsRepository.resetToSeed();
   }
 }

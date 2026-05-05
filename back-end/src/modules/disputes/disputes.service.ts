@@ -1,35 +1,35 @@
 import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
-import { SEED_DISPUTES } from '../seed/seed.data';
 import { CreateDisputeDto } from './dto/create-dispute.dto';
 import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
+import { DisputesRepository } from './disputes.repository';
 import { MilestonesService } from '../milestones/milestones.service';
 
+/**
+ * DisputesService — Business Logic Layer
+ *
+ * Handles dispute creation, resolution, and milestone status updates.
+ * Delegates all data-access operations to DisputesRepository.
+ */
 @Injectable()
 export class DisputesService {
-  private disputes: any[] = JSON.parse(JSON.stringify(SEED_DISPUTES));
-  private counter = 100;
-
   constructor(
+    private readonly disputesRepository: DisputesRepository,
     @Inject(forwardRef(() => MilestonesService)) private milestonesService: MilestonesService,
   ) {}
 
-  private generateId(): string {
-    return 'd_' + Date.now() + '_' + (this.counter++);
-  }
-
   findAll() {
-    return this.disputes;
+    return this.disputesRepository.findAll();
   }
 
   findById(id: string) {
-    const d = this.disputes.find(d => d.id === id);
+    const d = this.disputesRepository.findById(id);
     if (!d) throw new NotFoundException(`Dispute with id "${id}" not found`);
     return d;
   }
 
   create(dto: CreateDisputeDto) {
     const dispute = {
-      id: this.generateId(),
+      id: this.disputesRepository.generateId(),
       status: 'open',
       expertId: null,
       verdict: null,
@@ -39,7 +39,7 @@ export class DisputesService {
       milestoneId: dto.milestoneId || null,
       ...dto,
     };
-    this.disputes.push(dispute);
+    this.disputesRepository.insert(dispute);
 
     // If milestone exists, set it to disputed
     if (dto.milestoneId) {
@@ -73,6 +73,6 @@ export class DisputesService {
   }
 
   resetToSeed() {
-    this.disputes = JSON.parse(JSON.stringify(SEED_DISPUTES));
+    this.disputesRepository.resetToSeed();
   }
 }

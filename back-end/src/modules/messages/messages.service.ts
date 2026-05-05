@@ -1,33 +1,30 @@
 import { Injectable } from '@nestjs/common';
 import { CreateMessageDto } from './dto/create-message.dto';
+import { MessagesRepository } from './messages.repository';
 
+/**
+ * MessagesService — Business Logic Layer
+ *
+ * Delegates all data-access operations to MessagesRepository.
+ */
 @Injectable()
 export class MessagesService {
-  private messages: any[] = [];
-  private counter = 100;
-
-  private generateId(): string {
-    return 'msg_' + Date.now() + '_' + (this.counter++);
-  }
+  constructor(private readonly messagesRepository: MessagesRepository) {}
 
   findAll(query?: { taskId?: string; userId?: string }) {
-    let result = this.messages;
-    if (query?.taskId) result = result.filter(m => m.taskId === query.taskId);
-    if (query?.userId) result = result.filter(m => m.senderId === query.userId || m.receiverId === query.userId);
-    return result;
+    return this.messagesRepository.findAll(query);
   }
 
   create(dto: CreateMessageDto) {
     const msg = {
-      id: this.generateId(),
+      id: this.messagesRepository.generateId(),
       createdAt: new Date().toISOString(),
       ...dto,
     };
-    this.messages.push(msg);
-    return msg;
+    return this.messagesRepository.insert(msg);
   }
 
   resetToSeed() {
-    this.messages = [];
+    this.messagesRepository.resetToSeed();
   }
 }

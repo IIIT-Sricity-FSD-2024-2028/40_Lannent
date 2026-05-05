@@ -1,34 +1,31 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { SEED_TASKS } from '../seed/seed.data';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { TasksRepository } from './tasks.repository';
 
+/**
+ * TasksService — Business Logic Layer
+ *
+ * Handles validation and error handling.
+ * Delegates all data-access operations to TasksRepository.
+ */
 @Injectable()
 export class TasksService {
-  private tasks: any[] = JSON.parse(JSON.stringify(SEED_TASKS));
-  private counter = 100;
-
-  private generateId(): string {
-    return 't_' + Date.now() + '_' + (this.counter++);
-  }
+  constructor(private readonly tasksRepository: TasksRepository) {}
 
   findAll(query?: { clientId?: string; workerId?: string; status?: string }) {
-    let result = this.tasks;
-    if (query?.clientId) result = result.filter(t => t.clientId === query.clientId);
-    if (query?.workerId) result = result.filter(t => t.workerId === query.workerId);
-    if (query?.status) result = result.filter(t => t.status === query.status);
-    return result;
+    return this.tasksRepository.findAll(query);
   }
 
   findById(id: string) {
-    const task = this.tasks.find(t => t.id === id);
+    const task = this.tasksRepository.findById(id);
     if (!task) throw new NotFoundException(`Task with id "${id}" not found`);
     return task;
   }
 
   create(dto: CreateTaskDto) {
     const task = {
-      id: this.generateId(),
+      id: this.tasksRepository.generateId(),
       status: 'open',
       progress: 0,
       workerId: null,
@@ -38,25 +35,22 @@ export class TasksService {
       auditEnabled: dto.auditEnabled || false,
       ...dto,
     };
-    this.tasks.push(task);
-    return task;
+    return this.tasksRepository.insert(task);
   }
 
   update(id: string, dto: UpdateTaskDto) {
-    const idx = this.tasks.findIndex(t => t.id === id);
-    if (idx === -1) throw new NotFoundException(`Task with id "${id}" not found`);
-    this.tasks[idx] = { ...this.tasks[idx], ...dto };
-    return this.tasks[idx];
+    const updated = this.tasksRepository.update(id, dto);
+    if (!updated) throw new NotFoundException(`Task with id "${id}" not found`);
+    return updated;
   }
 
   delete(id: string) {
-    const idx = this.tasks.findIndex(t => t.id === id);
-    if (idx === -1) throw new NotFoundException(`Task with id "${id}" not found`);
-    this.tasks.splice(idx, 1);
+    const deleted = this.tasksRepository.deleteById(id);
+    if (!deleted) throw new NotFoundException(`Task with id "${id}" not found`);
     return { deleted: true };
   }
 
   resetToSeed() {
-    this.tasks = JSON.parse(JSON.stringify(SEED_TASKS));
+    this.tasksRepository.resetToSeed();
   }
 }

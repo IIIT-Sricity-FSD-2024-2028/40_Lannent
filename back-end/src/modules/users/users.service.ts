@@ -1,94 +1,33 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { SEED_USERS, SEED_CLIENTS, SEED_WORKERS, SEED_EXPERTS } from '../seed/seed.data';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UsersRepository } from './users.repository';
 
 /**
  * EER Specialization — Users Service
  *
- * Internally maintains 4 arrays (base users + 3 role sub-tables).
- * Externally returns MERGED/FLAT user objects (transparent JOIN).
+ * Handles business logic (validation, error handling, avatar generation).
+ * Delegates all data-access operations to UsersRepository.
  * The API response shape is IDENTICAL to the old monolithic approach.
  */
 @Injectable()
 export class UsersService {
-  // ── Internal EER sub-tables ───────────────────────────────────────────────
-  private users: any[]   = JSON.parse(JSON.stringify(SEED_USERS));
-  private clients: any[] = JSON.parse(JSON.stringify(SEED_CLIENTS));
-  private workers: any[] = JSON.parse(JSON.stringify(SEED_WORKERS));
-  private experts: any[] = JSON.parse(JSON.stringify(SEED_EXPERTS));
-  private counter = 100;
-
-  private generateId(): string {
-    return 'u_' + Date.now() + '_' + (this.counter++);
-  }
-
-  // ── Merge: base user + role-specific fields → flat object ─────────────────
-  private mergeUser(base: any): any {
-    if (!base) return null;
-    // Start with base user fields
-    const merged: any = { ...base };
-
-    // Attach role-specific fields based on role
-    if (base.role === 'client') {
-      const sub = this.clients.find(c => c.userId === base.id);
-      merged.company = sub?.company ?? '';
-      merged.location = sub?.location ?? '';
-      // Set worker/expert defaults so frontend never sees undefined
-      merged.skills = [];
-      merged.rating = 0;
-      merged.completedProjects = 0;
-      merged.specialization = '';
-      merged.reviewsDone = 0;
-    } else if (base.role === 'worker') {
-      const sub = this.workers.find(w => w.userId === base.id);
-      merged.location = sub?.location ?? '';
-      merged.skills = sub?.skills ?? [];
-      merged.rating = sub?.rating ?? 0;
-      merged.completedProjects = sub?.completedProjects ?? 0;
-      // Set client/expert defaults
-      merged.company = '';
-      merged.specialization = '';
-      merged.reviewsDone = 0;
-    } else if (base.role === 'expert') {
-      const sub = this.experts.find(e => e.userId === base.id);
-      merged.specialization = sub?.specialization ?? '';
-      merged.reviewsDone = sub?.reviewsDone ?? 0;
-      // Set client/worker defaults
-      merged.company = '';
-      merged.location = '';
-      merged.skills = [];
-      merged.rating = 0;
-      merged.completedProjects = 0;
-    } else {
-      // superuser or unknown — set all role-specific fields to defaults
-      merged.company = '';
-      merged.location = '';
-      merged.skills = [];
-      merged.rating = 0;
-      merged.completedProjects = 0;
-      merged.specialization = '';
-      merged.reviewsDone = 0;
-    }
-
-    return merged;
-  }
+  constructor(private readonly usersRepository: UsersRepository) {}
 
   // ── Public API (returns merged/flat objects) ──────────────────────────────
 
   findAll() {
-    return this.users.map(u => this.mergeUser(u));
+    return this.usersRepository.findAll();
   }
 
   findById(id: string) {
-    const base = this.users.find(u => u.id === id);
-    if (!base) throw new NotFoundException(`User with id "${id}" not found`);
-    return this.mergeUser(base);
+    const user = this.usersRepository.findById(id);
+    if (!user) throw new NotFoundException(`User with id "${id}" not found`);
+    return user;
   }
 
   findByEmail(email: string) {
-    const base = this.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    return base ? this.mergeUser(base) : null;
+    return this.usersRepository.findByEmail(email);
   }
 
   login(email: string, password: string) {
@@ -120,7 +59,7 @@ export class UsersService {
       'linear-gradient(135deg,#ec4899,#be185d)',
     ];
 
-    const id = this.generateId();
+    const id = this.usersRepository.generateId();
 
     // ── Insert into base USERS table ────────────────────────────────────
     const baseUser: any = {
@@ -135,17 +74,17 @@ export class UsersService {
       joinDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       walletBalance: 0,
     };
-    this.users.push(baseUser);
+    this.usersRepository.insertBase(baseUser);
 
     // ── Insert into role-specific sub-table ──────────────────────────────
     if (dto.role === 'client') {
-      this.clients.push({
+      this.usersRepository.insertClient({
         userId: id,
         company: dto.company || '',
         location: dto.location || '',
       });
     } else if (dto.role === 'worker') {
-      this.workers.push({
+      this.usersRepository.insertWorker({
         userId: id,
         location: dto.location || '',
         skills: dto.skills || [],
@@ -153,7 +92,7 @@ export class UsersService {
         completedProjects: 0,
       });
     } else if (dto.role === 'expert') {
-      this.experts.push({
+      this.usersRepository.insertExpert({
         userId: id,
         specialization: dto.specialization || '',
         reviewsDone: 0,
@@ -161,83 +100,72 @@ export class UsersService {
     }
 
     // Return merged flat object (same shape as before)
-    return this.mergeUser(baseUser);
+    return this.usersRepository.findById(id);
   }
 
   update(id: string, dto: UpdateUserDto) {
-    const baseIdx = this.users.findIndex(u => u.id === id);
-    if (baseIdx === -1) throw new NotFoundException(`User with id "${id}" not found`);
-
-    const base = this.users[baseIdx];
+    const existing = this.usersRepository.findById(id);
+    if (!existing) throw new NotFoundException(`User with id "${id}" not found`);
 
     // ── Update base USERS fields ────────────────────────────────────────
-    if (dto.name !== undefined) base.name = dto.name;
-    if (dto.email !== undefined) base.email = dto.email;
-    if (dto.password !== undefined) base.password = dto.password;
-    if (dto.role !== undefined) base.role = dto.role;
-    if (dto.avatar !== undefined) base.avatar = dto.avatar;
-    if (dto.avatarColor !== undefined) base.avatarColor = dto.avatarColor;
-    if (dto.status !== undefined) base.status = dto.status;
-    if (dto.walletBalance !== undefined) base.walletBalance = dto.walletBalance;
+    const baseUpdates: any = {};
+    if (dto.name !== undefined) baseUpdates.name = dto.name;
+    if (dto.email !== undefined) baseUpdates.email = dto.email;
+    if (dto.password !== undefined) baseUpdates.password = dto.password;
+    if (dto.role !== undefined) baseUpdates.role = dto.role;
+    if (dto.avatar !== undefined) baseUpdates.avatar = dto.avatar;
+    if (dto.avatarColor !== undefined) baseUpdates.avatarColor = dto.avatarColor;
+    if (dto.status !== undefined) baseUpdates.status = dto.status;
+    if (dto.walletBalance !== undefined) baseUpdates.walletBalance = dto.walletBalance;
+    this.usersRepository.updateBase(id, baseUpdates);
 
     // ── Update role-specific sub-table fields ───────────────────────────
-    if (base.role === 'client') {
-      let sub = this.clients.find(c => c.userId === id);
-      if (!sub) { sub = { userId: id, company: '', location: '' }; this.clients.push(sub); }
+    const base = this.usersRepository.getRawBase(id);
+    if (base?.role === 'client') {
+      let sub = this.usersRepository.findClientSub(id);
+      if (!sub) { this.usersRepository.insertClient({ userId: id, company: '', location: '' }); sub = this.usersRepository.findClientSub(id); }
       if (dto.company !== undefined) sub.company = dto.company;
       if (dto.location !== undefined) sub.location = dto.location;
-    } else if (base.role === 'worker') {
-      let sub = this.workers.find(w => w.userId === id);
-      if (!sub) { sub = { userId: id, location: '', skills: [], rating: 0, completedProjects: 0 }; this.workers.push(sub); }
+    } else if (base?.role === 'worker') {
+      let sub = this.usersRepository.findWorkerSub(id);
+      if (!sub) { this.usersRepository.insertWorker({ userId: id, location: '', skills: [], rating: 0, completedProjects: 0 }); sub = this.usersRepository.findWorkerSub(id); }
       if (dto.location !== undefined) sub.location = dto.location;
       if (dto.skills !== undefined) sub.skills = dto.skills;
       if (dto.rating !== undefined) sub.rating = dto.rating;
       if (dto.completedProjects !== undefined) sub.completedProjects = dto.completedProjects;
-    } else if (base.role === 'expert') {
-      let sub = this.experts.find(e => e.userId === id);
-      if (!sub) { sub = { userId: id, specialization: '', reviewsDone: 0 }; this.experts.push(sub); }
+    } else if (base?.role === 'expert') {
+      let sub = this.usersRepository.findExpertSub(id);
+      if (!sub) { this.usersRepository.insertExpert({ userId: id, specialization: '', reviewsDone: 0 }); sub = this.usersRepository.findExpertSub(id); }
       if (dto.specialization !== undefined) sub.specialization = dto.specialization;
       if (dto.reviewsDone !== undefined) sub.reviewsDone = dto.reviewsDone;
     }
 
-    return this.mergeUser(base);
+    return this.usersRepository.findById(id);
   }
 
   delete(id: string) {
-    const idx = this.users.findIndex(u => u.id === id);
-    if (idx === -1) throw new NotFoundException(`User with id "${id}" not found`);
-
-    // Remove from base table
-    this.users.splice(idx, 1);
-
-    // Remove from role sub-tables (CASCADE equivalent)
-    this.clients = this.clients.filter(c => c.userId !== id);
-    this.workers = this.workers.filter(w => w.userId !== id);
-    this.experts = this.experts.filter(e => e.userId !== id);
-
+    const deleted = this.usersRepository.deleteById(id);
+    if (!deleted) throw new NotFoundException(`User with id "${id}" not found`);
     return { deleted: true };
   }
 
   deductFromWallet(id: string, amount: number) {
-    const base = this.users.find(u => u.id === id);
+    const base = this.usersRepository.getRawBase(id);
     if (!base) throw new NotFoundException(`User with id "${id}" not found`);
     if (base.walletBalance < amount) throw new BadRequestException('Insufficient wallet balance.');
     base.walletBalance -= amount;
-    return this.mergeUser(base);
+    return this.usersRepository.findById(id);
   }
 
   addToWallet(id: string, amount: number) {
-    const base = this.users.find(u => u.id === id);
+    const base = this.usersRepository.getRawBase(id);
     if (!base) throw new NotFoundException(`User with id "${id}" not found`);
     base.walletBalance += amount;
-    return this.mergeUser(base);
+    return this.usersRepository.findById(id);
   }
 
-  // ── Reset all 4 arrays to seed data ───────────────────────────────────────
+  // ── Reset all data to seed ────────────────────────────────────────────────
   resetToSeed() {
-    this.users   = JSON.parse(JSON.stringify(SEED_USERS));
-    this.clients = JSON.parse(JSON.stringify(SEED_CLIENTS));
-    this.workers = JSON.parse(JSON.stringify(SEED_WORKERS));
-    this.experts = JSON.parse(JSON.stringify(SEED_EXPERTS));
+    this.usersRepository.resetToSeed();
   }
 }

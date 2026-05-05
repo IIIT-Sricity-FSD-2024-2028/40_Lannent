@@ -1,39 +1,30 @@
 import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
-import { SEED_PROPOSALS } from '../seed/seed.data';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { UpdateProposalDto } from './dto/update-proposal.dto';
+import { ProposalsRepository } from './proposals.repository';
 import { TasksService } from '../tasks/tasks.service';
 import { TransactionsService } from '../transactions/transactions.service';
 
+/**
+ * ProposalsService — Business Logic Layer
+ *
+ * Handles hiring, invitation acceptance/decline, and escrow creation.
+ * Delegates all data-access operations to ProposalsRepository.
+ */
 @Injectable()
 export class ProposalsService {
-  private proposals: any[] = JSON.parse(JSON.stringify(SEED_PROPOSALS));
-  private counter = 100;
-
   constructor(
+    private readonly proposalsRepository: ProposalsRepository,
     @Inject(forwardRef(() => TasksService)) private tasksService: TasksService,
     @Inject(forwardRef(() => TransactionsService)) private transactionsService: TransactionsService,
   ) {}
 
-  private generateId(): string {
-    return 'p_' + Date.now() + '_' + (this.counter++);
-  }
-
   findAll(query?: { taskId?: string; workerId?: string; type?: string }) {
-    let result = this.proposals;
-    if (query?.taskId) result = result.filter(p => p.taskId === query.taskId);
-    if (query?.workerId) {
-      if (query?.type === 'invitation') {
-        result = result.filter(p => p.workerId === query.workerId && p.type === 'invitation');
-      } else {
-        result = result.filter(p => p.workerId === query.workerId && p.type !== 'invitation');
-      }
-    }
-    return result;
+    return this.proposalsRepository.findAll(query);
   }
 
   findById(id: string) {
-    const prop = this.proposals.find(p => p.id === id);
+    const prop = this.proposalsRepository.findById(id);
     if (!prop) throw new NotFoundException(`Proposal with id "${id}" not found`);
     return prop;
   }
@@ -52,22 +43,20 @@ export class ProposalsService {
     }
 
     const prop = {
-      id: this.generateId(),
+      id: this.proposalsRepository.generateId(),
       status: 'pending',
       type: dto.type || 'proposal',
       createdAt: new Date().toISOString().slice(0, 10),
       skills: dto.skills || [],
       ...dto,
     };
-    this.proposals.push(prop);
-    return prop;
+    return this.proposalsRepository.insert(prop);
   }
 
   update(id: string, dto: UpdateProposalDto) {
-    const idx = this.proposals.findIndex(p => p.id === id);
-    if (idx === -1) throw new NotFoundException(`Proposal with id "${id}" not found`);
-    this.proposals[idx] = { ...this.proposals[idx], ...dto };
-    return this.proposals[idx];
+    const updated = this.proposalsRepository.update(id, dto);
+    if (!updated) throw new NotFoundException(`Proposal with id "${id}" not found`);
+    return updated;
   }
 
   hireWorker(proposalId: string) {
@@ -84,11 +73,7 @@ export class ProposalsService {
     }
 
     // Mark all other proposals for same task as rejected, this one as hired
-    this.proposals = this.proposals.map(p =>
-      p.taskId === prop.taskId
-        ? { ...p, status: p.id === proposalId ? 'hired' : 'rejected' }
-        : p,
-    );
+    this.proposalsRepository.updateAllByTaskId(prop.taskId, proposalId);
 
     // Update task with hired worker
     try {
@@ -108,7 +93,7 @@ export class ProposalsService {
       });
     } catch {}
 
-    return this.proposals.find(p => p.id === proposalId);
+    return this.proposalsRepository.findById(proposalId);
   }
 
   acceptInvitation(proposalId: string) {
@@ -125,11 +110,7 @@ export class ProposalsService {
       if (e instanceof BadRequestException) throw e;
     }
 
-    this.proposals = this.proposals.map(p =>
-      p.taskId === prop.taskId
-        ? { ...p, status: p.id === proposalId ? 'hired' : 'rejected' }
-        : p,
-    );
+    this.proposalsRepository.updateAllByTaskId(prop.taskId, proposalId);
 
     try {
       const task = this.tasksService.findById(prop.taskId);
@@ -147,7 +128,7 @@ export class ProposalsService {
       });
     } catch {}
 
-    return this.proposals.find(p => p.id === proposalId);
+    return this.proposalsRepository.findById(proposalId);
   }
 
   declineInvitation(proposalId: string) {
@@ -158,6 +139,6 @@ export class ProposalsService {
   }
 
   resetToSeed() {
-    this.proposals = JSON.parse(JSON.stringify(SEED_PROPOSALS));
+    this.proposalsRepository.resetToSeed();
   }
 }

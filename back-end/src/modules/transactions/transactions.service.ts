@@ -1,26 +1,23 @@
 import { Injectable } from '@nestjs/common';
-import { SEED_TRANSACTIONS } from '../seed/seed.data';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
+import { TransactionsRepository } from './transactions.repository';
 
+/**
+ * TransactionsService — Business Logic Layer
+ *
+ * Delegates all data-access operations to TransactionsRepository.
+ */
 @Injectable()
 export class TransactionsService {
-  private transactions: any[] = JSON.parse(JSON.stringify(SEED_TRANSACTIONS));
-  private counter = 100;
-
-  private generateId(): string {
-    return 'tx_' + Date.now() + '_' + (this.counter++);
-  }
+  constructor(private readonly transactionsRepository: TransactionsRepository) {}
 
   findAll(query?: { userId?: string }) {
-    if (query?.userId) {
-      return this.transactions.filter(t => t.fromId === query.userId || t.toId === query.userId);
-    }
-    return this.transactions;
+    return this.transactionsRepository.findAll(query);
   }
 
   create(dto: CreateTransactionDto) {
     const tx = {
-      id: this.generateId(),
+      id: this.transactionsRepository.generateId(),
       status: dto.status || 'completed',
       createdAt: new Date().toISOString().slice(0, 10),
       taskId: dto.taskId || null,
@@ -28,11 +25,10 @@ export class TransactionsService {
       description: dto.description || '',
       ...dto,
     };
-    this.transactions.push(tx);
-    return tx;
+    return this.transactionsRepository.insert(tx);
   }
 
   resetToSeed() {
-    this.transactions = JSON.parse(JSON.stringify(SEED_TRANSACTIONS));
+    this.transactionsRepository.resetToSeed();
   }
 }

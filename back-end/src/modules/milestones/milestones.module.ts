@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MilestonesController } from './milestones.controller';
 import { MilestonesService } from './milestones.service';
+import { MilestonesRepository } from './milestones.repository';
 import { TasksModule } from '../tasks/tasks.module';
 import { UsersModule } from '../users/users.module';
 import { TransactionsModule } from '../transactions/transactions.module';
@@ -16,7 +17,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     forwardRef(() => NotificationsModule),
   ],
   controllers: [MilestonesController],
-  providers: [MilestonesService],
+  providers: [MilestonesRepository, MilestonesService],
   exports: [MilestonesService],
 })
 export class MilestonesModule {}

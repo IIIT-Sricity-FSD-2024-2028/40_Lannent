@@ -1,45 +1,37 @@
 import { Injectable } from '@nestjs/common';
-import { SEED_NOTIFICATIONS } from '../seed/seed.data';
 import { CreateNotificationDto } from './dto/create-notification.dto';
+import { NotificationsRepository } from './notifications.repository';
 
+/**
+ * NotificationsService — Business Logic Layer
+ *
+ * Delegates all data-access operations to NotificationsRepository.
+ */
 @Injectable()
 export class NotificationsService {
-  private notifications: any[] = JSON.parse(JSON.stringify(SEED_NOTIFICATIONS));
-  private counter = 100;
-
-  private generateId(): string {
-    return 'n_' + Date.now() + '_' + (this.counter++);
-  }
+  constructor(private readonly notificationsRepository: NotificationsRepository) {}
 
   findAll(query?: { userId?: string }) {
-    if (query?.userId) return this.notifications.filter(n => n.userId === query.userId);
-    return this.notifications;
+    return this.notificationsRepository.findAll(query);
   }
 
   create(dto: CreateNotificationDto) {
     const notif = {
-      id: this.generateId(),
+      id: this.notificationsRepository.generateId(),
       read: false,
       createdAt: new Date().toISOString().slice(0, 10),
       subtext: dto.subtext || '',
       ...dto,
     };
-    this.notifications.push(notif);
-    return notif;
+    return this.notificationsRepository.insert(notif);
   }
 
   markAllRead(userId: string) {
-    let count = 0;
-    this.notifications.forEach(n => {
-      if (n.userId === userId && !n.read) {
-        n.read = true;
-        count++;
-      }
-    });
+    const count = this.notificationsRepository.markAllReadByUserId(userId);
     return { markedRead: count };
   }
 
   resetToSeed() {
-    this.notifications = JSON.parse(JSON.stringify(SEED_NOTIFICATIONS));
+    this.notificationsRepository.resetToSeed();
   }
 }
