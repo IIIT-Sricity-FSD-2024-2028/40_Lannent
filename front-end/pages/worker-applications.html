@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Worker Applications — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .apps-layout { display:grid; grid-template-columns:340px 1fr; gap:20px; }
+    .proposal-list { display:flex; flex-direction:column; gap:0; background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+    .proposal-item { padding:16px 20px; border-bottom:1px solid rgba(0,0,0,0.05); cursor:pointer; transition:background 0.15s; }
+    .proposal-item:last-child { border-bottom:none; }
+    .proposal-item:hover { background:var(--secondary); }
+    .proposal-item.active { background:#eef2ff; border-left:3px solid #6366f1; }
+    .proposal-detail { background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+    .detail-section { padding:24px; border-bottom:1px solid var(--border); }
+    .detail-section:last-child { border-bottom:none; }
+    .rating-star { color:#f59e0b; }
+    .portfolio-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .portfolio-item { border-radius:12px; overflow:hidden; background:var(--input-bg); border:1px solid var(--border); }
+    .portfolio-img { width:100%; height:120px; object-fit:cover; background:linear-gradient(135deg,#eef2ff,#e0e7ff); display:flex; align-items:center; justify-content:center; }
+    .hire-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:200; align-items:center; justify-content:center; backdrop-filter:blur(4px); }
+    @media(max-width:900px){ .apps-layout{ grid-template-columns:1fr; } }
+  </style>
+  <script>
+    // Load projects from Store (tasks belonging to current client)
+    function loadProjects() {
+      if (typeof Auth === 'undefined' || typeof Store === 'undefined') return [];
+      const session = Auth.getCurrentUser();
+      if (!session) return [];
+      // Only show open tasks — clients can only review proposals and hire for open projects
+      return Store.getTasksByClient(session.userId)
+        .filter(t => t.status === 'open')
+        .map(t => ({
+        id: t.id,
+        title: t.title,
+        description: t.description || '',
+        budget: '$' + (t.budget || 0).toLocaleString(),
+        deadline: t.deadline ? new Date(t.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'No deadline',
+        posted: t.createdAt ? new Date(t.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Recent',
+        proposalCount: Store.getProposalsByTask(t.id).filter(p => p.type !== 'invitation').length
+      }));
+    }
+
+    // Build proposals list from Store only (filtered to current client's tasks)
+    function buildAllProposals() {
+      if (typeof Store === 'undefined') return [];
+      const session = Auth.getCurrentUser();
+      if (!session) return [];
+      const clientTaskIds = Store.getTasksByClient(session.userId).map(t => t.id);
+      return Store.getProposals()
+        .filter(p => clientTaskIds.includes(p.taskId))
+        .map(p => {
+          const worker = Store.getUserById(p.workerId);
+          return {
+            id: p.id, projectId: p.taskId, taskId: p.taskId,
+            workerName: p.workerName || worker?.name || 'Worker',
+            avatar: p.avatar || worker?.avatar || 'WK',
+            avatarColor: p.avatarColor || worker?.avatarColor || '',
+            rating: worker?.rating || 4.5,
+            reviewCount: worker?.reviewCount || 10,
+            location: worker?.location || 'Remote',
+            bidPrice: p.bidPrice || '$0',
+            timeline: p.timeline || '2 weeks',
+            coverLetter: p.coverLetter || '',
+            skills: p.skills || worker?.skills || [],
+            completedProjects: worker?.completedProjects || 0,
+            successRate: worker?.successRate || 90,
+            hourlyRate: worker?.hourlyRate || '$50/hr',
+            responseTime: worker?.responseTime || 'Within 24 hours',
+            status: p.status || 'pending',
+            fromStore: true,
+            type: p.type || 'application',
+          };
+        });
+    }
+
+    let allProposals = [];
+    let selectedProjectId = '';
+    let selectedProposalId = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('client')) return;
+      const projects = loadProjects();
+      selectedProjectId = projects[0]?.id || '';
+      allProposals = buildAllProposals();
+
+      // If client has no projects, show empty state
+      if (!projects.length) {
+        initDashboard({
+          role: 'client',
+          activePath: 'client-my-projects.html',
+          pageTitle: 'Worker Applications',
+          pageSubtitle: 'Review proposals and hire the best talent',
+          content: `
+            <div style="text-align:center;padding:80px 24px;">
+              <div style="width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg,#eef2ff,#e0e7ff);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">
+                <i data-lucide="inbox" style="width:32px;height:32px;color:#6366f1;"></i>
+              </div>
+              <h3 style="font-size:18px;font-weight:600;margin-bottom:8px;">No projects yet</h3>
+              <p style="font-size:14px;color:var(--muted-foreground);margin-bottom:24px;">Post a task first to start receiving worker applications.</p>
+              <a href="post-task.html" class="btn-primary" style="display:inline-flex;align-items:center;gap:8px;padding:12px 24px;border-radius:12px;font-size:14px;">Post a Task</a>
+            </div>
+          `
+        });
+        lucide.createIcons();
+        return;
+      }
+      function getProposals() {
+        return allProposals.filter(p => (p.projectId === selectedProjectId || p.taskId === selectedProjectId) && p.type !== 'invitation' && p.status === 'pending');
+      }
+
+      function renderProposalList(proposals) {
+        if (!proposals.length) return '<div style="padding:32px;text-align:center;color:var(--muted-foreground);">No proposals for this project yet.</div>';
+        return proposals.map(p => `
+          <div class="proposal-item${p.id === selectedProposalId ? ' active' : ''}" onclick="selectProposal('${p.id}')">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+              <div style="width:36px;height:36px;border-radius:50%;background:${p.avatarColor};display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;flex-shrink:0;">${p.avatar}</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:14px;">${p.workerName}</div>
+                <div style="font-size:12px;color:var(--muted-foreground);">${'★'.repeat(Math.round(p.rating))} ${p.rating} (${p.reviewCount})</div>
+              </div>
+              <div style="text-align:right;flex-shrink:0;">
+                <div style="font-weight:700;color:#10b981;font-size:14px;">${p.bidPrice}</div>
+                <div style="font-size:11px;color:var(--muted-foreground);">${p.timeline}</div>
+              </div>
+            </div>
+            <p style="font-size:12px;color:var(--muted-foreground);line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${p.coverLetter}</p>
+          </div>`).join('');
+      }
+
+      function renderProposalDetail(p) {
+        if (!p) return '<div style="padding:48px;text-align:center;color:var(--muted-foreground);">Select a proposal to view details</div>';
+        return `
+          <div class="detail-section">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;">
+              <div style="display:flex;align-items:center;gap:14px;">
+                <div style="width:56px;height:56px;border-radius:50%;background:${p.avatarColor};display:flex;align-items:center;justify-content:center;color:white;font-size:16px;font-weight:700;">${p.avatar}</div>
+                <div>
+                  <h2 style="font-size:18px;font-weight:600;margin-bottom:4px;">${p.workerName}</h2>
+                  <div style="font-size:13px;color:var(--muted-foreground);display:flex;align-items:center;gap:12px;">
+                    <span><i data-lucide="map-pin" style="width:12px;height:12px;display:inline;vertical-align:middle;"></i> ${p.location}</span>
+                    <span><i data-lucide="clock" style="width:12px;height:12px;display:inline;vertical-align:middle;"></i> ${p.responseTime}</span>
+                  </div>
+                </div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:24px;font-weight:700;color:#10b981;">${p.bidPrice}</div>
+                <div style="font-size:13px;color:var(--muted-foreground);">${p.timeline}</div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">
+              <div style="padding:12px;border-radius:12px;background:#ecfdf5;text-align:center;">
+                <div style="font-weight:700;font-size:18px;color:#10b981;">${p.successRate}%</div>
+                <div style="font-size:11px;color:#065f46;">Success Rate</div>
+              </div>
+              <div style="padding:12px;border-radius:12px;background:#eef2ff;text-align:center;">
+                <div style="font-weight:700;font-size:18px;color:#4f46e5;">${p.completedProjects}</div>
+                <div style="font-size:11px;color:#3730a3;">Projects Done</div>
+              </div>
+              <div style="padding:12px;border-radius:12px;background:#fffbeb;text-align:center;">
+                <div style="font-weight:700;font-size:18px;color:#d97706;">${p.rating}★</div>
+                <div style="font-size:11px;color:#92400e;">Rating</div>
+              </div>
+              <div style="padding:12px;border-radius:12px;background:#faf5ff;text-align:center;">
+                <div style="font-weight:700;font-size:16px;color:#7c3aed;">${p.hourlyRate}</div>
+                <div style="font-size:11px;color:#5b21b6;">Hourly Rate</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:12px;">
+              <button class="btn-primary" style="flex:2;padding:10px;border-radius:12px;" onclick="openHireModal('${p.id}')">
+                <i data-lucide="check-circle" style="width:15px;height:15px;display:inline;vertical-align:middle;margin-right:6px;"></i>Hire ${p.workerName.split(' ')[0]}
+              </button>
+              <button class="btn-outline" style="flex:1;padding:10px;border-radius:12px;color:#ef4444;border-color:#fca5a5;" title="Reject" onclick="rejectProposal('${p.id}')">
+                Reject
+              </button>
+            </div>
+          </div>
+
+          <div class="detail-section">
+            <h3 style="font-size:14px;font-weight:600;margin-bottom:12px;">Cover Letter</h3>
+            <p style="font-size:14px;color:#374151;line-height:1.7;">${p.coverLetter}</p>
+          </div>
+
+          <div class="detail-section">
+            <h3 style="font-size:14px;font-weight:600;margin-bottom:12px;">Skills</h3>
+            <div class="skills-list">${p.skills.map(s => `<span class="skill-tag" style="font-size:13px;padding:5px 12px;">${s}</span>`).join('')}</div>
+          </div>
+        `;
+      }
+
+      const content = `
+        <div style="margin-bottom:16px;">
+          <a href="client-my-projects.html" style="display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--muted-foreground);transition:color 0.15s;" onmouseenter="this.style.color='var(--foreground)'" onmouseleave="this.style.color='var(--muted-foreground)'">
+            <i data-lucide="arrow-left" style="width:16px;height:16px;"></i> Back to Projects
+          </a>
+        </div>
+
+        <!-- Project Switcher with Dropdown and Details -->
+        <div style="margin-bottom:20px;">
+          <div style="position:relative;background:linear-gradient(135deg,#eef2ff,#f0f4ff);border:1px solid #c7d2fe;border-radius:16px;padding:16px 20px;margin-bottom:16px;">
+            <div id="projectSelectDisplay" style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:8px 12px;background:rgba(255,255,255,0.6);border-radius:12px;border:1px solid #ddd6fe;">
+              <i data-lucide="briefcase" style="width:20px;height:20px;color:#4f46e5;flex-shrink:0;"></i>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:14px;font-weight:600;color:var(--foreground);" id="projectSelectTitle">${projects[0]?.title || 'Select a project'}</div>
+                <div style="font-size:12px;color:#6366f1;" id="projectSelectProposals">${getProposals().length} proposals</div>
+              </div>
+              <i data-lucide="chevron-down" style="width:18px;height:18px;color:#6366f1;flex-shrink:0;" id="dropdownChevron"></i>
+            </div>
+            <!-- Custom Dropdown Menu -->
+            <div id="projectDropdownMenu" style="display:none;position:absolute;top:100%;left:16px;right:16px;background:white;border:1px solid #c7d2fe;border-radius:12px;margin-top:8px;box-shadow:0 8px 24px rgba(79,70,229,0.15);z-index:100;overflow:hidden;">
+              ${projects.map(proj => `
+                <div onclick="switchProject('${proj.id}', null)" style="padding:12px 16px;cursor:pointer;border-bottom:1px solid #f3f4f6;transition:background 0.15s;display:flex;align-items:center;gap:12px;" onmouseover="this.style.background='#f8fafc'" onmouseleave="this.style.background='transparent'">
+                  <i data-lucide="briefcase" style="width:16px;height:16px;color:#4f46e5;flex-shrink:0;"></i>
+                  <div style="flex:1;">
+                    <div style="font-size:13px;font-weight:600;color:var(--foreground);">${proj.title}</div>
+                    <div style="font-size:11px;color:#6b7280;">${proj.proposalCount} proposals</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Project Details -->
+          <div id="projectDetails" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:20px;">
+          </div>
+        </div>
+
+        <!-- Main layout -->
+        <div class="apps-layout">
+          <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <span style="font-size:14px;font-weight:600;" id="proposalCount">${getProposals().length} Proposals</span>
+              <div style="display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:10px;background:var(--input-bg);flex:1;max-width:200px;margin-left:12px;">
+                <i data-lucide="search" style="width:14px;height:14px;color:var(--muted-foreground);flex-shrink:0;"></i>
+                <input type="text" placeholder="Search..." id="proposalSearch" style="background:none;border:none;outline:none;font-size:13px;font-family:inherit;flex:1;" oninput="filterProposals()" />
+              </div>
+            </div>
+            <div class="proposal-list" id="proposalList">${renderProposalList(getProposals())}</div>
+          </div>
+
+          <div class="proposal-detail" id="proposalDetail">
+            ${renderProposalDetail(allProposals.find(p => p.id === selectedProposalId))}
+          </div>
+        </div>
+
+        <!-- Hire Modal -->
+        <div class="hire-modal" id="hireModal">
+          <div style="background:white;border-radius:24px;padding:32px;width:100%;max-width:440px;margin:0 16px;box-shadow:0 32px 80px rgba(0,0,0,0.15);">
+            <h2 style="font-size:20px;font-weight:600;margin-bottom:8px;">Confirm Hire</h2>
+            <p style="font-size:14px;color:var(--muted-foreground);margin-bottom:20px;">You're about to hire <strong id="hireWorkerName"></strong> for this project. This will lock the escrow funds.</p>
+            <div style="padding:16px;border-radius:12px;background:#f0fdf4;border:1px solid #bbf7d0;margin-bottom:20px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px;">
+                <span style="color:#374151;">Bid Amount</span><span style="font-weight:700;" id="hireBidAmount"></span>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px;">
+                <span style="color:#374151;">Platform Fee (5%)</span><span style="font-weight:600;color:#dc2626;" id="hireFee"></span>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:13px;border-top:1px solid #bbf7d0;padding-top:8px;margin-top:4px;">
+                <span style="font-weight:600;">Total Escrow</span><span style="font-weight:700;color:#10b981;" id="hireTotal"></span>
+              </div>
+            </div>
+            <div style="display:flex;gap:12px;">
+              <button onclick="document.getElementById('hireModal').style.display='none'" class="btn-outline" style="flex:1;padding:12px;border-radius:12px;">Cancel</button>
+              <button onclick="confirmHire()" class="btn-primary" style="flex:2;padding:12px;border-radius:12px;">Confirm & Lock Escrow</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Global functions (define before initDashboard)
+      window.selectProposal = function(id) {
+        selectedProposalId = id;
+        document.querySelectorAll('.proposal-item').forEach(el => el.classList.remove('active'));
+        event.currentTarget?.classList.add('active');
+        const p = allProposals.find(p => p.id === id);
+        const detail = document.getElementById('proposalDetail');
+        if (detail) { detail.innerHTML = renderProposalDetail(p); lucide.createIcons(); }
+      };
+
+      window.switchProject = function(id, btn) {
+        selectedProjectId = id;
+        selectedProposalId = null;
+        
+        // Update dropdown display
+        const selectDisplay = document.getElementById('projectSelectDisplay');
+        if (selectDisplay) {
+          document.getElementById('projectSelectTitle').textContent = projects.find(p => p.id === id).title;
+          document.getElementById('projectSelectProposals').textContent = getProposals().length + ' proposals';
+        }
+        
+        // Render project details
+        const project = projects.find(p => p.id === id);
+        const detailsDiv = document.getElementById('projectDetails');
+        if (detailsDiv && project) {
+          detailsDiv.innerHTML = `
+            <div style="margin-bottom:20px;">
+              <h3 style="font-size:18px;font-weight:700;margin-bottom:6px;font-family:system-ui,-apple-system,sans-serif;color:var(--foreground);">${project.title}</h3>
+              <p style="font-size:13px;color:#6b7280;line-height:1.6;font-family:system-ui,-apple-system,sans-serif;">${project.description}</p>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+              <div style="padding:14px;border-radius:12px;background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1px solid #a7f3d0;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                  <i data-lucide="dollar-sign" style="width:16px;height:16px;color:#10b981;flex-shrink:0;"></i>
+                  <div style="font-size:11px;color:#065f46;font-weight:600;font-family:system-ui,-apple-system,sans-serif;">Budget</div>
+                </div>
+                <div style="font-size:16px;font-weight:700;color:#059669;font-family:system-ui,-apple-system,sans-serif;">${project.budget}</div>
+              </div>
+              <div style="padding:14px;border-radius:12px;background:linear-gradient(135deg,#eff6ff,#eef2ff);border:1px solid #bfdbfe;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                  <i data-lucide="users" style="width:16px;height:16px;color:#0ea5e9;flex-shrink:0;"></i>
+                  <div style="font-size:11px;color:#0c4a6e;font-weight:600;font-family:system-ui,-apple-system,sans-serif;">Proposals</div>
+                </div>
+                <div style="font-size:16px;font-weight:700;color:#0284c7;font-family:system-ui,-apple-system,sans-serif;">${getProposals().length}</div>
+              </div>
+              <div style="padding:14px;border-radius:12px;background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1px solid #fde68a;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                  <i data-lucide="calendar" style="width:16px;height:16px;color:#f59e0b;flex-shrink:0;"></i>
+                  <div style="font-size:11px;color:#92400e;font-weight:600;font-family:system-ui,-apple-system,sans-serif;">Deadline</div>
+                </div>
+                <div style="font-size:14px;font-weight:600;color:#d97706;font-family:system-ui,-apple-system,sans-serif;">${project.deadline}</div>
+              </div>
+              <div style="padding:14px;border-radius:12px;background:linear-gradient(135deg,#faf5ff,#f3e8ff);border:1px solid #ddd6fe;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                  <i data-lucide="clock" style="width:16px;height:16px;color:#a855f7;flex-shrink:0;"></i>
+                  <div style="font-size:11px;color:#6b21a8;font-weight:600;font-family:system-ui,-apple-system,sans-serif;">Posted</div>
+                </div>
+                <div style="font-size:14px;font-weight:600;color:#9333ea;font-family:system-ui,-apple-system,sans-serif;">${project.posted}</div>
+              </div>
+            </div>
+          `;
+        }
+        
+        const props = getProposals();
+        const list = document.getElementById('proposalList');
+        const count = document.getElementById('proposalCount');
+        if (list) { list.innerHTML = renderProposalList(props); lucide.createIcons(); }
+        if (count) count.textContent = `${props.length} Proposals`;
+        const detail = document.getElementById('proposalDetail');
+        if (detail) detail.innerHTML = '<div style="padding:48px;text-align:center;color:var(--muted-foreground);">Select a proposal to view details</div>';
+        
+        // Update and close dropdown
+        const dropdownMenu = document.getElementById('projectDropdownMenu');
+        if (dropdownMenu) {
+          dropdownMenu.innerHTML = projects.map(proj => {
+            const pCount = allProposals.filter(p => (p.projectId === proj.id || p.taskId === proj.id) && p.type !== 'invitation' && p.status === 'pending').length;
+            return `
+              <div onclick="switchProject('${proj.id}', null)" style="padding:12px 16px;cursor:pointer;border-bottom:1px solid #f3f4f6;transition:background 0.15s;display:flex;align-items:center;gap:12px;" onmouseover="this.style.background='#f8fafc'" onmouseleave="this.style.background='transparent'">
+                <i data-lucide="briefcase" style="width:16px;height:16px;color:#4f46e5;flex-shrink:0;"></i>
+                <div style="flex:1;">
+                  <div style="font-size:13px;font-weight:600;color:var(--foreground);">${proj.title}</div>
+                  <div style="font-size:11px;color:#6b7280;">${pCount} proposals</div>
+                </div>
+              </div>
+            `;
+          }).join('');
+          dropdownMenu.style.display = 'none';
+        }
+        const chevron = document.getElementById('dropdownChevron');
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      };
+
+      window.filterProposals = function() {
+        const q = (document.getElementById('proposalSearch')?.value || '').toLowerCase();
+        const props = getProposals().filter(p => (!q || p.workerName.toLowerCase().includes(q) || p.skills.some(s => s.toLowerCase().includes(q))));
+        const list = document.getElementById('proposalList');
+        if (list) { list.innerHTML = renderProposalList(props); lucide.createIcons(); }
+      };
+
+      window.openHireModal = function(proposalId) {
+        selectedProposalId = proposalId;
+        const p = allProposals.find(p => p.id === proposalId);
+        if (!p) return;
+        const modal = document.getElementById('hireModal');
+        const bid = parseInt(p.bidPrice.replace(/[$,]/g, ''));
+        const fee = Math.round(bid * 0.05);
+        document.getElementById('hireWorkerName').textContent = p.workerName;
+        document.getElementById('hireBidAmount').textContent = p.bidPrice;
+        document.getElementById('hireFee').textContent = `$${fee}`;
+        document.getElementById('hireTotal').textContent = `$${bid + fee}`;
+        modal.style.display = 'flex';
+        lucide.createIcons();
+      };
+
+      window.confirmHire = function() {
+        // Guard: verify the task is still open before hiring
+        if (typeof Store !== 'undefined') {
+          const task = Store.getTaskById(selectedProjectId);
+          if (task && task.status !== 'open') {
+            document.getElementById('hireModal').style.display = 'none';
+            Validate.toast('This project is no longer open — cannot hire.', 'error');
+            return;
+          }
+        }
+
+        document.getElementById('hireModal').style.display = 'none';
+
+        // Save to store if it's a store proposal
+        try {
+          if (typeof Store !== 'undefined' && selectedProposalId) {
+            const storeProposal = Store.getProposals().find(p => p.id === selectedProposalId);
+            if (storeProposal) {
+              Store.hireWorker(selectedProposalId);
+            }
+          }
+        } catch(e) { console.warn('Store hire failed', e); }
+
+        // Update UI — mark hired, disable others in current project
+        allProposals = allProposals.map(p => {
+          if (p.taskId === selectedProjectId) {
+            return { ...p, status: p.id === selectedProposalId ? 'hired' : 'rejected' };
+          }
+          return p;
+        });
+
+        Validate.toast('✓ Worker hired! Escrow funds locked.', 'success');
+
+        // Re-render the proposal list
+        switchProject(selectedProjectId, null);
+      };
+
+      window.rejectProposal = function(proposalId) {
+        Validate.confirm('Are you sure you want to reject this application?', () => {
+          allProposals = allProposals.map(p => {
+            if (p.id === proposalId) {
+              return { ...p, status: 'rejected' };
+            }
+            return p;
+          });
+          
+          if (typeof Store !== 'undefined' && Store.updateProposal) {
+            try { Store.updateProposal(proposalId, { status: 'rejected' }); } catch(e) {}
+          }
+          
+          Validate.toast('Application rejected.', 'success');
+          switchProject(selectedProjectId, null);
+        });
+      };
+
+      // Initialize dashboard and project details
+      initDashboard({
+        role: 'client',
+        activePath: 'client-my-projects.html',
+        pageTitle: 'Worker Applications',
+        pageSubtitle: 'Review proposals and hire the best talent',
+        content
+      });
+      lucide.createIcons();
+      
+      // Initialize project details on page load
+      switchProject(selectedProjectId, null);
+      
+      // Add click handler to toggle dropdown
+      const displayDiv = document.getElementById('projectSelectDisplay');
+      const dropdownMenu = document.getElementById('projectDropdownMenu');
+      const chevron = document.getElementById('dropdownChevron');
+      
+      if (displayDiv) {
+        displayDiv.addEventListener('click', function() {
+          if (dropdownMenu.style.display === 'none') {
+            dropdownMenu.style.display = 'block';
+            chevron.style.transform = 'rotate(180deg)';
+            chevron.style.transition = 'transform 0.2s';
+          } else {
+            dropdownMenu.style.display = 'none';
+            chevron.style.transform = 'rotate(0deg)';
+          }
+        });
+      }
+      
+      // Close dropdown when clicking outside
+      document.addEventListener('click', function(event) {
+        if (displayDiv && dropdownMenu && !displayDiv.contains(event.target) && !dropdownMenu.contains(event.target)) {
+          dropdownMenu.style.display = 'none';
+          if (chevron) chevron.style.transform = 'rotate(0deg)';
+        }
+      });
+    });
+  </script>
+</head>
+<body></body>
+</html>

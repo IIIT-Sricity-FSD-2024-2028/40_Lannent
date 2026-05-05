@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Resolve Dispute — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    /* ── Two-column layout ── */
+    .resolve-layout {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 960px) { .resolve-layout { grid-template-columns: 1fr; } }
+
+    /* ── Shared card ── */
+    .rc {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      margin-bottom: 18px;
+    }
+    .rc:last-child { margin-bottom: 0; }
+    .rc-head {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .rc-head-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--foreground);
+    }
+    .rc-head-icon {
+      width: 32px; height: 32px;
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .rc-body { padding: 20px; }
+
+    /* ── Alert banner ── */
+    .dispute-alert {
+      border-radius: 12px;
+      border-left: 4px solid;
+      padding: 14px 16px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 18px;
+    }
+    .dispute-alert.high   { background: #fef2f2; border-color: #ef4444; }
+    .dispute-alert.medium { background: #fff7ed; border-color: #f59e0b; }
+    .dispute-alert.low    { background: #fffbeb; border-color: #eab308; }
+    .dispute-alert-title  { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+    .dispute-alert.high   .dispute-alert-title { color: #b91c1c; }
+    .dispute-alert.medium .dispute-alert-title { color: #92400e; }
+    .dispute-alert.low    .dispute-alert-title  { color: #854d0e; }
+    .dispute-alert-body   { font-size: 12px; color: var(--muted-foreground); line-height: 1.55; }
+
+    /* ── Info grid ── */
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .info-cell { display: flex; flex-direction: column; gap: 3px; }
+    .info-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted-foreground);
+    }
+    .info-value { font-size: 14px; font-weight: 500; color: var(--foreground); }
+    .info-value.mono { font-family: monospace; font-size: 13px; }
+
+    /* ── Party card ── */
+    .party-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(0,0,0,0.05);
+    }
+    .party-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .party-avatar {
+      width: 42px; height: 42px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; color: #fff;
+      flex-shrink: 0;
+    }
+    .party-name  { font-size: 14px; font-weight: 600; }
+    .party-role  { font-size: 12px; color: var(--muted-foreground); margin-top: 2px; }
+    .party-tag   {
+      margin-left: auto;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid;
+    }
+    .tag-raiser  { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+    .tag-respondent { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+
+    /* ── Timeline ── */
+    .timeline { position: relative; padding-left: 24px; }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 7px; top: 8px; bottom: 8px;
+      width: 2px;
+      background: var(--border);
+    }
+    .tl-item { position: relative; margin-bottom: 18px; }
+    .tl-item:last-child { margin-bottom: 0; }
+    .tl-dot {
+      position: absolute;
+      left: -21px; top: 4px;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 2px var(--border);
+    }
+    .tl-dot.red    { background: #ef4444; box-shadow: 0 0 0 2px #fca5a5; }
+    .tl-dot.orange { background: #f59e0b; box-shadow: 0 0 0 2px #fde68a; }
+    .tl-dot.blue   { background: #6366f1; box-shadow: 0 0 0 2px #c7d2fe; }
+    .tl-dot.gray   { background: #9ca3af; }
+    .tl-time  { font-size: 11px; color: var(--muted-foreground); margin-bottom: 3px; }
+    .tl-text  { font-size: 13px; font-weight: 500; }
+    .tl-sub   { font-size: 12px; color: var(--muted-foreground); margin-top: 2px; line-height: 1.4; }
+
+    /* ── Files ── */
+    .file-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 13px 0;
+      border-bottom: 1px solid rgba(0,0,0,0.05);
+    }
+    .file-row:last-child { border-bottom: none; }
+    .file-icon-wrap {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .file-name  { font-size: 13px; font-weight: 500; }
+    .file-size  { font-size: 12px; color: var(--muted-foreground); margin-top: 2px; }
+    .file-dl {
+      margin-left: auto;
+      padding: 5px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 12px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .file-dl:hover { background: var(--secondary); }
+
+    /* ── Verdict panel ── */
+    .verdict-option {
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .verdict-option:last-of-type { margin-bottom: 0; }
+    .verdict-option:hover  { border-color: #6366f1; background: #f5f3ff; }
+    .verdict-option.selected { border-color: #6366f1; background: #eef2ff; }
+    .verdict-radio {
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      flex-shrink: 0;
+      margin-top: 2px;
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color 0.15s;
+    }
+    .verdict-option.selected .verdict-radio { border-color: #6366f1; }
+    .verdict-radio-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #6366f1;
+      display: none;
+    }
+    .verdict-option.selected .verdict-radio-dot { display: block; }
+    .verdict-title { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+    .verdict-desc  { font-size: 12px; color: var(--muted-foreground); line-height: 1.4; }
+
+    /* ── Escrow display ── */
+    .escrow-bar {
+      background: var(--input-bg);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 14px;
+    }
+    .escrow-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted-foreground); margin-bottom: 6px; }
+    .escrow-val   { font-size: 22px; font-weight: 700; color: #10b981; letter-spacing: -0.02em; }
+    .escrow-sub   { font-size: 12px; color: var(--muted-foreground); margin-top: 2px; }
+
+    /* ── Resolution note textarea ── */
+    .resolution-note {
+      width: 100%;
+      min-height: 90px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--input-bg);
+      font-size: 13px;
+      font-family: inherit;
+      resize: vertical;
+      outline: none;
+      transition: box-shadow 0.15s;
+    }
+    .resolution-note:focus { box-shadow: 0 0 0 2px rgba(99,102,241,0.2); }
+
+    /* ── Action buttons ── */
+    .btn-resolve-confirm {
+      width: 100%;
+      height: 42px;
+      border-radius: 10px;
+      background: linear-gradient(180deg, hsl(0,0%,16%) 0%, hsl(0,0%,10%) 100%);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: inherit;
+      border: none;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: transform 0.15s, opacity 0.15s;
+      margin-bottom: 10px;
+    }
+    .btn-resolve-confirm:hover  { opacity: 0.9; transform: scale(1.01); }
+    .btn-resolve-confirm:active { transform: scale(0.99); }
+    .btn-back {
+      width: 100%;
+      height: 40px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s;
+      text-decoration: none;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      color: var(--muted-foreground);
+    }
+    .btn-back:hover { background: var(--secondary); color: var(--foreground); }
+
+    /* ── Status pill ── */
+    .spill {
+      display: inline-flex; align-items: center;
+      padding: 4px 11px;
+      border-radius: 9999px;
+      font-size: 11px; font-weight: 600;
+      border: 1px solid;
+    }
+    .spill-open   { background:#fef2f2; border-color:#fca5a5; color:#b91c1c; }
+    .spill-invest { background:#faf5ff; border-color:#d8b4fe; color:#7c3aed; }
+    .spill-resolved { background:#d1fae5; border-color:#6ee7b7; color:#065f46; }
+
+    /* ── What is a dispute? ── */
+    .explain-box {
+      background: #eff6ff;
+      border: 1px solid #bae6fd;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 18px;
+    }
+    .explain-title { font-size: 13px; font-weight: 700; color: #0284c7; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+    .explain-body  { font-size: 12px; color: #0369a1; line-height: 1.6; }
+    .explain-body li { margin-bottom: 4px; padding-left: 4px; list-style: disc; margin-left: 14px; }
+  </style>
+
+  <script>
+    /* ── Dispute data keyed by milestoneId ── */
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('expert')) return;
+      const session = Auth.getCurrentUser();
+      const params = new URLSearchParams(window.location.search);
+      const disputeId = params.get('id') || params.get('disputeId');
+
+      // Load real dispute from Store
+      let raw = disputeId ? Store.getDisputeById(disputeId) : null;
+      if (!raw) {
+        const all = Store.getDisputes();
+        raw = all.find(d => d.status === 'open') || all[0] || null;
+      }
+      if (!raw) {
+        document.body.innerHTML = '<div style="padding:80px;text-align:center;color:#6b7280;font-size:16px;">No dispute found. <a href="expert-dispute-cases.html" style="color:#6366f1;">Go to Disputes</a></div>';
+        return;
+      }
+
+      const task   = Store.getTaskById(raw.taskId);
+      const raiser = Store.getUserById(raw.raisedBy);
+      const respondent = Store.getUserById(raw.againstId);
+      const escrowAmt = raw.amount || '$0';
+
+      // Build the `d` object that the rest of the template uses
+      const d = {
+        project:           raw.project || (task ? task.title : 'Unknown Project'),
+        milestone:         raw.milestone || 'Milestone',
+        milestoneId:       raw.id,
+        issue:             raw.reason ? raw.reason.substring(0,60)+'...' : 'Dispute',
+        description:       raw.reason || 'No description provided.',
+        status:            raw.status === 'open' ? 'Open' : raw.status === 'resolved' ? 'Resolved' : 'Under Investigation',
+        severity:          raw.severity || 'medium',
+        escrow:            escrowAmt,
+        raisedDate:        raw.createdAt ? new Date(raw.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Recently',
+        raisedBy:          raiser ? raiser.role.charAt(0).toUpperCase()+raiser.role.slice(1) : 'User',
+        raisedByName:      raiser ? raiser.name : (raw.raisedByName || 'Unknown'),
+        raisedByInitials:  raiser ? raiser.avatar : '?',
+        raisedByColor:     raiser ? raiser.avatarColor : '#6366f1',
+        respondent:        respondent ? respondent.role.charAt(0).toUpperCase()+respondent.role.slice(1) : 'User',
+        respondentName:    respondent ? respondent.name : (raw.againstName || 'Unknown'),
+        respondentInitials:respondent ? respondent.avatar : '?',
+        respondentColor:   respondent ? respondent.avatarColor : '#10b981',
+        timeline: [
+          { dot:'blue',  time: raw.createdAt ? new Date(raw.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'N/A', text:'Task posted', sub:'Project requirements defined.' },
+          { dot:'green', time:'—',             text:'Work submitted',       sub:'Gig worker submitted deliverable for review.' },
+          { dot:'orange',time: raw.createdAt ? new Date(raw.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'N/A', text:'Dispute raised', sub:'Escrow frozen. Case assigned to Expert Reviewer.' },
+        ],
+        files: [],
+      };
+
+      let selectedVerdict = '';
+
+      function toast(msg, type='success') {
+        const bg = type==='success'?'#10b981': type==='warn'?'#f59e0b':'#ef4444';
+        const t  = document.createElement('div');
+        t.style.cssText = `position:fixed;bottom:24px;right:24px;background:${bg};color:#fff;padding:14px 20px;border-radius:12px;font-size:14px;font-weight:500;z-index:999;box-shadow:0 8px 24px rgba(0,0,0,0.2);`;
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(()=>t.remove(), 3200);
+      }
+
+      /* timeline HTML */
+      const timelineHTML = d.timeline.map(t => `
+        <div class="tl-item">
+          <div class="tl-dot ${t.dot}"></div>
+          <div class="tl-time">${t.time}</div>
+          <div class="tl-text">${t.text}</div>
+          <div class="tl-sub">${t.sub}</div>
+        </div>`).join('');
+
+      /* files HTML */
+      const filesHTML = d.files.map(f => `
+        <div class="file-row">
+          <div class="file-icon-wrap" style="background:${f.iconBg};">
+            <i data-lucide="${f.icon}" style="width:18px;height:18px;color:${f.iconColor};"></i>
+          </div>
+          <div>
+            <div class="file-name">${f.name}</div>
+            <div class="file-size">${f.size}</div>
+          </div>
+          <button class="file-dl" onclick="toast('Downloading ${f.name}…','success')">
+            <i data-lucide="download" style="width:12px;height:12px;display:inline;vertical-align:middle;margin-right:4px;"></i>View
+          </button>
+        </div>`).join('');
+
+      const SEV_CLASS = { 'high': 'high', 'medium': 'medium', 'low': 'low' };
+      const STATUS_CLASS = { 'Open': 'spill-open', 'Resolved': 'spill-resolved', 'Under Investigation': 'spill-invest' };
+
+      const content = `
+        <!-- ── What is a dispute? info banner ── -->
+        <div class="explain-box">
+          <div class="explain-title">
+            <i data-lucide="info" style="width:15px;height:15px;"></i>
+            What is a Dispute on Lannent?
+          </div>
+          <div class="explain-body">
+            A dispute is a formal conflict raised by either the <strong>Client</strong> or the <strong>Gig Worker</strong> when they cannot agree on a milestone outcome. Common triggers include:
+            <ul>
+              <li><strong>Client-raised:</strong> Deliverable does not meet quality standards, performance benchmarks not met, features are missing, or the deadline was breached.</li>
+              <li><strong>Worker-raised:</strong> Scope was expanded beyond the original agreement, an approved milestone payment was not released, or additional work was requested without compensation.</li>
+            </ul>
+            Once raised, <strong>escrow funds are frozen</strong> and the case is escalated to an Expert Reviewer. The Expert's verdict is <strong>binding</strong> — a resolution in favour of the Client may trigger a rework request; in favour of the Worker, funds are released immediately.
+          </div>
+        </div>
+
+        <!-- ── Severity alert ── -->
+        <div class="dispute-alert ${SEV_CLASS[d.severity]}">
+          <i data-lucide="alert-triangle" style="width:18px;height:18px;margin-top:1px;flex-shrink:0;${d.severity==='high'?'color:#ef4444;':d.severity==='medium'?'color:#f59e0b;':'color:#eab308;'}"></i>
+          <div>
+            <div class="dispute-alert-title">${d.severity.charAt(0).toUpperCase()+d.severity.slice(1)}-Severity Dispute — Escrow Frozen</div>
+            <div class="dispute-alert-body">Funds of ${d.escrow} are held in escrow and will not be released until a verdict is issued. Review all files and the event timeline before making your decision.</div>
+          </div>
+        </div>
+
+        <div class="resolve-layout">
+
+          <!-- ═══ LEFT COLUMN ═══ -->
+          <div>
+
+            <!-- Case Overview -->
+            <div class="rc">
+              <div class="rc-head">
+                <div class="rc-head-icon" style="background:#eef2ff;">
+                  <i data-lucide="scale" style="width:16px;height:16px;color:#6366f1;"></i>
+                </div>
+                <span class="rc-head-title">Case Overview</span>
+                <span class="spill ${STATUS_CLASS[d.status]}" style="margin-left:auto;">${d.status}</span>
+              </div>
+              <div class="rc-body">
+                <div class="info-grid" style="margin-bottom:16px;">
+                  <div class="info-cell">
+                    <span class="info-label">Project</span>
+                    <span class="info-value">${d.project}</span>
+                  </div>
+                  <div class="info-cell">
+                    <span class="info-label">Milestone</span>
+                    <span class="info-value">${d.milestone}</span>
+                  </div>
+                  <div class="info-cell">
+                    <span class="info-label">Dispute ID</span>
+                    <span class="info-value mono">#DIS-${d.milestoneId}</span>
+                  </div>
+                  <div class="info-cell">
+                    <span class="info-label">Date Raised</span>
+                    <span class="info-value">${d.raisedDate}</span>
+                  </div>
+                  <div class="info-cell">
+                    <span class="info-label">Issue Type</span>
+                    <span class="info-value">${d.issue}</span>
+                  </div>
+                  <div class="info-cell">
+                    <span class="info-label">Escrow Held</span>
+                    <span class="info-value" style="color:#10b981;font-weight:700;">${d.escrow}</span>
+                  </div>
+                </div>
+                <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted-foreground);margin-bottom:8px;">Dispute Description</div>
+                <p style="font-size:14px;line-height:1.65;color:var(--foreground);">${d.description}</p>
+              </div>
+            </div>
+
+            <!-- Parties Involved -->
+            <div class="rc">
+              <div class="rc-head">
+                <div class="rc-head-icon" style="background:#ecfdf5;">
+                  <i data-lucide="users" style="width:16px;height:16px;color:#10b981;"></i>
+                </div>
+                <span class="rc-head-title">Parties Involved</span>
+              </div>
+              <div class="rc-body">
+                <div class="party-row">
+                  <div class="party-avatar" style="background:${d.raisedByColor};">${d.raisedByInitials}</div>
+                  <div>
+                    <div class="party-name">${d.raisedByName}</div>
+                    <div class="party-role">${d.raisedBy}</div>
+                  </div>
+                  <span class="party-tag tag-raiser">Raised Dispute</span>
+                </div>
+                <div class="party-row">
+                  <div class="party-avatar" style="background:${d.respondentColor};">${d.respondentInitials}</div>
+                  <div>
+                    <div class="party-name">${d.respondentName}</div>
+                    <div class="party-role">${d.respondent}</div>
+                  </div>
+                  <span class="party-tag tag-respondent">Respondent</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Event Timeline -->
+            <div class="rc">
+              <div class="rc-head">
+                <div class="rc-head-icon" style="background:#fff7ed;">
+                  <i data-lucide="clock" style="width:16px;height:16px;color:#f59e0b;"></i>
+                </div>
+                <span class="rc-head-title">Event Timeline</span>
+              </div>
+              <div class="rc-body">
+                <div class="timeline">${timelineHTML}</div>
+              </div>
+            </div>
+
+            <!-- Files Submitted by Gig Worker -->
+            <div class="rc">
+              <div class="rc-head">
+                <div class="rc-head-icon" style="background:#faf5ff;">
+                  <i data-lucide="folder-open" style="width:16px;height:16px;color:#a855f7;"></i>
+                </div>
+                <span class="rc-head-title">Files Submitted by Gig Worker</span>
+                <span style="margin-left:auto;font-size:12px;color:var(--muted-foreground);">${d.files.length} files</span>
+              </div>
+              <div class="rc-body">${filesHTML}</div>
+            </div>
+
+          </div><!-- /LEFT -->
+
+          <!-- ═══ RIGHT COLUMN ═══ -->
+          <div>
+
+            <!-- Escrow snapshot -->
+            <div class="rc">
+              <div class="rc-head">
+                <div class="rc-head-icon" style="background:#ecfdf5;">
+                  <i data-lucide="wallet" style="width:16px;height:16px;color:#10b981;"></i>
+                </div>
+                <span class="rc-head-title">Escrow Status</span>
+              </div>
+              <div class="rc-body">
+                <div class="escrow-bar">
+                  <div class="escrow-label">Frozen Amount</div>
+                  <div class="escrow-val">${d.escrow}</div>
+                  <div class="escrow-sub">Held pending Expert verdict</div>
+                </div>
+                <p style="font-size:12px;color:var(--muted-foreground);line-height:1.55;">
+                  Per platform rules, funds are <strong>never released</strong> while a dispute is active. Your verdict will trigger an automatic escrow action — release to the worker or return to client.
+                </p>
+              </div>
+            </div>
+
+            <!-- Verdict -->
+            <div class="rc">
+              <div class="rc-head">
+                <div class="rc-head-icon" style="background:#eef2ff;">
+                  <i data-lucide="gavel" style="width:16px;height:16px;color:#6366f1;"></i>
+                </div>
+                <span class="rc-head-title">Issue Your Verdict</span>
+              </div>
+              <div class="rc-body">
+                <p style="font-size:12px;color:var(--muted-foreground);margin-bottom:14px;line-height:1.5;">Select a resolution outcome. Your decision is <strong>binding</strong> and will be logged against this case.</p>
+
+                <div class="verdict-option" id="v1" onclick="selectVerdict('favour_worker',this)">
+                  <div class="verdict-radio"><div class="verdict-radio-dot"></div></div>
+                  <div>
+                    <div class="verdict-title">Rule in favour of Gig Worker</div>
+                    <div class="verdict-desc">Work meets requirements. Release ${d.escrow} escrow to worker immediately.</div>
+                  </div>
+                </div>
+
+                <div class="verdict-option" id="v2" onclick="selectVerdict('favour_client',this)">
+                  <div class="verdict-radio"><div class="verdict-radio-dot"></div></div>
+                  <div>
+                    <div class="verdict-title">Rule in favour of Client</div>
+                    <div class="verdict-desc">Work does not meet requirements. Return escrow to client. Worker must revise and resubmit.</div>
+                  </div>
+                </div>
+
+
+                <div style="margin-top:16px;">
+                  <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">Resolution Notes <span style="color:var(--muted-foreground);font-weight:400;">(required)</span></label>
+                  <textarea id="resolutionNote" class="resolution-note" placeholder="Summarise your findings and reasoning for this verdict. This note is visible to both parties." oninput="this.style.borderColor=this.value.trim().length>=50?'var(--border)':''"></textarea>
+                  <div id="resolutionNoteErr" style="font-size:12px;color:#ef4444;margin-top:4px;display:none;"></div>
+                </div>
+
+                <div style="margin-top:16px;">
+                  <button class="btn-resolve-confirm" onclick="submitVerdict()">
+                    <i data-lucide="shield-check" style="width:15px;height:15px;"></i>
+                    Submit Verdict
+                  </button>
+                  <a href="expert-dispute-cases.html" class="btn-back">
+                    <i data-lucide="arrow-left" style="width:14px;height:14px;"></i>
+                    Back to Disputes
+                  </a>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- /RIGHT -->
+        </div><!-- /resolve-layout -->
+      `;
+
+      initDashboard({
+        role:        'expert',
+        activePath:  'expert-dispute-cases.html',
+        pageTitle:   'Resolve Dispute',
+        pageSubtitle: `Case #DIS-${d.milestoneId} · ${d.project} — ${d.milestone}`,
+        content,
+      });
+
+      lucide.createIcons();
+
+      /* verdict selection */
+      window.selectVerdict = function(val, el) {
+        selectedVerdict = val;
+        document.querySelectorAll('.verdict-option').forEach(o => o.classList.remove('selected'));
+        el.classList.add('selected');
+      };
+
+      /* submit */
+      window.submitVerdict = function() {
+        const noteEl = document.getElementById('resolutionNote');
+        const note = noteEl?.value?.trim() || '';
+        let valid = true;
+
+        // Validate verdict selection
+        if (!selectedVerdict) {
+          Validate.toast('Please select a verdict outcome before submitting.', 'error');
+          valid = false;
+        }
+
+        // Validate resolution notes (min 50 chars for meaningful reasoning)
+        if (!note || note.length < 50) {
+          if (noteEl) { noteEl.style.borderColor = '#ef4444'; }
+          const errEl = document.getElementById('resolutionNoteErr');
+          if (errEl) { errEl.textContent = 'Resolution notes must be at least 50 characters. Provide detailed reasoning.'; errEl.style.display = 'block'; }
+          valid = false;
+        } else {
+          if (noteEl) noteEl.style.borderColor = '';
+          const errEl = document.getElementById('resolutionNoteErr');
+          if (errEl) errEl.style.display = 'none';
+        }
+        if (!valid) return;
+
+        // Map verdict to store format
+        const verdictMap = { favour_worker: 'worker-favour', favour_client: 'client-favour', partial: 'split', escalate: 'client-favour' };
+        const storeVerdict = verdictMap[selectedVerdict] || selectedVerdict;
+
+        // Save to store
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const disputeId = params.get('id') || params.get('disputeId');
+          const session = typeof Auth !== 'undefined' ? Auth.getCurrentUser() : null;
+          if (disputeId && typeof Store !== 'undefined') {
+            Store.resolveDispute(disputeId, { verdict: storeVerdict, resolution: note, expertId: session?.userId || 'u3' });
+
+            // Notify the client (dispute raiser) about the resolution
+            const dispute = Store.getDisputeById(disputeId);
+            const verdictLabel = storeVerdict === 'worker-favour' ? 'in favour of the Worker' : storeVerdict === 'client-favour' ? 'in favour of the Client' : 'with a partial resolution';
+
+            if (raw.raisedBy) {
+              Store.addNotification({
+                userId: raw.raisedBy,
+                type: 'dispute-resolved',
+                text: `Dispute resolved: ${d.project}`,
+                subtext: `Expert verdict ${verdictLabel} — ${d.milestone}`,
+              });
+            }
+
+            // Notify the respondent (worker/client being disputed)
+            if (raw.againstId) {
+              Store.addNotification({
+                userId: raw.againstId,
+                type: 'dispute-resolved',
+                text: `Dispute resolved: ${d.project}`,
+                subtext: `Expert verdict ${verdictLabel} — ${d.milestone}`,
+              });
+            }
+          }
+        } catch(e) { console.warn('Store save failed', e); }
+
+        const msgs = {
+          favour_worker: `✓ Verdict submitted. Escrow of ${d.escrow} released to ${d.respondentName}.`,
+          favour_client: `✓ Verdict submitted. Escrow returned to client. Worker notified to revise.`,
+          partial:       `✓ Partial resolution submitted. Escrow split and worker notified.`,
+          escalate:      `✓ Case escalated to senior reviewer.`,
+        };
+        Validate.toast(msgs[selectedVerdict], 'success');
+        setTimeout(() => { window.location.href = 'expert-dispute-cases.html'; }, 2800);
+      };
+    });
+  </script>
+</head>
+<body></body>
+</html>

@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Account Settings — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+
+  <!-- Global helpers — must NOT be deferred so onclick attributes can find them -->
+  <script>
+    function switchTab(tabId, btn) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.snav-btn').forEach(el => el.classList.remove('active'));
+      var panel = document.getElementById('tab-' + tabId);
+      if (panel) panel.classList.add('active');
+      if (btn) btn.classList.add('active');
+    }
+
+    function updateCharCount() {
+      var ta = document.getElementById('p-bio');
+      var cnt = document.getElementById('bioCharCount');
+      if (ta && cnt) cnt.textContent = ta.value.length + '/500 characters';
+    }
+
+    function toggleSwitch(btn) {
+      btn.classList.toggle('on');
+    }
+
+    var paymentMethods = [
+      { id: 1, name: 'Visa Card', detail: '•••• 4242', icon: 'credit-card', color: '#2563eb', primary: true },
+      { id: 2, name: 'Bank Account', detail: 'Chase •••• 8901', icon: 'landmark', color: '#16a34a' },
+      { id: 3, name: 'PayPal', detail: 'alex.morgan@email.com', icon: 'mail', color: '#7c3aed' }
+    ];
+
+    function renderPaymentMethods() {
+      var list = document.getElementById('pmList');
+      if (!list) return;
+      list.innerHTML = paymentMethods.map(function(pm) {
+        return `
+          <div class="pm-card" data-pmid="${pm.id}">
+            <div class="pm-card-left">
+              <div class="pm-icon-wrap"><i data-lucide="${pm.icon}" style="color:${pm.color};"></i></div>
+              <div>
+                <div class="pm-name">${pm.name}${pm.primary ? ' <span class="badge-primary">Primary</span>' : ''}</div>
+                <div class="pm-detail">${pm.detail}</div>
+              </div>
+            </div>
+            <button class="btn-icon-del" onclick="removePM(this)"><i data-lucide="trash-2"></i></button>
+          </div>
+        `;
+      }).join('');
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function removePM(btn) {
+      var card = btn.closest('.pm-card');
+      if (!card) return;
+      var id = parseInt(card.getAttribute('data-pmid'), 10);
+      paymentMethods = paymentMethods.filter(function(pm) { return pm.id !== id; });
+      renderPaymentMethods();
+      showToast('Payment method removed!');
+    }
+
+    function addPaymentMethod() {
+      var numberEl = document.getElementById('add-card-number');
+      var expiryEl = document.getElementById('add-card-expiry');
+      var cvcEl = document.getElementById('add-card-cvc');
+      if (!numberEl || !expiryEl || !cvcEl) return;
+
+      var number = numberEl.value.trim();
+      var expiry = expiryEl.value.trim();
+      var cvc = cvcEl.value.trim();
+
+      if (!number || !expiry || !cvc) {
+        showToast('Please fill in all payment fields.');
+        return;
+      }
+
+      var digits = number.replace(/\D/g, '');
+      if (digits.length < 4) {
+        showToast('Card number must include at least 4 digits.');
+        return;
+      }
+      var last4 = digits.slice(-4);
+
+      var newMethod = {
+        id: Date.now(),
+        name: 'Card •••• ' + last4,
+        detail: 'Expires ' + expiry,
+        icon: 'credit-card',
+        color: '#2563eb'
+      };
+
+      paymentMethods.push(newMethod);
+      renderPaymentMethods();
+
+      numberEl.value = '';
+      expiryEl.value = '';
+      cvcEl.value = '';
+
+      closeModal('addPaymentModal');
+      showToast('Payment method added!');
+    }
+
+    var loginSessions = [
+      { id: 1, device: 'MacBook Pro · Chrome', location: 'San Francisco, CA', time: '2 minutes ago', current: true, icon: 'monitor' },
+      { id: 2, device: 'iPhone 14 · Safari', location: 'San Francisco, CA', time: '3 hours ago', icon: 'smartphone' },
+      { id: 3, device: 'iPad Air · Safari', location: 'Oakland, CA', time: '2 days ago', icon: 'tablet-smartphone' }
+    ];
+
+    function renderLoginActivity() {
+      var container = document.getElementById('loginActivityList');
+      if (!container) return;
+      container.innerHTML = loginSessions.map(function(s) {
+        return `
+          <div class="activity-row">
+            <div class="act-icon"><i data-lucide="${s.icon}"></i></div>
+            <div>
+              <div class="act-device">${s.device}${s.current ? ' <span class="badge-current">Current</span>' : ''}</div>
+              <div class="act-meta">${s.location} · ${s.time}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function logoutAllDevices() {
+      loginSessions = [];
+      renderLoginActivity();
+      showToast('All devices logged out.');
+    }
+
+    function openModal(id) {
+      var el = document.getElementById(id);
+      if (el) { el.classList.add('open'); if (window.lucide) lucide.createIcons(); }
+    }
+
+    function closeModal(id) {
+      var el = document.getElementById(id);
+      if (el) el.classList.remove('open');
+    }
+
+    function enable2FA() {
+      closeModal('twoFAModal');
+      var badge = document.getElementById('twoFaBadge');
+      var btn   = document.getElementById('twoFaBtn');
+      if (badge) { badge.textContent = 'Enabled'; badge.className = 'badge-status badge-enabled'; }
+      if (btn)   btn.textContent = 'Manage 2FA';
+      showToast('Two-factor authentication enabled!');
+    }
+
+    function showToast(msg) {
+      var t = document.getElementById('toast');
+      if (!t) return;
+      t.textContent = '\u2713 ' + (msg || 'Settings saved successfully');
+      t.style.display = 'block';
+      clearTimeout(t._timer);
+      t._timer = setTimeout(function() { t.style.display = 'none'; }, 3200);
+    }
+  </script>
+  <style>
+    /* ─── Layout ─────────────────────────────────────── */
+    .settings-wrap { display: flex; gap: 24px; align-items: flex-start; }
+
+    /* ─── Left Tab Nav ───────────────────────────────── */
+    .settings-sidenav {
+      width: 240px; flex-shrink: 0;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 10px;
+      position: sticky; top: 24px;
+      box-shadow: 0 10px 40px 5px rgba(194,194,194,0.12);
+    }
+    .snav-btn {
+      display: flex; align-items: center; gap: 12px;
+      width: 100%; padding: 12px 14px; border-radius: 10px;
+      font-size: 14px; font-weight: 500; color: var(--muted-foreground);
+      background: transparent; border: none; cursor: pointer;
+      transition: background 0.15s, color 0.15s; text-align: left;
+    }
+    .snav-btn:hover { background: var(--secondary); color: var(--foreground); }
+    .snav-btn.active { background: var(--foreground); color: var(--background); }
+    .snav-btn i { width: 18px; height: 18px; flex-shrink: 0; }
+
+    /* ─── Right Content Panel ────────────────────────── */
+    .settings-panel {
+      flex: 1;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 32px;
+      box-shadow: 0 10px 40px 5px rgba(194,194,194,0.12);
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .settings-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+    .settings-sub { font-size: 13px; color: var(--muted-foreground); margin-bottom: 28px; }
+
+    /* ─── Section dividers ───────────────────────────── */
+    .section-divider { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+
+    /* ─── Avatar row ─────────────────────────────────── */
+    .avatar-row { display: flex; align-items: center; gap: 24px; margin-bottom: 28px; }
+    .avatar-wrap { position: relative; flex-shrink: 0; }
+    .avatar-circle {
+      width: 96px; height: 96px; border-radius: 50%;
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 28px; font-weight: 600; letter-spacing: 1px;
+    }
+    .avatar-square {
+      width: 96px; height: 96px; border-radius: 14px;
+      background: var(--secondary); border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted-foreground);
+    }
+    .avatar-cam-btn {
+      position: absolute; bottom: 2px; right: 2px;
+      width: 30px; height: 30px; border-radius: 50%;
+      background: var(--foreground); color: var(--background);
+      border: 2px solid var(--card); display: flex;
+      align-items: center; justify-content: center; cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .avatar-cam-btn:hover { opacity: 0.8; }
+    .avatar-cam-btn i { width: 14px; height: 14px; }
+    .avatar-meta p { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+    .avatar-meta small { font-size: 12px; color: var(--muted-foreground); display: block; margin-bottom: 12px; }
+
+    /* ─── Input grid ─────────────────────────────────── */
+    .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+    .form-grid-2.span-full { grid-template-columns: 1fr; }
+    .field-group { display: flex; flex-direction: column; gap: 6px; }
+    .field-group label { font-size: 13px; font-weight: 500; }
+    .field-input {
+      height: 44px; padding: 0 14px;
+      border: 1px solid var(--border); border-radius: 10px;
+      background: var(--secondary); font-size: 14px;
+      color: var(--foreground); outline: none;
+      transition: box-shadow 0.15s, border-color 0.15s;
+      font-family: inherit;
+    }
+    .field-input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+    .field-input.with-icon { padding-left: 38px; }
+    .field-wrap { position: relative; }
+    .field-icon {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      color: var(--muted-foreground); pointer-events: none;
+      width: 16px; height: 16px;
+    }
+    textarea.field-input { height: auto; padding: 12px 14px; resize: none; }
+    select.field-input { cursor: pointer; }
+
+    /* ─── Phone input group ─────────────────────────────── */
+    .phone-input-group {
+      display: flex; gap: 10px; align-items: flex-start;
+    }
+    .phone-country-select {
+      width: 170px; flex-shrink: 0; height: 44px; padding: 0 10px;
+      border: 1px solid var(--border); border-radius: 10px;
+      background: var(--secondary); font-size: 13px;
+      color: var(--foreground); outline: none; cursor: pointer;
+      font-family: inherit;
+      transition: box-shadow 0.15s, border-color 0.15s;
+    }
+    .phone-country-select:focus {
+      border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+    }
+    .phone-number-wrap { flex: 1; position: relative; }
+    .phone-number-wrap .field-icon {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      color: var(--muted-foreground); pointer-events: none;
+      width: 16px; height: 16px;
+    }
+    .phone-number-wrap .field-input { width: 100%; padding-left: 38px; box-sizing: border-box; }
+    .phone-hint {
+      font-size: 11px; color: var(--muted-foreground); margin-top: 4px;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .phone-hint i { width: 12px; height: 12px; }
+    .field-input.input-error {
+      border-color: #ef4444 !important;
+      box-shadow: 0 0 0 2px rgba(239,68,68,0.15) !important;
+    }
+    .field-input.input-valid {
+      border-color: #10b981 !important;
+      box-shadow: 0 0 0 2px rgba(16,185,129,0.12) !important;
+    }
+    .phone-error-msg {
+      color: #ef4444; font-size: 12px; margin-top: 4px;
+      display: flex; align-items: center; gap: 4px;
+      animation: fadeInError 0.2s ease;
+    }
+    @keyframes fadeInError { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+    .btn-save:disabled {
+      opacity: 0.5; cursor: not-allowed;
+    }
+
+    /* ─── Char count ─────────────────────────────────── */
+    .char-count { font-size: 11px; color: var(--muted-foreground); margin-top: 4px; text-align: right; }
+
+    /* ─── Save button row ────────────────────────────── */
+    .save-row { display: flex; justify-content: flex-end; padding-top: 20px; }
+    .btn-save {
+      display: flex; align-items: center; gap: 8px;
+      height: 44px; padding: 0 24px; border-radius: 12px;
+      background: var(--foreground); color: var(--background);
+      font-size: 14px; font-weight: 500; border: none; cursor: pointer;
+      transition: opacity 0.15s; font-family: inherit;
+    }
+    .btn-save:hover { opacity: 0.85; }
+    .btn-save i { width: 16px; height: 16px; }
+
+    /* ─── Payment method cards ───────────────────────── */
+    .pm-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
+    .btn-add {
+      display: flex; align-items: center; gap: 8px;
+      height: 40px; padding: 0 18px; border-radius: 10px;
+      background: var(--foreground); color: var(--background);
+      font-size: 13px; font-weight: 500; border: none; cursor: pointer;
+      transition: opacity 0.15s; flex-shrink: 0; font-family: inherit;
+    }
+    .btn-add:hover { opacity: 0.85; }
+    .pm-card {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px; border: 1px solid var(--border); border-radius: 12px;
+      background: var(--secondary); margin-bottom: 10px;
+    }
+    .pm-card-left { display: flex; align-items: center; gap: 14px; }
+    .pm-icon-wrap {
+      width: 48px; height: 48px; border-radius: 10px;
+      background: var(--card); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .pm-icon-wrap i { width: 18px; height: 18px; }
+    .pm-name { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; margin-bottom: 3px; }
+    .pm-detail { font-size: 12px; color: var(--muted-foreground); }
+    .badge-primary {
+      padding: 2px 8px; border-radius: 5px; font-size: 11px; font-weight: 500;
+      background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d;
+    }
+    .btn-icon-del {
+      padding: 8px; border-radius: 8px; background: transparent;
+      border: none; cursor: pointer; color: #ef4444;
+      transition: background 0.15s; display: flex;
+    }
+    .btn-icon-del:hover { background: #fef2f2; }
+    .btn-icon-del i { width: 16px; height: 16px; }
+
+    /* ─── Info banner ────────────────────────────────── */
+    .info-banner {
+      display: flex; gap: 12px; padding: 16px;
+      background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px;
+      margin-top: 16px;
+    }
+    .info-banner i { width: 20px; height: 20px; color: #2563eb; flex-shrink: 0; margin-top: 1px; }
+    .info-banner-title { font-size: 13px; font-weight: 600; color: #1e3a8a; margin-bottom: 4px; }
+    .info-banner-body { font-size: 12px; color: #1d4ed8; }
+
+    /* ─── Notification toggles ───────────────────────── */
+    .notif-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px; border: 1px solid var(--border); border-radius: 12px;
+      background: var(--secondary); margin-bottom: 10px;
+    }
+    .notif-label { font-size: 14px; font-weight: 500; margin-bottom: 3px; }
+    .notif-desc { font-size: 12px; color: var(--muted-foreground); }
+    .toggle-switch {
+      width: 44px; height: 24px; border-radius: 12px; border: none;
+      background: #e5e7eb; padding: 2px; cursor: pointer;
+      position: relative; transition: background 0.2s; flex-shrink: 0;
+    }
+    .toggle-switch.on { background: #6366f1; }
+    .toggle-knob {
+      width: 20px; height: 20px; border-radius: 50%; background: white;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.18); position: absolute;
+      top: 2px; left: 2px; transition: transform 0.2s;
+    }
+    .toggle-switch.on .toggle-knob { transform: translateX(20px); }
+
+    /* ─── Security sub-cards ─────────────────────────── */
+    .sec-card {
+      border: 1px solid var(--border); border-radius: 12px;
+      background: var(--secondary); padding: 24px; margin-bottom: 16px;
+    }
+    .sec-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
+    .sec-card-title { font-size: 15px; font-weight: 600; margin-bottom: 3px; }
+    .sec-card-sub { font-size: 12px; color: var(--muted-foreground); }
+    .badge-status {
+      padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 500;
+    }
+    .badge-enabled { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
+    .badge-disabled { background: #f9fafb; border: 1px solid #e5e7eb; color: #6b7280; }
+    .btn-outline-sm {
+      height: 40px; padding: 0 20px; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--card);
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      transition: background 0.15s; font-family: inherit;
+      color: var(--foreground);
+    }
+    .btn-outline-sm:hover { background: var(--secondary); }
+    .btn-red-outline {
+      height: 36px; padding: 0 16px; border-radius: 8px;
+      border: 1px solid #fecaca; background: #fef2f2;
+      font-size: 12px; font-weight: 500; cursor: pointer;
+      color: #dc2626; font-family: inherit; transition: background 0.15s;
+    }
+    .btn-red-outline:hover { background: #fee2e2; }
+
+    /* ─── Login activity ─────────────────────────────── */
+    .activity-row {
+      display: flex; align-items: center; gap: 14px;
+      padding: 12px; border: 1px solid var(--border);
+      border-radius: 10px; background: var(--card); margin-bottom: 8px;
+    }
+    .act-icon {
+      width: 40px; height: 40px; border-radius: 8px;
+      background: rgba(99,102,241,0.1); display: flex;
+      align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .act-icon i { width: 18px; height: 18px; color: #6366f1; }
+    .act-device { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+    .act-meta { font-size: 12px; color: var(--muted-foreground); }
+    .badge-current {
+      padding: 2px 8px; border-radius: 5px; font-size: 11px; font-weight: 500;
+      background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d;
+    }
+
+    /* ─── Password section ───────────────────────────── */
+    .pwd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    /* ─── Modal ──────────────────────────────────────── */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45); backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center;
+      z-index: 200; padding: 16px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-box {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 20px; padding: 32px;
+      max-width: 440px; width: 100%; box-shadow: 0 24px 64px rgba(0,0,0,0.2);
+    }
+    .modal-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 6px; }
+    .modal-title { font-size: 19px; font-weight: 600; }
+    .modal-sub { font-size: 13px; color: var(--muted-foreground); margin-bottom: 24px; }
+    .modal-close {
+      padding: 6px; border-radius: 8px; background: transparent;
+      border: none; cursor: pointer; color: var(--muted-foreground);
+      transition: background 0.15s;
+    }
+    .modal-close:hover { background: var(--secondary); }
+    .modal-close i { width: 20px; height: 20px; }
+    .modal-footer { display: flex; gap: 10px; margin-top: 8px; }
+    .btn-modal-cancel {
+      flex: 1; height: 44px; border-radius: 12px;
+      border: 1px solid var(--border); background: var(--background);
+      font-size: 14px; font-weight: 500; cursor: pointer;
+      transition: background 0.15s; font-family: inherit;
+      color: var(--foreground);
+    }
+    .btn-modal-cancel:hover { background: var(--secondary); }
+    .btn-modal-confirm {
+      flex: 1; height: 44px; border-radius: 12px;
+      background: var(--foreground); color: var(--background);
+      font-size: 14px; font-weight: 500; border: none;
+      cursor: pointer; transition: opacity 0.15s; font-family: inherit;
+    }
+    .btn-modal-confirm:hover { opacity: 0.85; }
+    .qr-placeholder {
+      padding: 32px; border-radius: 12px;
+      background: var(--secondary); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 18px;
+    }
+    .qr-inner {
+      width: 160px; height: 160px; background: white;
+      border-radius: 10px; display: flex; align-items: center;
+      justify-content: center; border: 1px solid var(--border);
+    }
+    .qr-inner span { font-size: 13px; color: var(--muted-foreground); }
+
+    /* ─── Toast ──────────────────────────────────────── */
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: #10b981; color: white;
+      padding: 14px 20px; border-radius: 12px;
+      font-size: 14px; font-weight: 500; z-index: 300;
+      box-shadow: 0 8px 24px rgba(16,185,129,0.3);
+      animation: slideUp 0.3s ease; display: none;
+    }
+    @keyframes slideUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+
+    /* ─── Responsive ─────────────────────────────────── */
+    @media (max-width: 820px) {
+      .settings-wrap { flex-direction: column; }
+      .settings-sidenav { width: 100%; position: static; }
+      .form-grid-2 { grid-template-columns: 1fr; }
+      .pwd-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('client')) return;
+      const session = Auth.getCurrentUser();
+      const role = session?.role || 'client';
+      const user = session ? Store.getUserById(session.userId) : null;
+      if (!user) return;
+
+      const profile = {
+        name: user.name || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        location: user.location || '',
+        bio: user.bio || '',
+        avatarColor: user.avatarColor || 'linear-gradient(135deg, #6366f1, #4f46e5)'
+      };
+
+      const company = user.companyDetails || {
+        name: '', industry: 'Technology', website: '', size: '50-200 employees', location: ''
+      };
+      
+      const initials = (profile.name.substring(0, 2) || 'AM').toUpperCase();
+
+      const content = `
+        <div class="settings-wrap">
+
+          <!-- ══ Left Tab Nav ══ -->
+          <nav class="settings-sidenav" id="settingsSidenav">
+            <button class="snav-btn active" data-tab="profile" onclick="switchTab('profile',this)">
+              <i data-lucide="user"></i> Profile Information
+            </button>
+            <button class="snav-btn" data-tab="company" onclick="switchTab('company',this)">
+              <i data-lucide="building-2"></i> Company Details
+            </button>
+          </nav>
+
+          <!-- ══ Right Content ══ -->
+          <div class="settings-panel">
+
+            <!-- ── Profile Tab ── -->
+            <div class="tab-content active" id="tab-profile">
+              <div class="settings-title">Profile Information</div>
+              <div class="settings-sub">Update your personal information and profile photo</div>
+
+              <!-- Avatar -->
+              <div class="avatar-row">
+                <div class="avatar-wrap">
+                  <div class="avatar-circle" style="background: ${profile.avatarColor}">${initials}</div>
+                  <button class="avatar-cam-btn"><i data-lucide="camera"></i></button>
+                </div>
+                <div class="avatar-meta">
+                  <p>Profile Photo</p>
+                  <small>JPG, PNG or GIF. Max size 2MB.</small>
+                  <button class="btn-outline-sm" style="display:flex;align-items:center;gap:8px;height:36px;font-size:13px;">
+                    <i data-lucide="upload" style="width:14px;height:14px;"></i> Upload Photo
+                  </button>
+                </div>
+              </div>
+              <hr class="section-divider">
+
+              <!-- Fields -->
+              <div class="form-grid-2">
+                <div class="field-group">
+                  <label>Full Name</label>
+                  <input type="text" class="field-input" value="${profile.name}" id="p-fullname">
+                </div>
+                <div class="field-group">
+                  <label>Email Address</label>
+                  <div class="field-wrap">
+                    <i data-lucide="mail" class="field-icon"></i>
+                    <input type="email" class="field-input with-icon" value="${profile.email}" id="p-email">
+                  </div>
+                </div>
+                <div class="field-group" style="grid-column: 1 / -1;">
+                  <label>Phone Number</label>
+                  <div class="phone-input-group">
+                    <select class="phone-country-select" id="p-country-code">
+                      ${Validate.getPhoneCountries().map(c => 
+                        '<option value="' + c.code + '"' + (c.code === '+91' ? ' selected' : '') + '>' + c.flag + ' ' + c.name + ' (' + c.code + ')' + '</option>'
+                      ).join('')}
+                    </select>
+                    <div class="phone-number-wrap">
+                      <i data-lucide="phone" class="field-icon"></i>
+                      <input type="tel" class="field-input with-icon" value="${profile.phone}" id="p-phone"
+                             maxlength="10" placeholder="e.g. 9876543210">
+                    </div>
+                  </div>
+                  <div class="phone-hint" id="p-phone-hint">
+                    <i data-lucide="info"></i> Enter 10-digit number
+                  </div>
+                  <div id="p-phone-error" class="phone-error-msg" style="display:none;"></div>
+                </div>
+                <div class="field-group">
+                  <label>Location</label>
+                  <div class="field-wrap">
+                    <i data-lucide="map-pin" class="field-icon"></i>
+                    <input type="text" class="field-input with-icon" value="${profile.location}" id="p-location">
+                  </div>
+                </div>
+              </div>
+              <div class="field-group" style="margin-bottom:4px;">
+                <label>Bio</label>
+                <textarea class="field-input" rows="4" id="p-bio" oninput="updateCharCount()">${profile.bio}</textarea>
+              </div>
+              <div class="char-count" id="bioCharCount">${profile.bio.length}/500 characters</div>
+
+              <div class="save-row">
+                <button class="btn-save" id="p-save-btn" onclick="saveProfileChanges()">
+                  <i data-lucide="save"></i> Save Changes
+                </button>
+              </div>
+            </div>
+
+            <!-- ── Company Tab ── -->
+            <div class="tab-content" id="tab-company">
+              <div class="settings-title">Company Details</div>
+              <div class="settings-sub">Update your company information and branding</div>
+
+              <div class="avatar-row">
+                <div class="avatar-wrap">
+                  <div class="avatar-square">
+                    <i data-lucide="building-2" style="width:32px;height:32px;"></i>
+                  </div>
+                  <button class="avatar-cam-btn"><i data-lucide="camera"></i></button>
+                </div>
+                <div class="avatar-meta">
+                  <p>Company Logo</p>
+                  <small>Recommended size: 400×400px. Max size 2MB.</small>
+                  <button class="btn-outline-sm" style="display:flex;align-items:center;gap:8px;height:36px;font-size:13px;">
+                    <i data-lucide="upload" style="width:14px;height:14px;"></i> Upload Logo
+                  </button>
+                </div>
+              </div>
+              <hr class="section-divider">
+
+              <div class="form-grid-2">
+                <div class="field-group">
+                  <label>Company Name</label>
+                  <input type="text" class="field-input" value="${company.name}" id="c-name">
+                </div>
+                <div class="field-group">
+                  <label>Industry</label>
+                  <select class="field-input" id="c-industry">
+                    <option ${company.industry==='Technology'?'selected':''}>Technology</option>
+                    <option ${company.industry==='Finance'?'selected':''}>Finance</option>
+                    <option ${company.industry==='Healthcare'?'selected':''}>Healthcare</option>
+                    <option ${company.industry==='Education'?'selected':''}>Education</option>
+                    <option ${company.industry==='E-commerce'?'selected':''}>E-commerce</option>
+                    <option ${company.industry==='Other'?'selected':''}>Other</option>
+                  </select>
+                </div>
+                <div class="field-group">
+                  <label>Company Website</label>
+                  <div class="field-wrap">
+                    <i data-lucide="globe" class="field-icon"></i>
+                    <input type="url" class="field-input with-icon" value="${company.website}" id="c-website">
+                  </div>
+                </div>
+                <div class="field-group">
+                  <label>Company Size</label>
+                  <select class="field-input" id="c-size">
+                    <option ${company.size==='1–10 employees'?'selected':''}>1–10 employees</option>
+                    <option ${company.size==='11–50 employees'?'selected':''}>11–50 employees</option>
+                    <option ${company.size==='50–200 employees'?'selected':''}>50–200 employees</option>
+                    <option ${company.size==='200–500 employees'?'selected':''}>200–500 employees</option>
+                    <option ${company.size==='500+ employees'?'selected':''}>500+ employees</option>
+                  </select>
+                </div>
+                <div class="field-group" style="grid-column:1/-1;">
+                  <label>Location</label>
+                  <div class="field-wrap">
+                    <i data-lucide="map-pin" class="field-icon"></i>
+                    <input type="text" class="field-input with-icon" value="${company.location}" id="c-location">
+                  </div>
+                </div>
+              </div>
+
+              <div class="save-row">
+                <button class="btn-save" onclick="saveCompanyChanges()">
+                  <i data-lucide="save"></i> Save Changes
+                </button>
+              </div>
+            </div>
+
+          </div><!-- /settings-panel -->
+        </div><!-- /settings-wrap -->
+
+        <!-- ══ Toast ══ -->
+        <div class="toast" id="toast">✓ Settings saved successfully</div>
+      `;
+
+      initDashboard({
+        role,
+        activePath: 'profile-settings.html',
+        pageTitle: 'Account Settings',
+        pageSubtitle: 'Manage your account details and company information.',
+        content
+      });
+
+      lucide.createIcons();
+
+      // ── Char counter init
+      if (typeof updateCharCount === 'function') updateCharCount();
+
+      // ── Auto-clear on input
+      ['p-fullname','p-email'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', () => Validate.clearError(id));
+      });
+
+      // ── Phone validation wiring ─────────────────────────
+      const pCountrySelect = document.getElementById('p-country-code');
+      const pPhoneInput    = document.getElementById('p-phone');
+      const pPhoneHint     = document.getElementById('p-phone-hint');
+      const pPhoneError    = document.getElementById('p-phone-error');
+      const pSaveBtn       = document.getElementById('p-save-btn');
+
+      /** Update placeholder, maxlength, and hint when country changes */
+      function updatePhoneUI() {
+        const code = pCountrySelect.value;
+        const rule = Validate.getPhoneValidationRule(code);
+        pPhoneInput.setAttribute('maxlength', rule.length);
+        pPhoneInput.setAttribute('placeholder', rule.placeholder);
+        pPhoneHint.innerHTML = '<i data-lucide="info"></i> Enter ' + rule.length + '-digit number';
+        if (window.lucide) lucide.createIcons();
+        // Re-validate current value
+        validatePhoneField();
+      }
+
+      /** Real-time phone validation */
+      function validatePhoneField() {
+        const code  = pCountrySelect.value;
+        const value = pPhoneInput.value.trim();
+
+        // Clear previous state
+        pPhoneInput.classList.remove('input-error', 'input-valid');
+        pPhoneError.style.display = 'none';
+        pPhoneError.innerHTML = '';
+
+        if (!value) {
+          // Empty is OK (optional)
+          if (pSaveBtn) pSaveBtn.disabled = false;
+          return true;
+        }
+
+        const err = Validate.validatePhoneNumber(value, code);
+        if (err) {
+          pPhoneInput.classList.add('input-error');
+          pPhoneError.innerHTML = '<svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>' + err;
+          pPhoneError.style.display = 'flex';
+          if (pSaveBtn) pSaveBtn.disabled = true;
+          return false;
+        } else {
+          pPhoneInput.classList.add('input-valid');
+          if (pSaveBtn) pSaveBtn.disabled = false;
+          return true;
+        }
+      }
+
+      // Block non-digit characters in real time
+      pPhoneInput?.addEventListener('input', function(e) {
+        this.value = this.value.replace(/\D/g, '');
+        validatePhoneField();
+      });
+
+      // Prevent paste of non-digits
+      pPhoneInput?.addEventListener('paste', function(e) {
+        e.preventDefault();
+        const text = (e.clipboardData || window.clipboardData).getData('text');
+        this.value = text.replace(/\D/g, '').substring(0, parseInt(this.getAttribute('maxlength')) || 15);
+        validatePhoneField();
+      });
+
+      // Block key presses that aren't digits or control keys
+      pPhoneInput?.addEventListener('keypress', function(e) {
+        if (!/[0-9]/.test(e.key)) e.preventDefault();
+      });
+
+      // Country code change
+      pCountrySelect?.addEventListener('change', updatePhoneUI);
+
+      // Initial UI setup
+      updatePhoneUI();
+    });
+
+    function updateCharCount() {
+      const bioEl = document.getElementById('p-bio');
+      const countEl = document.getElementById('bioCharCount');
+      if (bioEl && countEl) {
+        countEl.textContent = `${bioEl.value.length}/500 characters`;
+      }
+    }
+
+    function saveProfileChanges() {
+      const name  = document.getElementById('p-fullname')?.value.trim() || '';
+      const email = document.getElementById('p-email')?.value.trim() || '';
+      const phoneVal = document.getElementById('p-phone')?.value.trim() || '';
+      const countryCode = document.getElementById('p-country-code')?.value || '+91';
+      const location = document.getElementById('p-location')?.value.trim() || '';
+      const bio = document.getElementById('p-bio')?.value.trim() || '';
+
+      const { valid } = Validate.form([
+        { fieldId: 'p-fullname', value: name,  checks: [v => Validate.required(v, 'Full name'), v => Validate.minLength(v, 2, 'Full name')] },
+        { fieldId: 'p-email',   value: email, checks: [Validate.email] },
+      ]);
+      if (!valid) return;
+
+      // Validate phone with country-specific rule
+      if (phoneVal) {
+        const phoneErr = Validate.validatePhoneNumber(phoneVal, countryCode);
+        if (phoneErr) {
+          const errEl = document.getElementById('p-phone-error');
+          const phoneInput = document.getElementById('p-phone');
+          if (phoneInput) phoneInput.classList.add('input-error');
+          if (errEl) {
+            errEl.innerHTML = '<svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>' + phoneErr;
+            errEl.style.display = 'flex';
+          }
+          return;
+        }
+      }
+
+      // Combine country code + phone for storage
+      const fullPhone = phoneVal ? (countryCode + phoneVal) : '';
+
+      // Save to store
+      try {
+        const session = typeof Auth !== "undefined" ? Auth.getCurrentUser() : null;
+        if (session) {
+          Store.updateUser(session.userId, { name, email, phone: fullPhone, phoneCountryCode: countryCode, location, bio });
+          // Update session
+          const updated = { ...session, name, email };
+          localStorage.setItem('lannent_session', JSON.stringify(updated));
+        }
+      } catch(e) { console.warn('Store update failed', e); }
+
+      Validate.toast('Profile saved successfully!', 'success');
+      
+      const initials = (name.substring(0, 2) || 'AM').toUpperCase();
+      const circle = document.querySelector('.avatar-circle');
+      if (circle) circle.textContent = initials;
+    }
+
+    function saveCompanyChanges() {
+      const name = document.getElementById('c-name')?.value.trim() || '';
+      const industry = document.getElementById('c-industry')?.value || '';
+      const website = document.getElementById('c-website')?.value.trim() || '';
+      const size = document.getElementById('c-size')?.value || '';
+      const location = document.getElementById('c-location')?.value.trim() || '';
+
+      try {
+        const session = typeof Auth !== "undefined" ? Auth.getCurrentUser() : null;
+        if (session) {
+          Store.updateUser(session.userId, { 
+            companyDetails: { name, industry, website, size, location }
+          });
+        }
+      } catch(e) { console.warn('Store update failed', e); }
+
+      Validate.toast('Company details saved successfully!', 'success');
+    }
+  </script>
+</head>
+<body></body>
+</html>

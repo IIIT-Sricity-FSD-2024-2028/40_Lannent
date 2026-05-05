@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Client Dashboard — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('client')) return;
+
+      // Live stats from store
+      const session = typeof Auth !== "undefined" ? Auth.getCurrentUser() : null;
+      const userId = session?.userId || 'u1';
+      const myTasks = Store.getTasksByClient(userId);
+      const activeTasks = myTasks.filter(t => t.status === 'in-progress').length;
+      const pendingApps = Store.getProposals().filter(p => myTasks.find(t => t.id === p.taskId) && p.status === 'pending' && p.type !== 'invitation').length;
+      const user = Store.getUserById(userId);
+      const walletBal = user?.walletBalance || 0;
+      const completedTasks = myTasks.filter(t => t.status === 'completed').length;
+
+      // Recent activity from notifications
+      const notifs = Store.getNotifications(userId);
+
+      const content = `
+        <!-- Stats -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div>
+              <div class="stat-val">${activeTasks}</div>
+              <div class="stat-label">Active Projects</div>
+              <div class="stat-change">${myTasks.length} total</div>
+            </div>
+            <div class="stat-icon-wrap" style="background:#eff6ff;">
+              <i data-lucide="folder-kanban" style="width:20px;height:20px;color:#3b82f6;"></i>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="stat-val">${pendingApps}</div>
+              <div class="stat-label">Pending Applications</div>
+              <div class="stat-change">${pendingApps} new</div>
+            </div>
+            <div class="stat-icon-wrap" style="background:#faf5ff;">
+              <i data-lucide="users" style="width:20px;height:20px;color:#a855f7;"></i>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="stat-val">$${walletBal.toLocaleString()}</div>
+              <div class="stat-label">Wallet Balance</div>
+              <div class="stat-change">Available</div>
+            </div>
+            <div class="stat-icon-wrap" style="background:#ecfdf5;">
+              <i data-lucide="wallet" style="width:20px;height:20px;color:#10b981;"></i>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="stat-val">${completedTasks}</div>
+              <div class="stat-label">Completed Tasks</div>
+              <div class="stat-change">all time</div>
+            </div>
+            <div class="stat-icon-wrap" style="background:#fff7ed;">
+              <i data-lucide="check-circle" style="width:20px;height:20px;color:#f97316;"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div style="margin-bottom: 32px;">
+          <h2 style="font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 24px; font-weight: 500; margin-bottom: 20px;">Quick Actions</h2>
+          <div class="quick-actions-v2">
+            <a href="post-task.html" class="qa-v2-card" style="background:#f0f6ff; border-color:#e0efff;">
+              <div class="qa-v2-icon" style="color:#2563eb;">
+                <i data-lucide="plus" style="width:20px;height:20px;"></i>
+              </div>
+              <div class="qa-v2-content">
+                <div class="qa-v2-title">Post New Task</div>
+                <div class="qa-v2-desc">Create a new project and hire workers</div>
+              </div>
+            </a>
+            <a href="hire-gig-workers.html" class="qa-v2-card" style="background:#fdf5ff; border-color:#f8e4ff;">
+              <div class="qa-v2-icon" style="color:#9333ea;">
+                <i data-lucide="search" style="width:20px;height:20px;"></i>
+              </div>
+              <div class="qa-v2-content">
+                <div class="qa-v2-title">Browse Gig Workers</div>
+                <div class="qa-v2-desc">Find verified talent for your projects</div>
+              </div>
+            </a>
+            <a href="worker-applications.html" class="qa-v2-card" style="background:#f0fdf4; border-color:#dcfce7;">
+              <div class="qa-v2-icon" style="color:#16a34a;">
+                <i data-lucide="eye" style="width:20px;height:20px;"></i>
+              </div>
+              <div class="qa-v2-content">
+                <div class="qa-v2-title">View Applications</div>
+                <div class="qa-v2-desc">Review proposals from gig workers</div>
+              </div>
+            </a>
+            <a href="client-wallet.html" class="qa-v2-card" style="background:#fffaf0; border-color:#ffeed5;">
+              <div class="qa-v2-icon" style="color:#ea580c;">
+                <i data-lucide="wallet" style="width:20px;height:20px;"></i>
+              </div>
+              <div class="qa-v2-content">
+                <div class="qa-v2-title">Manage Wallet</div>
+                <div class="qa-v2-desc">Add funds and view transactions</div>
+              </div>
+            </a>
+          </div>
+        </div>
+
+        <!-- Active Projects Table -->
+        <div class="projects-table">
+          <div class="table-header">
+            <span class="table-title">Active Projects</span>
+            <a href="client-my-projects.html" class="btn-outline" style="font-size:13px;padding:6px 14px;">View All</a>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Project</th>
+                  <th>Worker</th>
+                  <th>Progress</th>
+                  <th>Deadline</th>
+                  <th>Status</th>
+                  <th>Escrow</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${myTasks.filter(t => t.status !== 'completed').slice(0, 4).map(t => {
+                  const worker = Store.getUserById(t.workerId);
+                  const avatar = worker ? worker.avatar : '?';
+                  const name = worker ? worker.name : 'Not Assigned';
+                  const bg = worker ? worker.avatarColor : '#e5e7eb';
+                  const color = worker ? 'white' : '#6b7280';
+                  
+                  const ms = Store.getMilestonesByTask(t.id);
+                  const msCount = ms.length;
+                  const msDone = ms.filter(m => ['completed', 'approved', 'audit-passed', 'done'].includes(m.status)).length;
+                  const prog = msCount ? Math.round((msDone / msCount) * 100) : 0;
+                  
+                  const statusColors = { 'in-progress': 'badge-blue', 'review': 'badge-purple', 'pending': 'badge-orange', 'completed': 'badge-green', 'open': 'badge-orange' };
+                  const badgeClass = statusColors[t.status] || 'badge-blue';
+                  
+                  return `
+                  <tr>
+                    <td style="font-weight:600;">${t.title}</td>
+                    <td>
+                      <div class="worker-cell">
+                        <div class="worker-avatar" style="background:${bg};color:${color};">${avatar}</div>
+                        <span ${!worker ? 'style="color:var(--muted-foreground);"' : ''}>${name}</span>
+                      </div>
+                    </td>
+                    <td style="min-width:140px;">
+                      <div class="progress-info"><span>${msDone}/${msCount} completed</span><span style="color:#6366f1;font-weight:600;">${prog}%</span></div>
+                      <div class="progress-track-sm"><div class="progress-fill-sm" style="width:${prog}%;"></div></div>
+                    </td>
+                    <td style="color:var(--muted-foreground);font-size:13px;">${t.deadline ? new Date(t.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'TBD'}</td>
+                    <td><span class="badge ${badgeClass}" style="text-transform:capitalize;">${(t.status || 'unknown').replace(/-/g, ' ')}</span></td>
+                    <td style="font-weight:600;">$${(t.budget || 0).toLocaleString()}</td>
+                    <td><a href="project-workroom.html?id=${t.id}" class="btn-sm">View</a></td>
+                  </tr>`;
+                }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted-foreground);padding:24px;">No active projects right now. Start by posting a task!</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      `;
+
+      initDashboard({
+        role: 'client',
+        activePath: 'client-dashboard.html',
+        pageTitle: 'Client Dashboard',
+        pageSubtitle: 'Manage your projects and track progress',
+        content
+      });
+      lucide.createIcons();
+    });
+  </script>
+</head>
+<body></body>
+</html>

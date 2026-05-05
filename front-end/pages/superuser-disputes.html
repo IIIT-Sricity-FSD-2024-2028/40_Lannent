@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>All Disputes — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .dispute-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px 24px; margin-bottom:16px; }
+    .dispute-card.resolved { opacity:0.7; }
+    .dispute-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:12px; }
+    .dispute-project { font-size:15px; font-weight:600; }
+    .dispute-meta { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; font-size:13px; color:var(--muted-foreground); }
+    .dispute-reason { font-size:13px; line-height:1.6; color:var(--muted-foreground); padding:12px 16px; background:var(--secondary); border-radius:10px; margin-bottom:16px; }
+    .dispute-actions { display:flex; gap:10px; flex-wrap:wrap; }
+    .btn-worker { padding:8px 16px; border-radius:10px; background:#ecfdf5; border:1px solid #bbf7d0; color:#166534; font-size:13px; font-weight:500; cursor:pointer; }
+    .btn-worker:hover { background:#bbf7d0; }
+    .btn-client { padding:8px 16px; border-radius:10px; background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; font-size:13px; font-weight:500; cursor:pointer; }
+    .btn-client:hover { background:#bfdbfe; }
+    .btn-split { padding:8px 16px; border-radius:10px; background:#faf5ff; border:1px solid #e9d5ff; color:#6b21a8; font-size:13px; font-weight:500; cursor:pointer; }
+    .btn-split:hover { background:#e9d5ff; }
+    .resolution-box { margin-top:12px; padding:12px 16px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; font-size:13px; color:#166534; line-height:1.5; }
+    .su-toolbar { display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
+    .su-filter { padding:10px 14px; border:1px solid var(--border); border-radius:12px; background:var(--background); font-size:14px; font-family:inherit; cursor:pointer; }
+    /* Override Modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; display:none; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:var(--card); border-radius:20px; padding:28px; max-width:480px; width:100%; box-shadow:0 24px 64px rgba(0,0,0,0.18); }
+    .form-label { display:block; font-size:13px; font-weight:500; margin-bottom:6px; }
+    .form-select, .form-textarea { width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:10px; background:var(--background); font-size:14px; font-family:inherit; outline:none; box-sizing:border-box; }
+    .form-textarea { resize:vertical; }
+    .form-group { margin-bottom:16px; }
+    .modal-actions { display:flex; gap:10px; margin-top:20px; }
+    .btn-cancel-modal { flex:1; padding:10px; border-radius:12px; border:1px solid var(--border); background:var(--background); font-size:14px; cursor:pointer; }
+    .btn-save-modal { flex:2; padding:10px; border-radius:12px; border:none; background:linear-gradient(to bottom,hsl(0,0%,16%),hsl(0,0%,10%)); color:#fff; font-size:14px; font-weight:500; cursor:pointer; }
+  </style>
+  <script>
+    let activeDisputeId = null;
+
+    function renderDisputes(filterStatus) {
+      const disputes = Store.getDisputes().filter(d => filterStatus === 'all' || d.status === filterStatus);
+      const container = document.getElementById('disputesList');
+      if (!container) return;
+
+      document.getElementById('disputeCount').textContent = disputes.length + ' dispute' + (disputes.length !== 1 ? 's' : '');
+
+      if (!disputes.length) {
+        container.innerHTML = '<div style="text-align:center;padding:48px;color:var(--muted-foreground);">No disputes found.</div>';
+        return;
+      }
+
+      container.innerHTML = disputes.map(d => {
+        const task = Store.getTaskById(d.taskId);
+        return `
+        <div class="dispute-card ${d.status === 'resolved' ? 'resolved' : ''}" id="dispute_${d.id}">
+          <div class="dispute-header">
+            <div>
+              <div class="dispute-project">${d.project}</div>
+              <div style="font-size:12px;color:var(--muted-foreground);margin-top:2px;">Raised ${d.createdAt}</div>
+            </div>
+            <span class="badge ${d.status === 'open' ? 'badge-orange' : 'badge-green'}">${d.status}</span>
+          </div>
+          <div class="dispute-meta">
+            <span><strong>Raised by:</strong> ${d.raisedByName}</span>
+            <span><strong>Against:</strong> ${d.againstName}</span>
+            <span><strong>Amount:</strong> ${d.amount}</span>
+            ${d.milestone ? `<span><strong>Milestone:</strong> ${d.milestone}</span>` : ''}
+          </div>
+          <div class="dispute-reason">${d.reason}</div>
+          ${d.status === 'resolved' ? `
+            <div class="resolution-box">
+              <strong>Resolution (${d.verdict?.replace(/-/g,' ')}):</strong> ${d.resolution}
+              ${d.resolvedAt ? `<br><span style="opacity:0.7;">Resolved on ${d.resolvedAt}</span>` : ''}
+            </div>
+          ` : `
+            <div class="dispute-actions">
+              <button class="btn-worker" onclick="quickResolve('${d.id}','worker-favour')">✓ Favour Worker</button>
+              <button class="btn-client" onclick="quickResolve('${d.id}','client-favour')">✓ Favour Client</button>
+              <button class="btn-split" onclick="quickResolve('${d.id}','split')">⟺ Split 50/50</button>
+              <button class="btn-edit" onclick="openOverrideModal('${d.id}')" style="padding:8px 16px;border-radius:10px;border:1px solid var(--border);background:var(--background);font-size:13px;font-weight:500;cursor:pointer;">Custom Override</button>
+            </div>
+          `}
+        </div>`;
+      }).join('');
+    }
+
+    function quickResolve(disputeId, verdict) {
+      const verdictLabels = { 'worker-favour': 'Worker receives full payment', 'client-favour': 'Client receives full refund', 'split': 'Funds split equally between both parties' };
+      Validate.confirm(
+        `Apply verdict: "${verdict.replace(/-/g,' ')}"? ${verdictLabels[verdict]}.`,
+        () => {
+          const d = Store.getDisputeById(disputeId);
+          Store.resolveDispute(disputeId, { verdict, resolution: verdictLabels[verdict], expertId: Auth.getCurrentUser()?.userId || 'u4' });
+          // Notify both parties
+          const vLabel = verdict === 'worker-favour' ? 'in favour of the Worker' : verdict === 'client-favour' ? 'in favour of the Client' : 'with a 50/50 split';
+          if (d && d.raisedBy) {
+            Store.addNotification({ userId: d.raisedBy, type: 'dispute-resolved', text: `Dispute resolved: ${d.project}`, subtext: `Verdict ${vLabel}` });
+          }
+          if (d && d.againstId) {
+            Store.addNotification({ userId: d.againstId, type: 'dispute-resolved', text: `Dispute resolved: ${d.project}`, subtext: `Verdict ${vLabel}` });
+          }
+          Validate.toast('Dispute resolved successfully.', 'success');
+          const filter = document.getElementById('statusFilterD')?.value || 'all';
+          renderDisputes(filter);
+        }
+      );
+    }
+
+    function openOverrideModal(disputeId) {
+      activeDisputeId = disputeId;
+      const d = Store.getDisputeById(disputeId);
+      document.getElementById('overrideDisputeTitle').textContent = 'Override: ' + d.project;
+      document.getElementById('overrideVerdict').value = '';
+      document.getElementById('overrideResolution').value = '';
+      document.getElementById('overrideModal').classList.add('open');
+    }
+
+    function closeOverrideModal() {
+      document.getElementById('overrideModal').classList.remove('open');
+      activeDisputeId = null;
+      Validate.clearAllErrors();
+    }
+
+    function submitOverride() {
+      const verdict = document.getElementById('overrideVerdict').value;
+      const resolution = document.getElementById('overrideResolution').value.trim();
+
+      const { valid } = Validate.form([
+        { fieldId: 'overrideVerdict', value: verdict, checks: [v => Validate.selected(v, 'verdict')] },
+        { fieldId: 'overrideResolution', value: resolution, checks: [v => Validate.required(v, 'Resolution'), v => Validate.minLength(v, 20, 'Resolution')] },
+      ]);
+      if (!valid) return;
+
+      const d = Store.getDisputeById(activeDisputeId);
+      Store.resolveDispute(activeDisputeId, { verdict, resolution, expertId: Auth.getCurrentUser()?.userId || 'u4' });
+      // Notify both parties
+      const vLabel = verdict === 'worker-favour' ? 'in favour of the Worker' : verdict === 'client-favour' ? 'in favour of the Client' : 'with a 50/50 split';
+      if (d && d.raisedBy) {
+        Store.addNotification({ userId: d.raisedBy, type: 'dispute-resolved', text: `Dispute resolved: ${d.project}`, subtext: `Verdict ${vLabel}` });
+      }
+      if (d && d.againstId) {
+        Store.addNotification({ userId: d.againstId, type: 'dispute-resolved', text: `Dispute resolved: ${d.project}`, subtext: `Verdict ${vLabel}` });
+      }
+      closeOverrideModal();
+      Validate.toast('Dispute override applied.', 'success');
+      const filter = document.getElementById('statusFilterD')?.value || 'all';
+      renderDisputes(filter);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('superuser')) return;
+
+      const disputes = Store.getDisputes();
+      const open = disputes.filter(d => d.status === 'open').length;
+      const resolved = disputes.filter(d => d.status === 'resolved').length;
+
+      const content = `
+        <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px;">
+          <div class="stat-card">
+            <div><div class="stat-val">${disputes.length}</div><div class="stat-label">Total Disputes</div></div>
+            <div class="stat-icon-wrap" style="background:#faf5ff;"><i data-lucide="scale" style="width:20px;height:20px;color:#a855f7;"></i></div>
+          </div>
+          <div class="stat-card">
+            <div><div class="stat-val">${open}</div><div class="stat-label">Open Disputes</div></div>
+            <div class="stat-icon-wrap" style="background:#fff7ed;"><i data-lucide="alert-circle" style="width:20px;height:20px;color:#f97316;"></i></div>
+          </div>
+          <div class="stat-card">
+            <div><div class="stat-val">${resolved}</div><div class="stat-label">Resolved</div></div>
+            <div class="stat-icon-wrap" style="background:#ecfdf5;"><i data-lucide="check-circle" style="width:20px;height:20px;color:#10b981;"></i></div>
+          </div>
+        </div>
+
+        <div class="su-toolbar">
+          <select class="su-filter" id="statusFilterD" onchange="renderDisputes(this.value)">
+            <option value="all">All Disputes</option>
+            <option value="open">Open Only</option>
+            <option value="resolved">Resolved Only</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom:12px;font-size:13px;color:var(--muted-foreground);">Showing <strong id="disputeCount"></strong></div>
+
+        <div id="disputesList"></div>
+
+        <!-- Override Modal -->
+        <div class="modal-overlay" id="overrideModal">
+          <div class="modal">
+            <p style="font-size:18px;font-weight:600;margin-bottom:6px;" id="overrideDisputeTitle">Override Dispute</p>
+            <p style="font-size:14px;color:var(--muted-foreground);margin-bottom:20px;">As Super User, your override is binding and final.</p>
+            <div class="form-group">
+              <label class="form-label">Verdict <span style="color:#ef4444;">*</span></label>
+              <select class="form-select" id="overrideVerdict">
+                <option value="">Select verdict</option>
+                <option value="worker-favour">Favour Worker — release payment</option>
+                <option value="client-favour">Favour Client — refund escrow</option>
+                <option value="split">Split 50/50 — divide equally</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Resolution Notes <span style="color:#ef4444;">*</span></label>
+              <textarea class="form-textarea" id="overrideResolution" rows="4" placeholder="Explain the reasoning for this verdict..."></textarea>
+            </div>
+            <div class="modal-actions">
+              <button class="btn-cancel-modal" onclick="closeOverrideModal()">Cancel</button>
+              <button class="btn-save-modal" onclick="submitOverride()">Apply Override</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      initDashboard({ role: 'superuser', activePath: 'superuser-disputes.html', pageTitle: 'All Disputes', pageSubtitle: 'Review and override dispute verdicts across the platform', content });
+
+      setTimeout(() => {
+        lucide.createIcons();
+        renderDisputes('all');
+        document.getElementById('overrideModal')?.addEventListener('click', e => { if (e.target.id === 'overrideModal') closeOverrideModal(); });
+        ['overrideVerdict','overrideResolution'].forEach(id => document.getElementById(id)?.addEventListener('input', () => Validate.clearError(id)));
+      }, 100);
+    });
+  </script>
+</head>
+<body></body>
+</html>

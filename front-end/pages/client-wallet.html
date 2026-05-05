@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wallet & Escrow — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .wallet-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:24px; }
+    .wallet-card { border-radius:20px; padding:28px; color:white; position:relative; overflow:hidden; }
+    .wallet-card::after { content:''; position:absolute; top:-40px; right:-40px; width:180px; height:180px; border-radius:50%; background:rgba(255,255,255,0.1); }
+    .tx-row { display:flex; align-items:center; gap:14px; padding:14px 0; border-bottom:1px solid rgba(0,0,0,0.05); }
+    .tx-row:last-child { border-bottom:none; }
+    .tx-icon { width:40px; height:40px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .tx-amount-pos { color:#10b981; font-weight:700; font-size:15px; }
+    .tx-amount-neg { color:#ef4444; font-weight:700; font-size:15px; }
+    .escrow-project { padding:16px; background:var(--input-bg); border-radius:14px; margin-bottom:12px; }
+    @keyframes slideUp { from { transform:translateY(30px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+    @keyframes slideInRight { from { transform:translateX(400px); opacity:0; } to { transform:translateX(0); opacity:1; } }
+    @keyframes slideInLeft { from { transform:translateX(0); opacity:1; } to { transform:translateX(400px); opacity:0; } }
+    @media(max-width:768px){ .wallet-grid{ grid-template-columns:1fr; } }
+  </style>
+  <script>
+    let availableBalance = 0;
+    let _walletUserId = '';
+
+    const TX_TYPE_MAP = {
+      'deposit':           { label:'Wallet Top-up',       icon:'arrow-down-circle', color:'#10b981', bg:'#ecfdf5', positive:true },
+      'escrow-lock':       { label:'Escrow Funded',       icon:'lock',              color:'#6366f1', bg:'#eef2ff', positive:false },
+      'milestone-release': { label:'Milestone Released',  icon:'unlock',            color:'#f59e0b', bg:'#fffbeb', positive:false },
+      'withdrawal':        { label:'Withdrawal',          icon:'arrow-up-circle',   color:'#ef4444', bg:'#fef2f2', positive:false },
+      'refund':            { label:'Partial Refund',      icon:'rotate-ccw',        color:'#a855f7', bg:'#faf5ff', positive:true },
+    };
+
+    const LOCKED_STATUSES = ['pending','submitted','todo','not-started','in-progress','review','audit-requested','audit-passed','disputed'];
+    const RELEASED_STATUSES = ['completed','approved','done','paid'];
+
+    function computeWalletData(userId) {
+      const user = Store.getUserById(userId);
+      const userTxs = Store.getTransactionsByUser(userId);
+      const allTxs = Store.getTransactions();
+      const clientTasks = Store.getTasksByClient(userId);
+      const clientTaskIds = new Set(clientTasks.map(t => t.id));
+
+      const walletBalance = user?.walletBalance || 0;
+      const deposits = userTxs.filter(t => t.type==='deposit' && t.toId===userId).reduce((s,t)=>s+t.amount,0);
+      const spent = userTxs.filter(t => t.type==='escrow-lock' && t.fromId===userId).reduce((s,t)=>s+t.amount,0);
+
+      // Total released = milestone-release transactions for this client's tasks (from ALL transactions, not just user's)
+      const releaseTxs = allTxs.filter(t => t.type==='milestone-release' && clientTaskIds.has(t.taskId));
+      const released = releaseTxs.reduce((s,t)=>s+t.amount,0);
+
+      // Active escrow = sum of milestone budgets that are NOT yet released
+      let activeEscrowAmount = 0;
+      let activeEscrowCount = 0;
+      const escrowProjects = [];
+
+      clientTasks.filter(t => t.status==='in-progress' || t.status==='open').forEach(t => {
+        const msList = Store.getMilestonesByTask(t.id);
+        const releasedVal = msList.filter(m => RELEASED_STATUSES.includes(m.status)).reduce((s,m)=>s+(m.budget||0),0);
+        const lockedVal = msList.filter(m => LOCKED_STATUSES.includes(m.status)).reduce((s,m)=>s+(m.budget||0),0);
+        const total = msList.reduce((s,m)=>s+(m.budget||0),0) || t.budget;
+        const pct = total ? Math.round((releasedVal/total)*100) : 0;
+
+        if (lockedVal > 0) activeEscrowCount++;
+        activeEscrowAmount += lockedVal;
+
+        escrowProjects.push({
+          name: t.title,
+          worker: Store.getUserById(t.workerId)?.name || 'TBD',
+          locked: '$' + lockedVal.toLocaleString(),
+          released: '$' + releasedVal.toLocaleString(),
+          total: '$' + total.toLocaleString(),
+          progress: pct,
+        });
+      });
+
+      // Build combined transaction list: user's own txs + milestone-releases for their tasks
+      const userTxIds = new Set(userTxs.map(t => t.id));
+      const combinedTxs = [...userTxs, ...releaseTxs.filter(t => !userTxIds.has(t.id))];
+      const transactions = combinedTxs.map(tx => {
+        const cfg = TX_TYPE_MAP[tx.type] || { label: tx.type, icon:'circle', color:'#64748b', bg:'#f1f5f9', positive:false };
+        const task = Store.getTaskById(tx.taskId);
+        return { type:tx.type, label:cfg.label, sub:(task?.title||'Platform') + ' \u2022 ' + (tx.createdAt || new Date().toISOString().slice(0,10)), amount:(cfg.positive?'+':'-') + '$' + tx.amount.toLocaleString(), positive:cfg.positive, icon:cfg.icon, color:cfg.color, bg:cfg.bg };
+      });
+
+      return { walletBalance, deposits, spent, released, activeEscrowAmount, activeEscrowCount, escrowProjects, transactions };
+    }
+
+    function renderDynamicWalletContent(d) {
+      const txRows = d.transactions.length === 0
+        ? `<div style="padding:48px 24px;text-align:center;color:var(--muted-foreground);">
+             <i data-lucide="wallet" style="width:40px;height:40px;opacity:0.3;margin:0 auto 12px;display:block;"></i>
+             <div style="font-weight:600;margin-bottom:4px;">No transactions yet</div>
+             <div style="font-size:13px;">Transactions will appear here once you fund a project.</div>
+           </div>`
+        : d.transactions.slice(-10).reverse().map(t => `
+              <div class="tx-row">
+                <div class="tx-icon" style="background:${t.bg};">
+                  <i data-lucide="${t.icon}" style="width:18px;height:18px;color:${t.color};"></i>
+                </div>
+                <div style="flex:1;">
+                  <div style="font-weight:600;font-size:14px;">${t.label}</div>
+                  <div style="font-size:12px;color:var(--muted-foreground);">${t.sub}</div>
+                </div>
+                <span class="${t.positive ? 'tx-amount-pos' : 'tx-amount-neg'}">${t.amount}</span>
+              </div>`).join('');
+
+      const escrowHtml = d.escrowProjects.length
+        ? d.escrowProjects.map(p => `
+              <div class="escrow-project">
+                <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                  <span style="font-weight:600;font-size:14px;">${p.name}</span>
+                  <span style="font-size:13px;font-weight:700;color:#6366f1;">${p.total}</span>
+                </div>
+                <div style="font-size:12px;color:var(--muted-foreground);margin-bottom:10px;">Worker: ${p.worker}</div>
+                <div style="height:6px;border-radius:9999px;background:var(--muted);overflow:hidden;margin-bottom:8px;">
+                  <div style="height:100%;border-radius:9999px;background:linear-gradient(90deg,#10b981,#34d399);width:${p.progress}%;"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;">
+                  <span style="color:#10b981;font-weight:500;">Released: ${p.released}</span>
+                  <span style="color:#6366f1;font-weight:500;">Locked: ${p.locked}</span>
+                </div>
+              </div>`).join('')
+        : '<div style="padding:20px;text-align:center;color:var(--muted-foreground);font-size:13px;">No active projects with escrow funded.</div>';
+
+      const stats = [
+        { label:'Total Deposited', val:'$'+d.deposits.toLocaleString(), color:'#6366f1', icon:'arrow-down-circle' },
+        { label:'Total Spent', val:'$'+d.spent.toLocaleString(), color:'#f97316', icon:'trending-up' },
+        { label:'Total Released', val:'$'+d.released.toLocaleString(), color:'#10b981', icon:'unlock' },
+        { label:'Active Escrows', val:d.activeEscrowCount.toString(), color:'#a855f7', icon:'lock' },
+      ];
+
+      return `
+        <div class="wallet-grid">
+          <div class="wallet-card" style="background:linear-gradient(135deg,#6366f1,#4f46e5);">
+            <div style="position:relative;z-index:1;">
+              <div style="font-size:13px;font-weight:500;opacity:0.8;margin-bottom:8px;">Available Balance</div>
+              <div style="font-size:36px;font-weight:900;letter-spacing:-0.03em;margin-bottom:20px;" id="availableBalanceDisplay">$${d.walletBalance.toLocaleString()}</div>
+              <div style="display:flex;gap:12px;">
+                <button onclick="showAddFunds()" style="padding:8px 20px;border-radius:10px;background:rgba(255,255,255,0.2);color:white;border:1px solid rgba(255,255,255,0.3);font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s;" onmouseenter="this.style.background='rgba(255,255,255,0.3)'" onmouseleave="this.style.background='rgba(255,255,255,0.2)'">+ Add Funds</button>
+                <button onclick="showWithdraw()" style="padding:8px 20px;border-radius:10px;background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.2);font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s;" onmouseenter="this.style.background='rgba(255,255,255,0.25)'" onmouseleave="this.style.background='rgba(255,255,255,0.15)'">Withdraw</button>
+              </div>
+            </div>
+          </div>
+          <div class="wallet-card" style="background:linear-gradient(135deg,#10b981,#059669);">
+            <div style="position:relative;z-index:1;">
+              <div style="font-size:13px;font-weight:500;opacity:0.8;margin-bottom:8px;">Total in Escrow</div>
+              <div style="font-size:36px;font-weight:900;letter-spacing:-0.03em;margin-bottom:8px;">$${d.activeEscrowAmount.toLocaleString()}</div>
+              <div style="font-size:13px;opacity:0.8;margin-bottom:16px;">Across ${d.activeEscrowCount} active project${d.activeEscrowCount!==1?'s':''}</div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:12px;opacity:0.9;">
+                <i data-lucide="shield-check" style="width:14px;height:14px;"></i> Secured & Protected
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
+          ${stats.map(s => `
+            <div class="stat-card">
+              <div><div class="stat-val" style="color:${s.color};">${s.val}</div><div class="stat-label">${s.label}</div></div>
+              <div class="stat-icon-wrap" style="background:${s.color}20;">
+                <i data-lucide="${s.icon}" style="width:20px;height:20px;color:${s.color};"></i>
+              </div>
+            </div>`).join('')}
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px 24px;">
+            <h3 style="font-size:15px;font-weight:600;margin-bottom:20px;">Escrow by Project</h3>
+            ${escrowHtml}
+          </div>
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px 24px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+              <h3 style="font-size:15px;font-weight:600;">Recent Transactions</h3>
+              <button class="btn-outline" style="font-size:13px;padding:5px 12px;" onclick="showAllTransactions()">View All</button>
+            </div>
+            ${txRows}
+          </div>
+        </div>`;
+    }
+
+    function refreshWallet() {
+      const d = computeWalletData(_walletUserId);
+      availableBalance = d.walletBalance;
+      const container = document.getElementById('walletDynamicContent');
+      if (container) {
+        container.innerHTML = renderDynamicWalletContent(d);
+        lucide.createIcons();
+      }
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('client')) return;
+
+      const session = typeof Auth !== "undefined" ? Auth.getCurrentUser() : null;
+      _walletUserId = session?.userId || 'u1';
+      const d = computeWalletData(_walletUserId);
+      availableBalance = d.walletBalance;
+
+      const content = `
+        <div id="walletDynamicContent">${renderDynamicWalletContent(d)}</div>
+
+        <!-- Add Funds Modal -->
+        <div id="addFundsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-start;justify-content:center;backdrop-filter:blur(4px);overflow-y:auto;padding:24px 0;">
+          <div style="background:white;border-radius:28px;width:100%;max-width:520px;margin:0 auto;box-shadow:0 40px 100px rgba(0,0,0,0.2);animation:slideUp 0.3s ease;max-height:calc(100vh - 40px);overflow-y:auto;">
+            <style>
+              @keyframes slideUp { from { transform:translateY(30px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+              @keyframes pulse { 0%, 100% { transform:scale(1); } 50% { transform:scale(1.05); } }
+            </style>
+
+            <!-- Header -->
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding:32px 32px 0;">
+              <div>
+                <h2 style="font-size:24px;font-weight:700;margin-bottom:4px;background:linear-gradient(135deg,#6366f1,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Add Funds</h2>
+                <p style="font-size:13px;color:#6b7280;">Securely add money to your Lannent wallet</p>
+              </div>
+              <button onclick="document.getElementById('addFundsModal').style.display='none'" style="background:linear-gradient(135deg,#f3e8ff,#ede9fe);border:none;cursor:pointer;color:#7c3aed;width:32px;height:32px;border-radius:12px;display:flex;align-items:center;justify-content:center;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                <i data-lucide="x" style="width:18px;height:18px;"></i>
+              </button>
+            </div>
+
+            <!-- Current Balance Info -->
+            <div style="background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1px solid #a7f3d0;border-radius:16px;padding:20px;margin:0 32px;margin-bottom:24px;">
+              <div style="font-size:12px;color:#065f46;font-weight:600;margin-bottom:6px;">💰 Current Balance</div>
+              <div style="font-size:28px;font-weight:900;color:#059669;letter-spacing:-0.02em;" id="currentBalanceDisplay">$4,875</div>
+            </div>
+
+            <!-- Amount Selection -->
+            <div style="padding:0 32px;margin-bottom:24px;">
+              <label style="display:block;font-size:14px;font-weight:600;color:#111827;margin-bottom:12px;">Choose Amount</label>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">
+                ${['$500','$1,000','$2,000','$5,000','$10,000','Custom'].map(amt => `
+                  <button type="button" onclick="selectAmount('${amt}',this)"
+                    style="padding:14px;border-radius:14px;border:2px solid #e5e7eb;background:white;font-size:15px;font-weight:600;color:#111827;cursor:pointer;transition:all 0.2s;position:relative;overflow:hidden;"
+                    onmouseenter="this.style.borderColor='#6366f1';this.style.background='#f8fafc';this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 24px rgba(99,102,241,0.15)'"
+                    onmouseleave="this.style.borderColor=this.classList.contains('selected')?'#6366f1':'#e5e7eb';this.style.background=this.classList.contains('selected')?'#eef2ff':'white';this.style.transform='translateY(0)';this.style.boxShadow='none'">
+                    <span style="position:relative;z-index:1;">${amt}</span>
+                    <div style="position:absolute;inset:0;background:linear-gradient(135deg,#6366f1,#a855f7);opacity:0;transition:opacity 0.2s;" class="amount-bg"></div>
+                  </button>`).join('')}
+              </div>
+
+              <!-- Custom Amount Input -->
+              <div id="customAmountSection" style="display:none;margin-top:16px;">
+                <div style="position:relative;">
+                  <span style="position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:18px;font-weight:600;color:#6366f1;">$</span>
+                  <input type="number" id="customAmountInput" placeholder="Enter custom amount" style="width:100%;padding:14px 14px 14px 38px;border:2px solid #ddd6fe;border-radius:12px;font-size:16px;font-weight:600;color:#111827;font-family:system-ui,-apple-system,sans-serif;background:white;outline:none;transition:all 0.2s;" oninput="updateCustomAmount()" onfocus="this.style.borderColor='#a855f7'" onblur="this.style.borderColor='#ddd6fe'" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Payment Methods -->
+            <div style="padding:0 32px;margin-bottom:24px;">
+              <label style="display:block;font-size:14px;font-weight:600;color:#111827;margin-bottom:12px;">Payment Method</label>
+              <div style="display:grid;gap:10px;">
+                ${[
+                  { id: 'bank', name: 'Bank Transfer (ACH)', desc: 'Free • 1-2 business days', icon: 'building-2', color: '#10b981', bg: '#ecfdf5' },
+                  { id: 'card', name: 'Credit/Debit Card', desc: 'Instant • 2.9% fee', icon: 'credit-card', color: '#f59e0b', bg: '#fffbeb' },
+                  { id: 'wire', name: 'Wire Transfer', desc: 'Instant • $25 fee', icon: 'zap', color: '#a855f7', bg: '#faf5ff' }
+                ].map(method => `
+                  <div onclick="selectPaymentMethod('${method.id}',this)" style="padding:16px;border:2px solid #e5e7eb;border-radius:14px;background:white;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor='#6366f1';this.style.background='#f8fafc'" onmouseleave="this.style.borderColor=this.classList.contains('selected')?'#6366f1':'#e5e7eb';this.style.background=this.classList.contains('selected')?'#eef2ff':'white'">
+                    <div style="display:flex;align-items:center;gap:14px;">
+                      <div style="width:48px;height:48px;border-radius:12px;background:${method.bg};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i data-lucide="${method.icon}" style="width:22px;height:22px;color:${method.color};"></i>
+                      </div>
+                      <div style="flex:1;">
+                        <div style="font-size:15px;font-weight:600;color:#111827;">${method.name}</div>
+                        <div style="font-size:13px;color:#6b7280;margin-top:2px;">${method.desc}</div>
+                      </div>
+                      <div style="width:20px;height:20px;border:2px solid #d1d5db;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;" class="method-radio">
+                        <div style="width:10px;height:10px;border-radius:50%;background:#6366f1;opacity:0;transition:opacity 0.2s;" class="method-radio-dot"></div>
+                      </div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <!-- Amount Preview -->
+            <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:16px;padding:20px;margin:0 32px;margin-bottom:24px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:12px;">
+                <span style="font-size:14px;color:#6b7280;">Amount to Add</span>
+                <span style="font-weight:700;color:#111827;font-size:15px;" id="previewAddAmount">$0.00</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:12px;">
+                <span style="font-size:14px;color:#6b7280;">Processing Fee</span>
+                <span style="font-weight:600;color:#ef4444;font-size:14px;" id="previewFee">$0.00</span>
+              </div>
+              <div style="height:1px;background:#e5e7eb;margin:12px 0;"></div>
+              <div style="display:flex;justify-content:space-between;">
+                <span style="font-size:16px;font-weight:700;color:#111827;">Total You'll Pay</span>
+                <span style="font-size:20px;font-weight:900;background:linear-gradient(135deg,#6366f1,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;" id="previewTotal">$0.00</span>
+              </div>
+            </div>
+
+            <!-- Security & Info -->
+            <div style="background:linear-gradient(135deg,#f8fafc,#f1f5f9);border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin:0 32px;margin-bottom:24px;">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+                <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#10b981,#059669);display:flex;align-items:center;justify-content:center;">
+                  <i data-lucide="shield-check" style="width:16px;height:16px;color:white;"></i>
+                </div>
+                <div>
+                  <div style="font-size:13px;font-weight:600;color:#111827;">Secure & Protected</div>
+                  <div style="font-size:12px;color:#6b7280;">256-bit SSL encryption • PCI DSS compliant</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;">
+                  <i data-lucide="clock" style="width:16px;height:16px;color:white;"></i>
+                </div>
+                <div>
+                  <div style="font-size:13px;font-weight:600;color:#111827;">Processing Time</div>
+                  <div style="font-size:12px;color:#6b7280;" id="processingTime">Select a payment method to see processing time</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div style="display:flex;gap:14px;padding:0 32px 32px;">
+              <button onclick="document.getElementById('addFundsModal').style.display='none'" style="flex:1;padding:14px;border-radius:12px;border:1px solid #e5e7eb;background:white;font-size:14px;font-weight:600;color:#111827;cursor:pointer;transition:all 0.2s;" onmouseenter="this.style.background='#f9fafb'" onmouseleave="this.style.background='white'">
+                Cancel
+              </button>
+              <button onclick="processAddFunds()" style="flex:2;padding:14px;border-radius:12px;border:none;background:linear-gradient(135deg,#6366f1,#a855f7);color:white;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.2s;box-shadow:0 4px 12px rgba(99,102,241,0.3);" onmouseenter="this.style.boxShadow='0 8px 24px rgba(99,102,241,0.4)'" onmouseleave="this.style.boxShadow='0 4px 12px rgba(99,102,241,0.3)'">
+                💳 Add Funds Securely
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Withdraw Modal -->
+        <div id="withdrawModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-start;justify-content:center;backdrop-filter:blur(4px);overflow-y:auto;padding:24px 0;">
+          <div style="background:white;border-radius:28px;padding:40px;width:100%;max-width:500px;margin:0 auto;box-shadow:0 40px 100px rgba(0,0,0,0.2);animation:slideUp 0.3s ease;max-height:calc(100vh - 40px);overflow-y:auto;">
+            <style>
+              @keyframes slideUp { from { transform:translateY(30px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+            </style>
+            
+            <!-- Header -->
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;">
+              <div>
+                <h2 style="font-size:24px;font-weight:700;margin-bottom:4px;background:linear-gradient(135deg,#6366f1,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Withdraw Funds</h2>
+                <p style="font-size:13px;color:#6b7280;">Securely transfer funds to your bank account</p>
+              </div>
+              <button onclick="document.getElementById('withdrawModal').style.display='none'" style="background:linear-gradient(135deg,#f3e8ff,#ede9fe);border:none;cursor:pointer;color:#7c3aed;width:32px;height:32px;border-radius:12px;display:flex;align-items:center;justify-content:center;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                <i data-lucide="x" style="width:18px;height:18px;"></i>
+              </button>
+            </div>
+
+            <!-- Available Balance Info -->
+            <div style="background:linear-gradient(135deg,#f3e8ff,#ede9fe);border:1px solid #ddd6fe;border-radius:16px;padding:20px;margin-bottom:24px;">
+              <div style="font-size:12px;color:#6b21a8;font-weight:600;margin-bottom:6px;">💰 Available for Withdrawal</div>
+              <div style="font-size:32px;font-weight:900;color:#7c3aed;letter-spacing:-0.02em;" id="withdrawAvailableDisplay">$4,875</div>
+            </div>
+
+            <!-- Withdrawal Amount Input -->
+            <div class="form-group" style="margin-bottom:24px;">
+              <label class="form-label" style="font-weight:600;margin-bottom:12px;">How much would you like to withdraw?</label>
+              <div style="position:relative;display:flex;align-items:center;">
+                <span style="position:absolute;left:16px;font-size:18px;font-weight:600;color:#7c3aed;">$</span>
+                <input type="number" id="withdrawAmount" placeholder="0.00" style="width:100%;padding:14px 14px 14px 38px;border:2px solid #ddd6fe;border-radius:12px;font-size:16px;font-weight:600;color:#111827;font-family:system-ui,-apple-system,sans-serif;background:white;outline:none;transition:all 0.2s;" oninput="updateWithdrawPreview()" onfocus="this.style.borderColor='#a855f7'" onblur="this.style.borderColor='#ddd6fe'" />
+              </div>
+              <div style="font-size:12px;color:#6b7280;margin-top:8px;">Minimum: <strong>$50</strong> | Maximum: <strong id="maxWithdrawAmt">$4,875</strong></div>
+            </div>
+
+            <!-- Quick Amount Selection -->
+            <div style="margin-bottom:24px;">
+              <label class="form-label" style="font-weight:600;margin-bottom:10px;font-size:12px;">Quick Amounts</label>
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+                ${['$100','$500','$1000','$2500'].map(amt => `
+                  <button type="button" onclick="setWithdrawAmount('${amt}')" 
+                    style="padding:10px;border-radius:10px;border:1px solid #ddd6fe;background:white;font-size:13px;font-weight:600;color:#7c3aed;cursor:pointer;transition:all 0.2s;"
+                    onmouseenter="this.style.background='#f3e8ff';this.style.borderColor='#a855f7'" onmouseleave="this.style.background='white';this.style.borderColor='#ddd6fe'">${amt}</button>`).join('')}
+              </div>
+            </div>
+
+            <!-- Withdrawal Preview -->
+            <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:14px;padding:18px;margin-bottom:24px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+                <span style="font-size:13px;color:#6b7280;">Amount to Withdraw</span>
+                <span style="font-weight:600;color:#111827;font-size:13px;" id="previewAmount">$0.00</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+                <span style="font-size:13px;color:#6b7280;">Processing Fee (1%)</span>
+                <span style="font-weight:600;color:#ef4444;font-size:13px;" id="previewFee">$0.00</span>
+              </div>
+              <div style="height:1px;background:#e5e7eb;margin:10px 0;"></div>
+              <div style="display:flex;justify-content:space-between;">
+                <span style="font-size:14px;font-weight:700;color:#111827;">You'll Receive</span>
+                <span style="font-size:18px;font-weight:900;background:linear-gradient(135deg,#10b981,#059669);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;" id="previewReceive">$0.00</span>
+              </div>
+            </div>
+
+            <!-- Bank Account Selection -->
+            <div class="form-group" style="margin-bottom:24px;">
+              <label class="form-label" style="font-weight:600;margin-bottom:10px;">Withdraw to</label>
+              <select id="withdrawAccount" style="width:100%;padding:12px 14px;border:2px solid #ddd6fe;border-radius:12px;font-size:14px;font-family:system-ui,-apple-system,sans-serif;color:#111827;background:white;cursor:pointer;outline:none;transition:all 0.2s;" onfocus="this.style.borderColor='#a855f7'" onblur="this.style.borderColor='#ddd6fe'">
+                <option>💳 Chase Bank ••••5241</option>
+                <option>🏦 Bank of America ••••3892</option>
+                <option>+ Add New Bank Account</option>
+              </select>
+            </div>
+
+            <!-- Action Buttons -->
+            <div style="display:flex;gap:12px;">
+              <button onclick="document.getElementById('withdrawModal').style.display='none'" style="flex:1;padding:14px;border-radius:12px;border:1px solid #e5e7eb;background:white;font-size:14px;font-weight:600;color:#111827;cursor:pointer;transition:all 0.2s;" onmouseenter="this.style.background='#f9fafb'" onmouseleave="this.style.background='white'">
+                Cancel
+              </button>
+              <button onclick="processWithdraw()" style="flex:1.5;padding:14px;border-radius:12px;border:none;background:linear-gradient(135deg,#10b981,#059669);color:white;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.2s;box-shadow:0 4px 12px rgba(16,185,129,0.3);" onmouseenter="this.style.boxShadow='0 8px 24px rgba(16,185,129,0.4)'" onmouseleave="this.style.boxShadow='0 4px 12px rgba(16,185,129,0.3)'">
+                ✓ Confirm Withdrawal
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- All Transactions Modal -->
+        <div id="allTransactionsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-start;justify-content:center;backdrop-filter:blur(4px);overflow-y:auto;padding:20px 0;">
+          <div style="background:white;border-radius:20px;width:100%;max-width:600px;box-shadow:0 40px 100px rgba(0,0,0,0.2);margin:0 auto;max-height:calc(100vh - 40px);overflow-y:auto;">
+            <!-- Header -->
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:28px 32px;border-bottom:1px solid #e5e7eb;background:linear-gradient(135deg,#f3e8ff,#ede9fe);">
+              <div>
+                <h2 style="font-size:22px;font-weight:700;color:#111827;margin:0;">All Transactions</h2>
+                <p style="font-size:13px;color:#6b7280;margin:4px 0 0 0;">Complete transaction history</p>
+              </div>
+              <button onclick="document.getElementById('allTransactionsModal').style.display='none'" style="background:linear-gradient(135deg,#f3e8ff,#ede9fe);border:none;cursor:pointer;color:#7c3aed;width:36px;height:36px;border-radius:12px;display:flex;align-items:center;justify-content:center;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                <i data-lucide="x" style="width:20px;height:20px;"></i>
+              </button>
+            </div>
+
+            <!-- Transactions List -->
+            <div style="padding:24px 32px;max-height:600px;overflow-y:auto;" id="allTransactionsListContainer">
+              <div style="padding:20px;text-align:center;color:#6b7280;">Loading transactions...</div>
+            </div>
+
+            <!-- Footer -->
+            <div style="padding:20px 32px;border-top:1px solid #e5e7eb;background:#f9fafb;border-radius:0 0 20px 20px;display:flex;justify-content:flex-end;">
+              <button onclick="document.getElementById('allTransactionsModal').style.display='none'" style="padding:10px 24px;border-radius:10px;background:white;border:1px solid #e5e7eb;font-size:14px;font-weight:600;color:#111827;cursor:pointer;transition:all 0.2s;" onmouseenter="this.style.background='#f3e8ff';this.style.borderColor='#a855f7';this.style.color='#7c3aed'" onmouseleave="this.style.background='white';this.style.borderColor='#e5e7eb';this.style.color='#111827'">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      initDashboard({
+        role: 'client',
+        activePath: 'client-wallet.html',
+        pageTitle: 'Wallet & Escrow',
+        pageSubtitle: 'Manage your balance and track escrow payments',
+        content
+      });
+      lucide.createIcons();
+    });
+
+    function showAddFunds() {
+      document.getElementById('addFundsModal').style.display = 'flex';
+      document.getElementById('currentBalanceDisplay').textContent = '$' + availableBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      // Reset previous modal state
+      document.querySelectorAll('#addFundsModal button.amount-selected').forEach(b => {
+        b.classList.remove('amount-selected');
+        b.style.borderColor = '#e5e7eb';
+        b.style.background = 'white';
+        const bg = b.querySelector('.amount-bg');
+        if (bg) bg.style.opacity = '0';
+      });
+      document.querySelectorAll('#addFundsModal .method-selected').forEach(el => {
+        el.classList.remove('method-selected');
+        const dot = el.querySelector('.method-radio-dot');
+        if (dot) dot.style.opacity = '0';
+      });
+      const customSection = document.getElementById('customAmountSection');
+      customSection.style.display = 'none';
+      document.getElementById('customAmountInput').value = '';
+      document.getElementById('processingTime').textContent = 'Select payment method for time/fee';
+
+      updateAddFundsPreview();
+      lucide.createIcons();
+    }
+
+    function selectAmount(amt, el) {
+      // Clear existing amount selections
+      document.querySelectorAll('#addFundsModal button.amount-selected').forEach(b => {
+        b.classList.remove('amount-selected');
+        b.style.borderColor = '#e5e7eb';
+        b.style.background = 'white';
+        b.querySelector('.amount-bg').style.opacity = '0';
+      });
+
+      // Select current amount button
+      el.classList.add('amount-selected');
+      el.style.borderColor = '#6366f1';
+      el.style.background = '#eef2ff';
+      el.querySelector('.amount-bg').style.opacity = '0.1';
+
+      // Handle custom amount
+      const customSection = document.getElementById('customAmountSection');
+      if (amt === 'Custom') {
+        customSection.style.display = 'block';
+        document.getElementById('customAmountInput').focus();
+      } else {
+        customSection.style.display = 'none';
+        document.getElementById('customAmountInput').value = '';
+      }
+
+      updateAddFundsPreview();
+    }
+
+    function updateCustomAmount() {
+      updateAddFundsPreview();
+    }
+
+    function selectPaymentMethod(methodId, el) {
+      // Clear all method selections
+      document.querySelectorAll('#addFundsModal .method-radio-dot').forEach(dot => {
+        dot.style.opacity = '0';
+      });
+      document.querySelectorAll('#addFundsModal .method-selected').forEach(div => {
+        div.classList.remove('method-selected');
+      });
+
+      // Select current method
+      el.classList.add('method-selected');
+      el.querySelector('.method-radio-dot').style.opacity = '1';
+
+      // Update processing time
+      const processingTimeEl = document.getElementById('processingTime');
+      switch(methodId) {
+        case 'bank':
+          processingTimeEl.textContent = '1-2 business days • Free';
+          break;
+        case 'card':
+          processingTimeEl.textContent = 'Instant • 2.9% processing fee';
+          break;
+        case 'wire':
+          processingTimeEl.textContent = 'Instant • $25 flat fee';
+          break;
+      }
+
+      updateAddFundsPreview();
+    }
+
+    function updateAddFundsPreview() {
+      const selectedAmountBtn = document.querySelector('#addFundsModal button.amount-selected');
+      let amount = 0;
+
+      if (selectedAmountBtn) {
+        const amountText = selectedAmountBtn.textContent.trim();
+        if (amountText === 'Custom') {
+          amount = parseFloat(document.getElementById('customAmountInput').value) || 0;
+        } else {
+          amount = parseFloat(amountText.replace(/[$,]/g, '')) || 0;
+        }
+      }
+
+      const selectedMethod = document.querySelector('#addFundsModal .method-selected');
+      let fee = 0;
+
+      if (selectedMethod) {
+        const methodId = selectedMethod.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
+        if (methodId) {
+          switch(methodId) {
+            case 'card':
+              fee = amount * 0.029;
+              break;
+            case 'wire':
+              fee = 25;
+              break;
+            case 'bank':
+              fee = 0;
+              break;
+          }
+        }
+      }
+
+      const total = amount + fee;
+
+      document.getElementById('previewAddAmount').textContent = '$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById('previewFee').textContent = fee === 0 ? 'Free' : '$' + fee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById('previewTotal').textContent = '$' + total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function processAddFunds() {
+      const selectedAmountBtn = document.querySelector('#addFundsModal button.amount-selected');
+      let amount = 0;
+
+      if (selectedAmountBtn) {
+        const amountText = selectedAmountBtn.textContent.trim();
+        if (amountText === 'Custom') {
+          amount = parseFloat(document.getElementById('customAmountInput').value) || 0;
+        } else {
+          amount = parseFloat(amountText.replace(/[$,]/g, '')) || 0;
+        }
+      }
+
+      if (amount <= 0) {
+        Validate.toast('Please select or enter a valid amount greater than 0.', 'error');
+        return;
+      }
+
+      const selectedMethod = document.querySelector('#addFundsModal .method-selected');
+      if (!selectedMethod) {
+        Validate.toast('Please select a payment method.', 'error');
+        return;
+      }
+
+      // Save deposit to store
+      try {
+        Store.createTransaction({ type: 'deposit', amount, fromId: 'external', toId: _walletUserId, taskId: null, milestoneId: null, description: 'Wallet top-up via payment', status: 'completed' });
+        Store.updateUser(_walletUserId, { walletBalance: (Store.getUserById(_walletUserId)?.walletBalance || 0) + amount });
+      } catch(e) { console.warn('Store deposit failed', e); }
+
+      // Close modal and refresh all wallet data
+      document.getElementById('addFundsModal').style.display = 'none';
+      refreshWallet();
+
+      Validate.toast('✓ $' + amount.toFixed(2) + ' added to your wallet successfully!', 'success');
+    }
+
+    function showNotification(message, type) {
+      // Remove existing notification
+      const existing = document.querySelector('.notification-toast');
+      if (existing) existing.remove();
+
+      // Create notification
+      const notification = document.createElement('div');
+      notification.className = 'notification-toast';
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? '#10b981' : '#ef4444'};
+        color: white;
+        padding: 16px 20px;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 600;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        z-index: 1000;
+        transform: translateX(400px);
+        opacity: 0;
+        transition: all 0.3s ease;
+        max-width: 400px;
+      `;
+
+      notification.textContent = message;
+      document.body.appendChild(notification);
+
+      // Animate in
+      setTimeout(() => {
+        notification.style.transform = 'translateX(0)';
+        notification.style.opacity = '1';
+      }, 100);
+
+      // Auto remove
+      setTimeout(() => {
+        notification.style.transform = 'translateX(400px)';
+        notification.style.opacity = '0';
+        setTimeout(() => notification.remove(), 300);
+      }, 4000);
+    }
+
+    function showAllTransactions() {
+      const d = computeWalletData(_walletUserId);
+      const container = document.getElementById('allTransactionsListContainer');
+      if (container) {
+        const allTx = d.transactions.slice().reverse();
+        container.innerHTML = allTx.length === 0
+          ? '<div style="padding:20px;text-align:center;color:#6b7280;">No transactions found.</div>'
+          : allTx.map(t => `
+              <div style="display:flex;align-items:center;gap:14px;padding:16px;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:12px;transition:all 0.2s;" onmouseover="this.style.background='#f9fafb';this.style.borderColor='#d1d5db'" onmouseout="this.style.background='white';this.style.borderColor='#e5e7eb'">
+                <div class="tx-icon" style="background:${t.bg};flex-shrink:0;">
+                  <i data-lucide="${t.icon}" style="width:18px;height:18px;color:${t.color};"></i>
+                </div>
+                <div style="flex:1;">
+                  <div style="font-weight:600;font-size:14px;color:#111827;">${t.label}</div>
+                  <div style="font-size:12px;color:#6b7280;margin-top:4px;">${t.sub}</div>
+                </div>
+                <span class="${t.positive ? 'tx-amount-pos' : 'tx-amount-neg'}" style="font-size:16px;font-weight:700;">${t.amount}</span>
+              </div>`).join('');
+      }
+      document.getElementById('allTransactionsModal').style.display = 'flex';
+      lucide.createIcons();
+    }
+
+    function showWithdraw() {
+      const modal = document.getElementById('withdrawModal');
+      modal.style.display = 'flex';
+      document.getElementById('withdrawAmount').value = '';
+      document.getElementById('withdrawAvailableDisplay').textContent = '$' + availableBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById('maxWithdrawAmt').textContent = '$' + availableBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      updateWithdrawPreview();
+      lucide.createIcons();
+    }
+
+    function setWithdrawAmount(amt) {
+      const amount = parseFloat(amt.replace('$', ''));
+      if (amount <= availableBalance) {
+        document.getElementById('withdrawAmount').value = amount;
+        updateWithdrawPreview();
+      }
+    }
+
+    function updateWithdrawPreview() {
+      const amount = parseFloat(document.getElementById('withdrawAmount').value) || 0;
+      const fee = amount * 0.01;
+      const receive = amount - fee;
+      
+      document.getElementById('previewAmount').textContent = '$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById('previewFee').textContent = '$' + fee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById('previewReceive').textContent = '$' + receive.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function processWithdraw() {
+      const amount = parseFloat(document.getElementById('withdrawAmount').value) || 0;
+      
+      if (amount <= 0) {
+        showNotification('Please enter a valid amount', 'error');
+        return;
+      }
+      
+      if (amount < 50) {
+        showNotification('Minimum withdrawal amount is $50', 'error');
+        return;
+      }
+      
+      if (amount > availableBalance) {
+        showNotification('Insufficient balance for this withdrawal', 'error');
+        return;
+      }
+      
+      // Create withdrawal transaction and deduct from wallet
+      try {
+        Store.createTransaction({ type: 'withdrawal', amount, fromId: _walletUserId, toId: 'external', taskId: null, milestoneId: null, description: 'Withdrawal to bank account', status: 'completed' });
+        Store.updateUser(_walletUserId, { walletBalance: (Store.getUserById(_walletUserId)?.walletBalance || 0) - amount });
+      } catch(e) { console.warn('Store withdrawal failed', e); }
+      
+      // Close modal and refresh all wallet data
+      document.getElementById('withdrawModal').style.display = 'none';
+      refreshWallet();
+      
+      showNotification('✓ Withdrawal of $' + amount.toFixed(2) + ' processed successfully! Funds will arrive in 1-2 business days.', 'success');
+    }
+
+    function showNotification(message, type) {
+      const notification = document.createElement('div');
+      const bgColor = type === 'success' ? '#10b981' : '#ef4444';
+      const icon = type === 'success' ? '✓' : '✕';
+      notification.style.cssText = `
+        position:fixed;
+        bottom:24px;
+        right:24px;
+        background:${bgColor};
+        color:white;
+        padding:16px 24px;
+        border-radius:12px;
+        font-size:14px;
+        font-weight:600;
+        z-index:300;
+        box-shadow:0 8px 24px rgba(0,0,0,0.2);
+        animation:slideInRight 0.3s ease;
+      `;
+      notification.textContent = message;
+      document.body.appendChild(notification);
+      setTimeout(() => {
+        notification.style.animation = 'slideInLeft 0.3s ease reverse';
+        setTimeout(() => notification.remove(), 300);
+      }, 3500);
+    }
+  </script>
+</head>
+<body></body>
+</html>

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Super User Dashboard — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('superuser')) return;
+
+      const users = Store.getUsers();
+      const tasks = Store.getTasks();
+      const disputes = Store.getDisputes();
+      const transactions = Store.getTransactions();
+      const auditReqs = Store.getAuditRequests();
+
+      const expertApps = typeof Store.getExpertApplications === 'function' ? Store.getExpertApplications() : [];
+      const pendingApps = expertApps.filter(a => a.status === 'pending').length;
+
+      const totalUsers    = users.length;
+      const activeTasks   = tasks.filter(t => t.status === 'in-progress').length;
+      const openDisputes  = disputes.filter(d => d.status === 'open').length;
+      const escrowTotal   = transactions.filter(t => t.type === 'escrow-lock').reduce((s,t) => s + t.amount, 0);
+      const released      = transactions.filter(t => t.type === 'milestone-release').reduce((s,t) => s + t.amount, 0);
+      const escrowBalance = escrowTotal - released;
+      const pendingAudits = auditReqs.filter(a => a.status === 'Pending').length;
+
+      // Role breakdown
+      const clients = users.filter(u => u.role === 'client').length;
+      const workers = users.filter(u => u.role === 'worker').length;
+      const experts = users.filter(u => u.role === 'expert').length;
+
+      // Recent users
+      const recentUsers = [...users].slice(-5).reverse();
+      // Recent tasks
+      const recentTasks = [...tasks].slice(-5).reverse();
+
+      const statusBadge = s => {
+        const map = { 'open':'badge-orange','in-progress':'badge-blue','completed':'badge-green','cancelled':'badge-red' };
+        return `<span class="badge ${map[s]||'badge-blue'}">${s.replace(/-/g,' ')}</span>`;
+      };
+
+      const content = `
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
+          <div class="stat-card">
+            <div><div class="stat-val">${totalUsers}</div><div class="stat-label">Total Users</div><div class="stat-change">${clients}C · ${workers}W · ${experts}E</div></div>
+            <div class="stat-icon-wrap" style="background:#eff6ff;"><i data-lucide="users" style="width:20px;height:20px;color:#3b82f6;"></i></div>
+          </div>
+          <div class="stat-card">
+            <div><div class="stat-val">${tasks.length}</div><div class="stat-label">Total Tasks</div><div class="stat-change">${activeTasks} active</div></div>
+            <div class="stat-icon-wrap" style="background:#ecfdf5;"><i data-lucide="folder-kanban" style="width:20px;height:20px;color:#10b981;"></i></div>
+          </div>
+          <div class="stat-card">
+            <div><div class="stat-val">$${escrowBalance.toLocaleString()}</div><div class="stat-label">Escrow Balance</div><div class="stat-change">$${released.toLocaleString()} released</div></div>
+            <div class="stat-icon-wrap" style="background:#faf5ff;"><i data-lucide="wallet" style="width:20px;height:20px;color:#a855f7;"></i></div>
+          </div>
+          <div class="stat-card">
+            <div><div class="stat-val" style="color:#f97316;">${pendingApps}</div><div class="stat-label">Pending Expert Apps</div><div class="stat-change">${openDisputes} open disputes</div></div>
+            <div class="stat-icon-wrap" style="background:#fff7ed;"><i data-lucide="shield-check" style="width:20px;height:20px;color:#f97316;"></i></div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div style="margin-bottom:28px;">
+          <h2 style="font-size:20px;font-weight:500;margin-bottom:16px;">Quick Actions</h2>
+          <div class="quick-actions-v2">
+            <a href="superuser-users.html" class="qa-v2-card" style="background:#f0f6ff;border-color:#e0efff;">
+              <div class="qa-v2-icon" style="color:#2563eb;"><i data-lucide="users" style="width:20px;height:20px;"></i></div>
+              <div class="qa-v2-content"><div class="qa-v2-title">Manage Users</div><div class="qa-v2-desc">Add, edit, suspend or delete users</div></div>
+            </a>
+            <a href="superuser-expert-applications.html" class="qa-v2-card" style="background:#fdf5ff;border-color:#f8e4ff;">
+              <div class="qa-v2-icon" style="color:#9333ea;"><i data-lucide="shield-check" style="width:20px;height:20px;"></i></div>
+              <div class="qa-v2-content"><div class="qa-v2-title">Expert Applications</div><div class="qa-v2-desc">${pendingApps} pending application${pendingApps !== 1 ? 's' : ''} to review</div></div>
+            </a>
+            <a href="superuser-tasks.html" class="qa-v2-card" style="background:#f0fdf4;border-color:#dcfce7;">
+              <div class="qa-v2-icon" style="color:#16a34a;"><i data-lucide="folder-kanban" style="width:20px;height:20px;"></i></div>
+              <div class="qa-v2-content"><div class="qa-v2-title">Manage Tasks</div><div class="qa-v2-desc">View, edit or remove any task</div></div>
+            </a>
+            <a href="superuser-disputes.html" class="qa-v2-card" style="background:#fff7ed;border-color:#ffeed5;">
+              <div class="qa-v2-icon" style="color:#ea580c;"><i data-lucide="scale" style="width:20px;height:20px;"></i></div>
+              <div class="qa-v2-content"><div class="qa-v2-title">Disputes</div><div class="qa-v2-desc">Override verdicts, close cases</div></div>
+            </a>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+          <!-- Recent Users -->
+          <div class="projects-table">
+            <div class="table-header">
+              <span class="table-title">Recent Users</span>
+              <a href="superuser-users.html" class="btn-outline" style="font-size:13px;padding:6px 14px;">View All</a>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody>
+                  ${recentUsers.map(u => `
+                  <tr>
+                    <td><div class="worker-cell"><div class="worker-avatar" style="${u.avatarColor?'background:'+u.avatarColor:''}">${u.avatar}</div><div><div style="font-weight:600;font-size:13px;">${u.name}</div><div style="font-size:12px;color:var(--muted-foreground);">${u.email}</div></div></div></td>
+                    <td><span class="badge ${u.role==='client'?'badge-blue':u.role==='expert'?'badge-purple':u.role==='superuser'?'badge-red':'badge-green'}">${u.role}</span></td>
+                    <td><span class="badge ${u.status==='active'?'badge-green':'badge-red'}">${u.status}</span></td>
+                    <td><a href="superuser-users.html" class="btn-sm">Edit</a></td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Recent Tasks -->
+          <div class="projects-table">
+            <div class="table-header">
+              <span class="table-title">Recent Tasks</span>
+              <a href="superuser-tasks.html" class="btn-outline" style="font-size:13px;padding:6px 14px;">View All</a>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Task</th><th>Budget</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody>
+                  ${recentTasks.map(t => `
+                  <tr>
+                    <td style="font-weight:600;font-size:13px;">${t.title}</td>
+                    <td>$${t.budget.toLocaleString()}</td>
+                    <td>${statusBadge(t.status)}</td>
+                    <td><a href="superuser-tasks.html" class="btn-sm">View</a></td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+
+      initDashboard({ role: 'superuser', activePath: 'superuser-dashboard.html', pageTitle: 'Super User Dashboard', pageSubtitle: 'Full platform control and oversight', content });
+      lucide.createIcons();
+    });
+  </script>
+</head>
+<body></body>
+</html>

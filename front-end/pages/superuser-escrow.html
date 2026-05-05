@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Escrow & Finance — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .finance-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:28px; }
+    .finance-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px 22px; }
+    .finance-card-label { font-size:12px; color:var(--muted-foreground); font-weight:600; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:8px; }
+    .finance-card-val { font-size:28px; font-weight:600; letter-spacing:-0.02em; }
+    .finance-card-sub { font-size:12px; color:var(--muted-foreground); margin-top:4px; }
+    .tx-table-wrap { background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+    .tx-table-wrap table { width:100%; border-collapse:collapse; }
+    .tx-table-wrap th { padding:12px 16px; text-align:left; font-size:12px; font-weight:600; color:var(--muted-foreground); background:var(--secondary); border-bottom:1px solid var(--border); text-transform:uppercase; letter-spacing:0.04em; }
+    .tx-table-wrap td { padding:14px 16px; border-bottom:1px solid var(--border); font-size:14px; vertical-align:middle; }
+    .tx-table-wrap tr:last-child td { border-bottom:none; }
+    .tx-table-wrap tr:hover td { background:rgba(0,0,0,0.015); }
+    .tx-type-icon { width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .su-toolbar { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+    .su-search { flex:1; min-width:200px; padding:10px 16px; border:1px solid var(--border); border-radius:12px; background:var(--background); font-size:14px; font-family:inherit; outline:none; }
+    .su-filter { padding:10px 14px; border:1px solid var(--border); border-radius:12px; background:var(--background); font-size:14px; font-family:inherit; cursor:pointer; }
+    .amount-credit { color:#10b981; font-weight:600; }
+    .amount-debit { color:#ef4444; font-weight:600; }
+    .btn-force { padding:5px 12px; border-radius:8px; border:1px solid #fde68a; background:#fffbeb; color:#92400e; font-size:12px; font-weight:500; cursor:pointer; }
+    .btn-force:hover { background:#fde68a; }
+  </style>
+  <script>
+    let allTx = [];
+
+    function renderTransactions() {
+      const search = document.getElementById('txSearch')?.value.toLowerCase() || '';
+      const typeFilter = document.getElementById('txTypeFilter')?.value || 'all';
+
+      let filtered = allTx.filter(tx => {
+        const from = Store.getUserById(tx.fromId);
+        const to = Store.getUserById(tx.toId);
+        const task = Store.getTaskById(tx.taskId);
+        const matchSearch = !search ||
+          (from?.name || tx.fromId).toLowerCase().includes(search) ||
+          (to?.name || tx.toId).toLowerCase().includes(search) ||
+          (task?.title || '').toLowerCase().includes(search) ||
+          tx.description.toLowerCase().includes(search);
+        const matchType = typeFilter === 'all' || tx.type === typeFilter;
+        return matchSearch && matchType;
+      });
+
+      const tbody = document.getElementById('txTableBody');
+      if (!tbody) return;
+
+      document.getElementById('txCount').textContent = filtered.length + ' transaction' + (filtered.length !== 1 ? 's' : '');
+
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="padding:48px;text-align:center;color:var(--muted-foreground);"><div style=\"display:flex;flex-direction:column;align-items:center;gap:8px;\"><i data-lucide=\"wallet\" style=\"width:36px;height:36px;opacity:0.3;\"></i><div style=\"font-weight:600;\">No transactions found</div><div style=\"font-size:13px;\">Adjust filters or check back later.</div></div></td></tr>';
+        lucide.createIcons();
+        return;
+      }
+
+      const typeConfig = {
+        'escrow-lock':      { bg:'#eff6ff', color:'#3b82f6', icon:'lock', label:'Escrow Lock' },
+        'milestone-release':{ bg:'#ecfdf5', color:'#10b981', icon:'check-circle', label:'Released' },
+        'deposit':          { bg:'#faf5ff', color:'#a855f7', icon:'arrow-down-circle', label:'Deposit' },
+        'refund':           { bg:'#fff7ed', color:'#f97316', icon:'rotate-ccw', label:'Refund' },
+      };
+
+      tbody.innerHTML = filtered.map(tx => {
+        const from = Store.getUserById(tx.fromId);
+        const to = Store.getUserById(tx.toId);
+        const task = Store.getTaskById(tx.taskId);
+        const tc = typeConfig[tx.type] || { bg:'#f1f5f9', color:'#64748b', icon:'circle', label:tx.type };
+        const isCredit = tx.type === 'deposit' || tx.type === 'milestone-release';
+
+        return `
+        <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div class="tx-type-icon" style="background:${tc.bg};">
+                <i data-lucide="${tc.icon}" style="width:16px;height:16px;color:${tc.color};"></i>
+              </div>
+              <div>
+                <div style="font-weight:500;font-size:13px;">${tx.description}</div>
+                <div style="font-size:12px;color:var(--muted-foreground);">${tx.createdAt}</div>
+              </div>
+            </div>
+          </td>
+          <td style="font-size:13px;">${from?.name || tx.fromId}</td>
+          <td style="font-size:13px;">${to?.name || tx.toId}</td>
+          <td style="font-size:13px;color:var(--muted-foreground);">${task?.title || '—'}</td>
+          <td class="${isCredit ? 'amount-credit' : 'amount-debit'}">
+            ${isCredit ? '+' : '-'}$${tx.amount.toLocaleString()}
+          </td>
+          <td><span class="badge badge-green">${tx.status}</span></td>
+        </tr>`;
+      }).join('');
+
+      if (!filtered.length) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted-foreground);">No transactions found.</td></tr>';
+
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function forceReleaseEscrow() {
+      Validate.confirm(
+        'Force-release all pending escrow funds? This will release funds for all pending milestones immediately.',
+        () => { Validate.toast('Force release executed. All pending escrow funds released.', 'warning'); }
+      );
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('superuser')) return;
+
+      allTx = Store.getTransactions();
+      const tasks = Store.getTasks();
+
+      const escrowLocked = allTx.filter(t => t.type === 'escrow-lock').reduce((s,t) => s+t.amount, 0);
+      const totalReleased = allTx.filter(t => t.type === 'milestone-release').reduce((s,t) => s+t.amount, 0);
+      const totalDeposits = allTx.filter(t => t.type === 'deposit').reduce((s,t) => s+t.amount, 0);
+      const escrowBalance = escrowLocked - totalReleased;
+      const totalVolume = allTx.reduce((s,t) => s+t.amount, 0);
+
+      const content = `
+        <div class="finance-grid">
+          <div class="finance-card">
+            <div class="finance-card-label">Escrow Balance</div>
+            <div class="finance-card-val" style="color:#6366f1;">$${escrowBalance.toLocaleString()}</div>
+            <div class="finance-card-sub">Currently locked in escrow</div>
+          </div>
+          <div class="finance-card">
+            <div class="finance-card-label">Total Released</div>
+            <div class="finance-card-val" style="color:#10b981;">$${totalReleased.toLocaleString()}</div>
+            <div class="finance-card-sub">Paid to workers</div>
+          </div>
+          <div class="finance-card">
+            <div class="finance-card-label">Total Deposits</div>
+            <div class="finance-card-val" style="color:#a855f7;">$${totalDeposits.toLocaleString()}</div>
+            <div class="finance-card-sub">Client top-ups</div>
+          </div>
+          <div class="finance-card">
+            <div class="finance-card-label">Total Volume</div>
+            <div class="finance-card-val">$${totalVolume.toLocaleString()}</div>
+            <div class="finance-card-sub">All-time transaction value</div>
+          </div>
+        </div>
+
+        <div class="su-toolbar">
+          <input class="su-search" id="txSearch" placeholder="Search transactions..." oninput="renderTransactions()" />
+          <select class="su-filter" id="txTypeFilter" onchange="renderTransactions()">
+            <option value="all">All Types</option>
+            <option value="escrow-lock">Escrow Lock</option>
+            <option value="milestone-release">Milestone Release</option>
+            <option value="deposit">Deposit</option>
+          </select>
+          <button class="btn-add" onclick="forceReleaseEscrow()" style="background:linear-gradient(to bottom,#f97316,#ea580c);">
+            <i data-lucide="zap" style="width:16px;height:16px;"></i> Force Release
+          </button>
+        </div>
+
+        <div style="margin-bottom:12px;font-size:13px;color:var(--muted-foreground);">Showing <strong id="txCount"></strong></div>
+
+        <div class="tx-table-wrap">
+          <table>
+            <thead>
+              <tr><th>Transaction</th><th>From</th><th>To</th><th>Task</th><th>Amount</th><th>Status</th></tr>
+            </thead>
+            <tbody id="txTableBody"></tbody>
+          </table>
+        </div>
+
+        <style>.btn-add{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:12px;color:#fff;border:none;font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;background:linear-gradient(to bottom,hsl(0,0%,16%),hsl(0,0%,10%));}</style>
+      `;
+
+      initDashboard({ role: 'superuser', activePath: 'superuser-escrow.html', pageTitle: 'Escrow & Finance', pageSubtitle: 'Monitor all platform transactions and escrow activity', content });
+
+      setTimeout(() => { lucide.createIcons(); renderTransactions(); }, 100);
+    });
+  </script>
+</head>
+<body></body>
+</html>

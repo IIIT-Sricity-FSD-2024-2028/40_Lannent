@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Submit Deliverable — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .submit-layout { display:grid; grid-template-columns:1fr 300px; gap:20px; }
+    .drop-zone { border:2px dashed var(--border); border-radius:16px; padding:40px; text-align:center; transition:border-color 0.2s, background 0.2s; cursor:pointer; }
+    .drop-zone:hover, .drop-zone.dragging { border-color:#6366f1; background:#f5f3ff; }
+    .drop-zone.has-error { border-color:#ef4444 !important; background:#fef2f2; }
+    .file-chip { display:flex; align-items:center; gap:12px; padding:12px 16px; background:var(--input-bg); border:1px solid var(--border); border-radius:12px; margin-bottom:8px; transition:border-color 0.2s; }
+    .file-chip.file-invalid { border-color:#ef4444; background:#fef2f2; }
+    .file-type-icon { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+
+    /* ── Validation styles ── */
+    .field-error {
+      font-size: 12px;
+      color: #ef4444;
+      margin-top: 4px;
+      display: none;
+      align-items: center;
+      gap: 4px;
+      animation: fadeIn 0.2s ease;
+    }
+    .field-error.visible { display: flex; }
+    .form-input.has-error { border-color: #ef4444 !important; box-shadow: 0 0 0 3px rgba(239,68,68,0.1); }
+    .form-input.has-success { border-color: #10b981 !important; box-shadow: 0 0 0 3px rgba(16,185,129,0.1); }
+
+    /* ── Character counter ── */
+    .char-counter { font-size: 11px; color: var(--muted-foreground); text-align: right; margin-top: 4px; transition: color 0.15s; }
+    .char-counter.warn { color: #f59e0b; }
+    .char-counter.error { color: #ef4444; font-weight: 600; }
+    .char-counter.ok { color: #10b981; }
+
+    /* ── Progress bar ── */
+    .upload-progress { height:4px; border-radius:9999px; background:var(--muted); overflow:hidden; margin-top:6px; }
+    .upload-progress-bar { height:100%; border-radius:9999px; background:linear-gradient(90deg,#6366f1,#8b5cf6); transition:width 0.4s ease; }
+
+    /* ── Checklist error ── */
+    .checklist-section { transition: box-shadow 0.2s; }
+    .checklist-section.has-error { box-shadow: inset 0 0 0 1.5px #ef4444; }
+
+    /* ── Disabled submit button ── */
+    .btn-submit-main:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    /* ── File size badge ── */
+    .file-size-badge { font-size:11px; padding:2px 8px; border-radius:6px; background:var(--secondary); color:var(--muted-foreground); white-space:nowrap; }
+    .file-size-badge.over { background:#fee2e2; color:#ef4444; font-weight:600; }
+
+    @keyframes fadeIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+    @media(max-width:900px){ .submit-layout{ grid-template-columns:1fr; } }
+  </style>
+  <script>
+    // ═════════════════════════════════════════════════════════
+    //  STATE
+    // ═════════════════════════════════════════════════════════
+    let uploadedFiles = [];
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+    const ALLOWED_EXTENSIONS = [
+      '.zip','.rar','.7z','.tar','.gz',       // archives
+      '.pdf',                                  // documents
+      '.jpg','.jpeg','.png','.gif','.svg','.webp', // images
+      '.js','.ts','.jsx','.tsx','.py','.java','.cpp','.c','.h','.cs','.rb','.go','.rs','.php','.html','.css','.scss','.json','.xml','.yml','.yaml','.md','.sql','.sh','.bat', // code
+    ];
+    const URL_PATTERN = /^https?:\/\/(github\.com|gitlab\.com|bitbucket\.org)\/.+/i;
+    const BRANCH_PATTERN = /^[a-zA-Z0-9_\-\/]+$/;
+
+    let milestone = {
+      projectName:'E-Commerce Mobile App',
+      milestoneTitle:'Milestone 2: Payment Integration & Checkout Flow',
+      client:'Sarah Johnson',
+      clientAvatar:'SJ',
+      clientColor:'linear-gradient(135deg,#6366f1,#4f46e5)',
+      budget:3500,
+      deadline:'March 15, 2026',
+    };
+
+    // ═════════════════════════════════════════════════════════
+    //  INIT
+    // ═════════════════════════════════════════════════════════
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('worker')) return;
+
+      const params = new URLSearchParams(window.location.search);
+      const mId = params.get('milestoneId') || params.get('id');
+      if (mId && typeof Store !== 'undefined') {
+        const mData = Store.getMilestoneById(mId);
+        if (mData) {
+          const tData = Store.getTaskById(mData.taskId);
+          const cUser = tData ? Store.getUserById(tData.clientId) : null;
+          milestone.projectName = tData ? tData.title : milestone.projectName;
+          milestone.milestoneTitle = mData.title || milestone.milestoneTitle;
+          milestone.budget = mData.budget || milestone.budget;
+          milestone.deadline = mData.dueDate ? new Date(mData.dueDate).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : 'No Deadline';
+          if (cUser) {
+            milestone.client = cUser.name;
+            milestone.clientAvatar = cUser.avatar;
+            milestone.clientColor = cUser.avatarColor;
+          }
+        }
+      }
+
+      const content = `
+        <div style="margin-bottom:16px;">
+          <a href="worker-my-projects.html" style="display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--muted-foreground);transition:color 0.15s;" onmouseenter="this.style.color='var(--foreground)'" onmouseleave="this.style.color='var(--muted-foreground)'">
+            <i data-lucide="arrow-left" style="width:16px;height:16px;"></i> Back to Projects
+          </a>
+        </div>
+
+        <!-- Milestone info banner -->
+        <div style="background:linear-gradient(135deg,#eef2ff,#e0e7ff);border:1.5px solid #c7d2fe;border-radius:16px;padding:20px 24px;margin-bottom:24px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div>
+              <div style="font-size:12px;color:#4f46e5;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Submitting for</div>
+              <div style="font-weight:600;font-size:16px;color:#1e1b4b;">${milestone.milestoneTitle}</div>
+              <div style="font-size:13px;color:#4f46e5;margin-top:4px;">${milestone.projectName}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:16px;">
+              <div style="text-align:center;">
+                <div style="font-weight:700;font-size:20px;color:#10b981;">$${milestone.budget.toLocaleString()}</div>
+                <div style="font-size:11px;color:#4f46e5;">Milestone Pay</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="font-weight:600;font-size:14px;">${milestone.deadline}</div>
+                <div style="font-size:11px;color:#4f46e5;">Deadline</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div style="width:36px;height:36px;border-radius:50%;background:${milestone.clientColor};display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;">${milestone.clientAvatar}</div>
+                <div><div style="font-size:12px;color:#4f46e5;">Client</div><div style="font-size:13px;font-weight:600;">${milestone.client}</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="submit-layout">
+          <!-- Main form -->
+          <div>
+            <!-- ════ File Upload Section ════ -->
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
+              <h3 style="font-size:15px;font-weight:600;margin-bottom:6px;">Upload Deliverable Files <span style="color:#ef4444;">*</span></h3>
+              <p style="font-size:13px;color:var(--muted-foreground);margin-bottom:20px;">Upload your code, designs, documentation, and any other relevant files</p>
+              <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()"
+                ondragover="event.preventDefault();this.classList.add('dragging')"
+                ondragleave="this.classList.remove('dragging')"
+                ondrop="handleFileDrop(event)">
+                <div style="width:56px;height:56px;border-radius:50%;background:#eef2ff;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+                  <i data-lucide="upload-cloud" style="width:28px;height:28px;color:#6366f1;"></i>
+                </div>
+                <p style="font-weight:600;font-size:15px;color:var(--foreground);margin-bottom:4px;">Drop files here or click to browse</p>
+                <p style="font-size:13px;color:var(--muted-foreground);">ZIP, PDF, images, code files. Max 50MB each.</p>
+              </div>
+              <input type="file" id="fileInput" multiple style="display:none;" onchange="handleFileSelect(event)" accept=".zip,.rar,.7z,.tar,.gz,.pdf,.jpg,.jpeg,.png,.gif,.svg,.webp,.js,.ts,.jsx,.tsx,.py,.java,.cpp,.c,.h,.cs,.rb,.go,.rs,.php,.html,.css,.scss,.json,.xml,.yml,.yaml,.md,.sql,.sh,.bat" />
+              <div id="fileList" style="margin-top:16px;"></div>
+              <div id="fileErr" class="field-error"><i data-lucide="alert-circle" style="width:12px;height:12px;"></i> <span></span></div>
+            </div>
+
+            <!-- ════ Repository Details (Optional) ════ -->
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
+              <h3 style="font-size:15px;font-weight:600;margin-bottom:16px;">Repository Details (Optional)</h3>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                <div class="form-group">
+                  <label class="form-label" style="display:flex;align-items:center;gap:6px;">
+                    <i data-lucide="github" style="width:15px;height:15px;"></i>Repository URL
+                  </label>
+                  <input type="url" id="repoUrl" class="form-input" placeholder="https://github.com/username/repo" />
+                  <div id="repoUrlErr" class="field-error"><i data-lucide="alert-circle" style="width:12px;height:12px;"></i> <span></span></div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" style="display:flex;align-items:center;gap:6px;">
+                    <i data-lucide="git-branch" style="width:15px;height:15px;"></i>Branch Name
+                  </label>
+                  <input type="text" id="branchName" class="form-input" placeholder="e.g. main, develop" />
+                  <div id="branchErr" class="field-error"><i data-lucide="alert-circle" style="width:12px;height:12px;"></i> <span></span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ════ Submission Notes & Documentation ════ -->
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
+              <h3 style="font-size:15px;font-weight:600;margin-bottom:6px;">Submission Notes & Documentation <span style="color:#ef4444;">*</span></h3>
+              <p style="font-size:13px;color:var(--muted-foreground);margin-bottom:16px;">Describe what you've built, how to run/test it, and any important notes for the client</p>
+              <label class="form-label">Title <span style="color:#ef4444;">*</span></label>
+              <input type="text" id="deliverableTitle" class="form-input" placeholder="Brief title for this submission" style="margin-bottom:4px;" />
+              <div id="deliverableTitleErr" class="field-error"><i data-lucide="alert-circle" style="width:12px;height:12px;"></i> <span></span></div>
+              <div id="titleCounter" class="char-counter">0 / 5 min</div>
+
+              <label class="form-label" style="margin-top:12px;">Description <span style="color:#ef4444;">*</span></label>
+              <textarea id="deliverableNotes" class="form-input" rows="6" placeholder="## What I built&#10;&#10;Describe the work completed for this milestone...&#10;&#10;## How to run&#10;&#10;1. npm install&#10;2. npm run dev&#10;&#10;## Notes for the client&#10;&#10;Any important information..."></textarea>
+              <div id="deliverableNotesErr" class="field-error"><i data-lucide="alert-circle" style="width:12px;height:12px;"></i> <span></span></div>
+              <div id="notesCounter" class="char-counter">0 / 20 min</div>
+            </div>
+
+            <!-- ════ Pre-submission Checklist ════ -->
+            <div id="checklistSection" class="checklist-section" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
+              <h3 style="font-size:15px;font-weight:600;margin-bottom:16px;">Pre-submission Checklist <span style="color:#ef4444;">*</span></h3>
+              ${[
+                'All code is thoroughly tested and bug-free',
+                'Documentation is complete and up to date',
+                'All project requirements are implemented',
+                'Code is clean and well-commented',
+                'Files are properly organized',
+              ].map((item, i) => `
+                <label style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:10px;cursor:pointer;transition:background 0.15s;margin-bottom:4px;" onmouseenter="this.style.background='var(--input-bg)'" onmouseleave="this.style.background='transparent'">
+                  <input type="checkbox" class="checklist-item" id="chk${i}" style="width:16px;height:16px;cursor:pointer;accent-color:#6366f1;" onchange="runAllValidation()" />
+                  <span style="font-size:14px;">${item}</span>
+                </label>`).join('')}
+              <div id="checklistErr" class="field-error" style="margin-top:8px;"><i data-lucide="alert-circle" style="width:12px;height:12px;"></i> <span></span></div>
+            </div>
+
+            <!-- ════ Action Buttons ════ -->
+            <div style="display:flex;gap:12px;">
+              <button class="btn-outline" style="flex:1;padding:12px;border-radius:12px;" onclick="saveDraft()">
+                <i data-lucide="save" style="width:14px;height:14px;display:inline;vertical-align:middle;margin-right:6px;"></i>Save Draft
+              </button>
+              <button id="submitBtn" class="btn-primary btn-submit-main" style="flex:2;padding:12px;border-radius:12px;font-size:15px;" onclick="showConfirmModal()" disabled>
+                <i data-lucide="send" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:8px;"></i>Submit Deliverable
+              </button>
+            </div>
+          </div>
+
+          <!-- Sidebar -->
+          <div>
+            <!-- Validation Status Card -->
+            <div id="validationStatus" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px;">
+              <h3 style="font-size:14px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:6px;">
+                <i data-lucide="shield-check" style="width:16px;height:16px;color:#6366f1;"></i> Submission Status
+              </h3>
+              <div id="validationChecks"></div>
+            </div>
+
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px;">
+              <h3 style="font-size:14px;font-weight:600;margin-bottom:16px;">Submission Guidelines</h3>
+              ${[
+                { icon:'check-circle', color:'#10b981', text:'Include all source files and assets' },
+                { icon:'check-circle', color:'#10b981', text:'Provide clear setup/run instructions' },
+                { icon:'check-circle', color:'#10b981', text:'Test all features before submitting' },
+                { icon:'check-circle', color:'#10b981', text:'Document any known limitations' },
+                { icon:'alert-circle', color:'#f59e0b', text:'Do not submit incomplete work' },
+              ].map(g => `
+                <div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.04);">
+                  <i data-lucide="${g.icon}" style="width:15px;height:15px;color:${g.color};flex-shrink:0;margin-top:1px;"></i>
+                  <span style="font-size:13px;color:#374151;">${g.text}</span>
+                </div>`).join('')}
+            </div>
+
+            <div style="background:linear-gradient(135deg,#ecfdf5,#d1fae5);border:1.5px solid #a7f3d0;border-radius:16px;padding:20px;">
+              <h3 style="font-size:14px;font-weight:600;color:#065f46;margin-bottom:12px;">What happens next?</h3>
+              ${[
+                { step:'1', text:'Client reviews your deliverable', color:'#6366f1' },
+                { step:'2', text:'Optional: Expert technical audit', color:'#a855f7' },
+                { step:'3', text:'Client approves or requests changes', color:'#f59e0b' },
+                { step:'4', text:'Escrow released to your wallet', color:'#10b981' },
+              ].map(s => `
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                  <div style="width:22px;height:22px;border-radius:50%;background:${s.color};display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;flex-shrink:0;">${s.step}</div>
+                  <span style="font-size:13px;color:#065f46;">${s.text}</span>
+                </div>`).join('')}
+            </div>
+          </div>
+        </div>
+
+        <!-- Confirm Modal -->
+        <div id="confirmModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(4px);">
+          <div style="background:white;border-radius:24px;padding:32px;width:100%;max-width:420px;margin:0 16px;box-shadow:0 32px 80px rgba(0,0,0,0.15);">
+            <div style="width:56px;height:56px;border-radius:50%;background:#eef2ff;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">
+              <i data-lucide="send" style="width:24px;height:24px;color:#6366f1;"></i>
+            </div>
+            <h2 style="font-size:20px;font-weight:600;text-align:center;margin-bottom:8px;">Submit Deliverable?</h2>
+            <p style="font-size:14px;color:var(--muted-foreground);text-align:center;margin-bottom:24px;">Once submitted, the client will be notified to review your work. You can still message them directly in the workroom.</p>
+            <div style="display:flex;gap:12px;">
+              <button onclick="document.getElementById('confirmModal').style.display='none'" class="btn-outline" style="flex:1;padding:12px;border-radius:12px;">Cancel</button>
+              <button onclick="submitDeliverable()" class="btn-primary" style="flex:2;padding:12px;border-radius:12px;">Confirm Submit</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      initDashboard({
+        role: 'worker',
+        activePath: 'worker-my-projects.html',
+        pageTitle: 'Submit Deliverable',
+        pageSubtitle: milestone.milestoneTitle,
+        content
+      });
+      lucide.createIcons();
+
+      // ── Attach real-time listeners ──
+      attachValidationListeners();
+      runAllValidation();   // initial state
+      renderValidationStatus();
+    });
+
+    // ═════════════════════════════════════════════════════════
+    //  ATTACH LISTENERS
+    // ═════════════════════════════════════════════════════════
+    function attachValidationListeners() {
+      const title = document.getElementById('deliverableTitle');
+      const notes = document.getElementById('deliverableNotes');
+      const repo  = document.getElementById('repoUrl');
+      const branch = document.getElementById('branchName');
+
+      if (title) title.addEventListener('input', () => { validateTextFields(); runAllValidation(); });
+      if (notes) notes.addEventListener('input', () => { validateTextFields(); runAllValidation(); });
+      if (repo)  repo.addEventListener('input', () => { validateURL(); runAllValidation(); });
+      if (branch) branch.addEventListener('input', () => { validateBranch(); runAllValidation(); });
+    }
+
+    // ═════════════════════════════════════════════════════════
+    //  VALIDATION FUNCTIONS
+    // ═════════════════════════════════════════════════════════
+
+    // ── Files ──
+    function validateFiles() {
+      const errEl = document.getElementById('fileErr');
+      const dropZone = document.getElementById('dropZone');
+      const errSpan = errEl?.querySelector('span');
+
+      if (uploadedFiles.length === 0) {
+        dropZone?.classList.add('has-error');
+        if (errSpan) errSpan.textContent = 'Please upload at least one file';
+        errEl?.classList.add('visible');
+        return false;
+      }
+
+      // Check for invalid files
+      const invalid = uploadedFiles.filter(f => f.error);
+      if (invalid.length > 0) {
+        dropZone?.classList.add('has-error');
+        if (errSpan) errSpan.textContent = `${invalid.length} file(s) have errors — remove them to continue`;
+        errEl?.classList.add('visible');
+        return false;
+      }
+
+      dropZone?.classList.remove('has-error');
+      errEl?.classList.remove('visible');
+      return true;
+    }
+
+    // ── Repository URL ──
+    function validateURL() {
+      const input = document.getElementById('repoUrl');
+      const errEl = document.getElementById('repoUrlErr');
+      const errSpan = errEl?.querySelector('span');
+      if (!input) return true;
+
+      const val = input.value.trim();
+      if (!val) {
+        // Optional — clear any error
+        input.classList.remove('has-error', 'has-success');
+        errEl?.classList.remove('visible');
+        return true;
+      }
+
+      if (!URL_PATTERN.test(val)) {
+        input.classList.add('has-error');
+        input.classList.remove('has-success');
+        if (errSpan) errSpan.textContent = 'Must be a valid GitHub, GitLab, or Bitbucket URL';
+        errEl?.classList.add('visible');
+        return false;
+      }
+
+      input.classList.remove('has-error');
+      input.classList.add('has-success');
+      errEl?.classList.remove('visible');
+      return true;
+    }
+
+    // ── Branch Name ──
+    function validateBranch() {
+      const input = document.getElementById('branchName');
+      const errEl = document.getElementById('branchErr');
+      const errSpan = errEl?.querySelector('span');
+      if (!input) return true;
+
+      const val = input.value.trim();
+      if (!val) {
+        input.classList.remove('has-error', 'has-success');
+        errEl?.classList.remove('visible');
+        return true;
+      }
+
+      if (!BRANCH_PATTERN.test(val)) {
+        input.classList.add('has-error');
+        input.classList.remove('has-success');
+        if (errSpan) errSpan.textContent = 'Only letters, numbers, dashes, underscores, and slashes';
+        errEl?.classList.add('visible');
+        return false;
+      }
+
+      input.classList.remove('has-error');
+      input.classList.add('has-success');
+      errEl?.classList.remove('visible');
+      return true;
+    }
+
+    // ── Title & Description ──
+    function validateTextFields() {
+      let valid = true;
+
+      // Title
+      const title = document.getElementById('deliverableTitle');
+      const titleErr = document.getElementById('deliverableTitleErr');
+      const titleCounter = document.getElementById('titleCounter');
+      const titleSpan = titleErr?.querySelector('span');
+
+      if (title) {
+        const len = title.value.trim().length;
+        if (titleCounter) {
+          titleCounter.textContent = `${len} / 5 min`;
+          titleCounter.className = 'char-counter ' + (len === 0 ? '' : len < 5 ? 'error' : 'ok');
+        }
+        if (len === 0) {
+          title.classList.add('has-error');
+          title.classList.remove('has-success');
+          if (titleSpan) titleSpan.textContent = 'Title is required';
+          titleErr?.classList.add('visible');
+          valid = false;
+        } else if (len < 5) {
+          title.classList.add('has-error');
+          title.classList.remove('has-success');
+          if (titleSpan) titleSpan.textContent = `Title must be at least 5 characters (${5 - len} more)`;
+          titleErr?.classList.add('visible');
+          valid = false;
+        } else {
+          title.classList.remove('has-error');
+          title.classList.add('has-success');
+          titleErr?.classList.remove('visible');
+        }
+      }
+
+      // Notes / Description
+      const notes = document.getElementById('deliverableNotes');
+      const notesErr = document.getElementById('deliverableNotesErr');
+      const notesCounter = document.getElementById('notesCounter');
+      const notesSpan = notesErr?.querySelector('span');
+
+      if (notes) {
+        const len = notes.value.trim().length;
+        if (notesCounter) {
+          notesCounter.textContent = `${len} / 20 min`;
+          notesCounter.className = 'char-counter ' + (len === 0 ? '' : len < 20 ? 'error' : 'ok');
+        }
+        if (len === 0) {
+          notes.classList.add('has-error');
+          notes.classList.remove('has-success');
+          if (notesSpan) notesSpan.textContent = 'Description is required';
+          notesErr?.classList.add('visible');
+          valid = false;
+        } else if (len < 20) {
+          notes.classList.add('has-error');
+          notes.classList.remove('has-success');
+          if (notesSpan) notesSpan.textContent = `Description must be at least 20 characters (${20 - len} more)`;
+          notesErr?.classList.add('visible');
+          valid = false;
+        } else {
+          notes.classList.remove('has-error');
+          notes.classList.add('has-success');
+          notesErr?.classList.remove('visible');
+        }
+      }
+
+      return valid;
+    }
+
+    // ── Checklist ──
+    function validateChecklist() {
+      const checks = document.querySelectorAll('.checklist-item');
+      const allChecked = [...checks].every(c => c.checked);
+      const section = document.getElementById('checklistSection');
+      const errEl = document.getElementById('checklistErr');
+      const errSpan = errEl?.querySelector('span');
+
+      if (!allChecked) {
+        section?.classList.add('has-error');
+        const unchecked = [...checks].filter(c => !c.checked).length;
+        if (errSpan) errSpan.textContent = `Please complete all checklist items (${unchecked} remaining)`;
+        errEl?.classList.add('visible');
+        return false;
+      }
+
+      section?.classList.remove('has-error');
+      errEl?.classList.remove('visible');
+      return true;
+    }
+
+    // ── Master validation: runs all + updates button ──
+    function runAllValidation() {
+      const filesOk     = validateFiles();
+      const urlOk       = validateURL();
+      const branchOk    = validateBranch();
+      const textOk      = validateTextFields();
+      const checklistOk = validateChecklist();
+      const allValid = filesOk && urlOk && branchOk && textOk && checklistOk;
+
+      const btn = document.getElementById('submitBtn');
+      if (btn) btn.disabled = !allValid;
+
+      renderValidationStatus();
+      return allValid;
+    }
+
+    // ── Sidebar validation status ──
+    function renderValidationStatus() {
+      const container = document.getElementById('validationChecks');
+      if (!container) return;
+
+      const items = [
+        { label: 'Files uploaded', ok: uploadedFiles.length > 0 && !uploadedFiles.some(f => f.error) },
+        { label: 'Title filled (5+ chars)', ok: (document.getElementById('deliverableTitle')?.value.trim().length || 0) >= 5 },
+        { label: 'Description filled (20+ chars)', ok: (document.getElementById('deliverableNotes')?.value.trim().length || 0) >= 20 },
+        { label: 'Checklist completed', ok: [...document.querySelectorAll('.checklist-item')].every(c => c.checked) },
+        { label: 'No validation errors', ok: !document.querySelector('.has-error') },
+      ];
+
+      container.innerHTML = items.map(i => `
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;">
+          <div style="width:18px;height:18px;border-radius:50%;background:${i.ok ? '#ecfdf5' : '#fef2f2'};border:1.5px solid ${i.ok ? '#10b981' : '#fca5a5'};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <i data-lucide="${i.ok ? 'check' : 'x'}" style="width:10px;height:10px;color:${i.ok ? '#10b981' : '#ef4444'};"></i>
+          </div>
+          <span style="font-size:12px;color:${i.ok ? '#059669' : '#6b7280'};">${i.label}</span>
+        </div>
+      `).join('');
+      lucide.createIcons();
+    }
+
+
+    // ═════════════════════════════════════════════════════════
+    //  FILE HANDLING
+    // ═════════════════════════════════════════════════════════
+    function handleFileDrop(e) {
+      e.preventDefault();
+      document.getElementById('dropZone').classList.remove('dragging');
+      addFiles(Array.from(e.dataTransfer.files));
+    }
+
+    function handleFileSelect(e) {
+      addFiles(Array.from(e.target.files));
+      e.target.value = ''; // allow re-selecting same file
+    }
+
+    function addFiles(files) {
+      files.forEach(file => {
+        const ext = '.' + file.name.split('.').pop().toLowerCase();
+        let error = null;
+
+        // Validate type
+        if (!ALLOWED_EXTENSIONS.includes(ext)) {
+          error = 'Unsupported file type';
+        }
+        // Validate size
+        else if (file.size > MAX_FILE_SIZE) {
+          error = 'File size exceeds 50MB';
+        }
+
+        const id = Date.now() + Math.random();
+        uploadedFiles.push({
+          id,
+          name: file.name,
+          size: file.size,
+          sizeFormatted: formatSize(file.size),
+          type: file.type || ext,
+          error,
+        });
+      });
+
+      renderFileList();
+      runAllValidation();
+      lucide.createIcons();
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+
+    function getFileIcon(type) {
+      const t = (type || '').toLowerCase();
+      if (t.includes('image') || t.includes('.jpg') || t.includes('.png') || t.includes('.gif') || t.includes('.svg') || t.includes('.webp'))
+        return { icon:'image', color:'#6366f1', bg:'#eef2ff' };
+      if (t.includes('zip') || t.includes('archive') || t.includes('rar') || t.includes('.7z') || t.includes('.tar') || t.includes('.gz'))
+        return { icon:'file-archive', color:'#f59e0b', bg:'#fffbeb' };
+      if (t.includes('pdf'))
+        return { icon:'file-text', color:'#ef4444', bg:'#fee2e2' };
+      // Code files
+      if (t.includes('.js') || t.includes('.ts') || t.includes('.py') || t.includes('.java') || t.includes('.cpp') || t.includes('.html') || t.includes('.css') || t.includes('.json'))
+        return { icon:'file-code', color:'#10b981', bg:'#ecfdf5' };
+      return { icon:'file', color:'#64748b', bg:'#f1f5f9' };
+    }
+
+    function renderFileList() {
+      const list = document.getElementById('fileList');
+      if (!list) return;
+
+      if (uploadedFiles.length === 0) {
+        list.innerHTML = '';
+        return;
+      }
+
+      list.innerHTML = uploadedFiles.map(f => {
+        const fi = getFileIcon(f.type);
+        const isOver = f.size > MAX_FILE_SIZE;
+        return `
+          <div class="file-chip ${f.error ? 'file-invalid' : ''}" id="file-${f.id}">
+            <div class="file-type-icon" style="background:${f.error ? '#fee2e2' : fi.bg};">
+              <i data-lucide="${f.error ? 'alert-triangle' : fi.icon}" style="width:16px;height:16px;color:${f.error ? '#ef4444' : fi.color};"></i>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${f.error ? 'color:#ef4444;' : ''}">${f.name}</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:2px;">
+                <span class="file-size-badge ${isOver ? 'over' : ''}">${f.sizeFormatted}</span>
+                ${f.error ? `<span style="font-size:11px;color:#ef4444;font-weight:500;">${f.error}</span>` : ''}
+              </div>
+              ${!f.error ? '<div class="upload-progress"><div class="upload-progress-bar" style="width:100%;"></div></div>' : ''}
+            </div>
+            <button onclick="removeFile(${f.id})" style="background:none;border:none;cursor:pointer;color:${f.error ? '#ef4444' : 'var(--muted-foreground)'};padding:4px;" title="Remove">
+              <i data-lucide="x" style="width:14px;height:14px;"></i>
+            </button>
+          </div>`;
+      }).join('');
+    }
+
+    function removeFile(id) {
+      uploadedFiles = uploadedFiles.filter(f => f.id !== id);
+      renderFileList();
+      runAllValidation();
+      lucide.createIcons();
+    }
+
+
+    // ═════════════════════════════════════════════════════════
+    //  SUBMIT FLOW
+    // ═════════════════════════════════════════════════════════
+    function showConfirmModal() {
+      // Final validation before showing modal
+      if (!runAllValidation()) {
+        // Scroll to first error
+        const firstErr = document.querySelector('.has-error, .file-invalid');
+        if (firstErr) firstErr.scrollIntoView({ behavior:'smooth', block:'center' });
+        if (typeof Validate !== 'undefined') Validate.toast('Please fix all errors before submitting', 'error');
+        return;
+      }
+      document.getElementById('confirmModal').style.display = 'flex';
+      lucide.createIcons();
+    }
+
+    function saveDraft() {
+      const data = {
+        files: uploadedFiles.filter(f => !f.error).map(f => f.name),
+        title: document.getElementById('deliverableTitle')?.value || '',
+        notes: document.getElementById('deliverableNotes')?.value || '',
+        repoUrl: document.getElementById('repoUrl')?.value || '',
+        branch: document.getElementById('branchName')?.value || '',
+        savedAt: new Date().toISOString(),
+      };
+      try {
+        localStorage.setItem('deliverableDraft', JSON.stringify(data));
+        if (typeof Validate !== 'undefined') Validate.toast('Draft saved successfully!', 'success');
+      } catch(e) {
+        if (typeof Validate !== 'undefined') Validate.toast('Could not save draft', 'error');
+      }
+    }
+
+    function submitDeliverable() {
+      if (!runAllValidation()) return;
+
+      const titleInput = document.getElementById('deliverableTitle');
+      const notesArea  = document.getElementById('deliverableNotes');
+      const repoInput  = document.getElementById('repoUrl');
+      const title = titleInput?.value.trim() || '';
+      const repoLink = repoInput?.value.trim() || '';
+      const notes = notesArea?.value.trim() || '';
+
+      // Save to store
+      const params = new URLSearchParams(window.location.search);
+      const milestoneId = params.get('milestoneId') || params.get('id');
+      if (milestoneId && typeof Store !== 'undefined') {
+        try {
+          const deliverable = {
+            title: title,
+            description: notes || 'Milestone deliverable submitted.',
+            link: repoLink || '',
+            files: uploadedFiles.filter(f => !f.error).map(f => f.name),
+          };
+          Store.submitDeliverable(milestoneId, deliverable);
+          const _ms = Store.getMilestoneById(milestoneId);
+          const _task = _ms ? Store.getTaskById(_ms.taskId) : null;
+          const _session = (typeof Auth !== 'undefined') ? Auth.getCurrentUser() : null;
+          if (_task && _task.clientId) {
+            Store.addNotification({ userId: _task.clientId, type: 'milestone-submitted', text: 'New deliverable submitted', subtext: (_ms.title || 'Milestone') + ' — ' + (_task.title || 'Project') + ' · just now', read: false });
+          }
+
+          // ── Notify expert reviewers if project has audit enabled ──
+          if (_task && _task.auditEnabled) {
+            const experts = Store.getUsers().filter(u => u.role === 'expert' && u.status !== 'suspended');
+            experts.forEach(expert => {
+              Store.addNotification({
+                userId: expert.id,
+                type: 'audit-needed',
+                text: '🔍 New deliverable awaiting technical audit',
+                subtext: (_ms.title || 'Milestone') + ' — ' + (_task.title || 'Project') + ' · just now',
+                read: false
+              });
+            });
+
+            // Auto-create audit request so it appears in the expert's audit requests page
+            try {
+              Store.createAuditRequest({
+                taskId: _task.id,
+                milestoneId: milestoneId,
+                clientId: _task.clientId,
+                workerId: _task.workerId || (_session ? _session.userId : ''),
+                project: _task.title,
+                milestone: _ms.title || 'Milestone',
+                worker: _session ? _session.name : 'Worker',
+                status: 'Pending',
+                priority: 'High',
+                requestedAt: new Date().toISOString().slice(0, 10),
+              });
+            } catch(auditErr) { console.warn('Auto audit request failed', auditErr); }
+          }
+        } catch(e) { console.warn('Store save failed', e); }
+      }
+
+      // Clear draft
+      try { localStorage.removeItem('deliverableDraft'); } catch(e) {}
+
+      // Resolve taskId for workroom link
+      let _taskId = params.get('taskId') || '';
+      if (!_taskId && milestoneId && typeof Store !== 'undefined') {
+        try { const _m = Store.getMilestoneById(milestoneId); if (_m) _taskId = _m.taskId || ''; } catch(e) {}
+      }
+
+      document.getElementById('confirmModal').style.display = 'none';
+      setTimeout(() => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:300;backdrop-filter:blur(4px);';
+        overlay.innerHTML = `
+          <div style="background:white;border-radius:24px;padding:40px;text-align:center;max-width:400px;margin:0 16px;box-shadow:0 32px 80px rgba(0,0,0,0.2);">
+            <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#10b981,#059669);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;box-shadow:0 12px 32px rgba(16,185,129,0.3);">
+              <span style="font-size:32px;color:white;">✓</span>
+            </div>
+            <h2 style="font-size:22px;font-weight:600;margin-bottom:8px;">Deliverable Submitted!</h2>
+            <p style="color:var(--muted-foreground);font-size:14px;line-height:1.6;margin-bottom:24px;">The client has been notified and will review your work. You'll be notified once they provide feedback.</p>
+            <div style="display:flex;gap:12px;">
+              <a href="worker-my-projects.html" class="btn-outline" style="flex:1;padding:12px;border-radius:12px;text-align:center;text-decoration:none;">My Projects</a>
+              <a href="worker-workroom.html?id=${_taskId}" class="btn-primary" style="flex:1;padding:12px;border-radius:12px;text-align:center;text-decoration:none;">Open Workroom</a>
+            </div>
+          </div>`;
+        document.body.appendChild(overlay);
+      }, 300);
+    }
+  </script>
+</head>
+<body></body>
+</html>

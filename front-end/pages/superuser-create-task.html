@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create Task — Super User — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    /* ═══ Layout ═══ */
+    .post-container { display:grid; grid-template-columns:1fr 320px; gap:18px; width:100%; max-width:none; margin:0; align-items:start; }
+    .section-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px 20px 24px; margin-bottom:20px; box-shadow:0 8px 30px rgba(0,0,0,0.06); }
+    .section-card h2 { font-size:17px; font-weight:500; letter-spacing:-0.02em; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+    .section-card h2 i { color: var(--muted-foreground); }
+    .form-group { margin-bottom:16px; }
+    .form-group:last-child { margin-bottom:0; }
+    .form-label { display:block; font-size:14px; font-weight:500; margin-bottom:8px; }
+    .form-label .required { color:#ef4444; }
+    .form-input, .form-select, .form-textarea { width:100%; padding:10px 16px; border:1px solid var(--border); border-radius:12px; background:var(--background); font-size:14px; font-family:inherit; outline:none; transition:box-shadow 0.2s, border-color 0.2s; box-sizing:border-box; }
+    .form-input:focus, .form-select:focus, .form-textarea:focus { box-shadow:0 0 0 2px var(--ring); border-color:var(--ring); }
+    .form-textarea { resize:none; padding:12px 16px; }
+    .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .form-input.with-icon { padding-left:44px; position:relative; }
+    .input-icon { position:absolute; left:16px; top:50%; transform:translateY(-50%); color:var(--muted-foreground); pointer-events:none; width:18px; height:18px; }
+    .form-input.has-error, .form-select.has-error, .form-textarea.has-error { border-color:#ef4444; box-shadow:0 0 0 2px rgba(239,68,68,0.12); }
+    .field-error { font-size:12px; color:#ef4444; margin-top:4px; display:none; }
+    .field-error.show { display:block; }
+
+    /* ═══ Client select ═══ */
+    .client-select-wrap { position: relative; }
+    .client-option { display:flex; align-items:center; gap:8px; padding:2px 0; }
+    .client-option-avatar {
+      width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+      font-size:10px; font-weight:700; color:#fff; flex-shrink:0;
+    }
+    .client-option-info { display:flex; flex-direction:column; }
+    .client-option-name { font-size:13px; font-weight:500; }
+    .client-option-email { font-size:11px; color:var(--muted-foreground); }
+
+    /* ═══ Milestones ═══ */
+    .milestone-list { display:flex; flex-direction:column; gap:12px; }
+    .milestone-card {
+      padding:16px; border:1px solid var(--border); border-radius:12px; background:var(--background);
+      display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+      transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+      animation: milestoneIn 0.3s ease both;
+    }
+    @keyframes milestoneIn {
+      from { opacity:0; transform:translateY(12px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    .milestone-card:hover { background:rgba(0,0,0,0.015); box-shadow:0 2px 10px rgba(0,0,0,0.04); }
+    .milestone-content { flex:1; }
+    .milestone-index {
+      display:flex; align-items:center; justify-content:center;
+      width:26px; height:26px; border-radius:50%; background:#dbeafe; color:#0369a1;
+      font-size:12px; font-weight:600; flex-shrink:0;
+    }
+    .milestone-title { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+    .milestone-title h3 { font-size:14px; font-weight:500; margin:0; }
+    .milestone-desc { font-size:12px; color:var(--muted-foreground); margin-left:34px; margin-bottom:8px; }
+    .milestone-meta { display:flex; align-items:center; gap:16px; margin-left:34px; font-size:13px; }
+    .milestone-budget { display:flex; align-items:center; gap:5px; font-weight:500; color:#16a34a; }
+    .milestone-budget i { color:#16a34a; }
+    .milestone-deadline { display:flex; align-items:center; gap:5px; color:var(--muted-foreground); }
+    .milestone-deadline i { color:#a855f7; }
+    .milestone-delete { background:none; border:none; color:var(--muted-foreground); cursor:pointer; padding:4px; border-radius:6px; transition:all 0.15s; }
+    .milestone-delete:hover { color:#dc2626; background:rgba(220,38,38,0.08); }
+    .milestone-form {
+      padding:18px; border:1px solid var(--border); background:rgba(0,0,0,0.015); border-radius:12px; margin-bottom:16px;
+      animation: milestoneIn 0.2s ease both;
+    }
+    .milestone-form-actions { display:flex; gap:8px; margin-top:14px; }
+    .milestone-form-actions button {
+      flex:1; padding:10px 16px; border-radius:10px; border:none; font-size:14px; font-weight:500;
+      cursor:pointer; transition:background 0.2s, transform 0.1s; font-family:inherit;
+    }
+    .milestone-form-actions .save { background:#22c55e; color:white; }
+    .milestone-form-actions .save:hover { background:#16a34a; transform:scale(1.01); }
+    .milestone-form-actions .cancel { border:1px solid var(--border); background:var(--background); }
+    .milestone-form-actions .cancel:hover { background:var(--secondary); }
+    .empty-state { text-align:center; padding:36px 16px; }
+    .empty-state i { color:var(--muted-foreground); margin-bottom:10px; opacity:0.5; display:block; }
+    .empty-state p { font-size:14px; color:var(--muted-foreground); }
+    .add-milestone-btn {
+      display:inline-flex; align-items:center; gap:8px; padding:9px 18px; border-radius:12px;
+      background:#eff6ff; border:1px solid #bfdbfe; color:#0369a1; font-size:14px; font-weight:500;
+      cursor:pointer; transition:background 0.2s, transform 0.1s; font-family:inherit;
+    }
+    .add-milestone-btn:hover { background:#dbeafe; transform:scale(1.02); }
+
+    /* ═══ Budget checker ═══ */
+    .budget-check { padding:14px 16px; border-radius:12px; margin-bottom:16px; font-size:14px; }
+    .budget-check.ok { background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; }
+    .budget-check.warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
+    .budget-check.exceeded { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+    .budget-check-item { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+    .budget-check-item:last-of-type { margin-bottom:0; }
+    .budget-check-divider { padding-top:8px; border-top:1px solid; }
+    .budget-check-warning { display:flex; align-items:flex-start; gap:8px; margin-top:10px; }
+    .budget-check-warning i { flex-shrink:0; margin-top:1px; }
+    .budget-check-warning p { font-size:12px; margin:0; }
+
+    /* ═══ Actions ═══ */
+    .action-buttons { display:flex; gap:12px; margin-top:4px; }
+    .action-buttons button {
+      flex:1; height:48px; border-radius:12px; border:none; font-size:14px; font-weight:500;
+      cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;
+      transition:all 0.2s; font-family:inherit;
+    }
+    .save-draft { border:1px solid var(--border); background:var(--card); color:var(--foreground); }
+    .save-draft:hover { background:var(--secondary); }
+    .publish {
+      border-radius:32px;
+      background:linear-gradient(to bottom, hsl(0,0%,16%), hsl(0,0%,10%));
+      color:#ffffff;
+      box-shadow:inset -4px -6px 25px 0px rgba(201,201,201,0.08), inset 4px 4px 10px 0px rgba(29,29,29,0.24);
+    }
+    .publish:hover { transform:scale(1.02); }
+    .publish:active { transform:scale(0.98); }
+    .publish:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+
+    /* ═══ Sidebar ═══ */
+    .post-sidebar { position:sticky; top:24px; }
+    .sidebar-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px; box-shadow:0px 10px 40px 5px rgba(194,194,194,0.12); }
+    .sidebar-card h3 { font-size:17px; font-weight:500; letter-spacing:-0.02em; margin-bottom:16px; }
+    .summary-item { padding:14px; border-radius:12px; margin-bottom:12px; }
+    .summary-item:last-child { margin-bottom:0; }
+    .summary-item.budget  { background:#f0fdf4; border:1px solid #bbf7d0; }
+    .summary-item.milestones { background:#eff6ff; border:1px solid #bfdbfe; }
+    .summary-item.deadline { background:#faf5ff; border:1px solid #e9d5ff; }
+    .summary-item.client  { background:#fff7ed; border:1px solid #fed7aa; }
+    .summary-label { display:flex; align-items:center; gap:8px; margin-bottom:4px; font-size:12px; font-weight:500; }
+    .summary-label.budget { color:#16a34a; } .summary-label.budget i { color:#16a34a; }
+    .summary-label.milestones { color:#0369a1; } .summary-label.milestones i { color:#0369a1; }
+    .summary-label.deadline { color:#7c3aed; } .summary-label.deadline i { color:#7c3aed; }
+    .summary-label.client { color:#c2410c; } .summary-label.client i { color:#c2410c; }
+    .summary-value { font-size:22px; font-weight:500; }
+    .summary-value.budget { color:#16a34a; }
+    .summary-value.milestones { color:#0369a1; }
+    .summary-value.deadline { color:#7c3aed; font-size:14px; }
+    .summary-value.client { color:#c2410c; font-size:14px; }
+
+    /* ═══ Distribution bar ═══ */
+    .budget-bar { height:8px; border-radius:99px; background:var(--border); overflow:hidden; margin-bottom:8px; }
+    .budget-bar-fill { height:100%; border-radius:99px; transition:width 0.3s ease; }
+    .budget-bar-fill.ok { background:linear-gradient(90deg,#10b981,#34d399); }
+    .budget-bar-fill.warn { background:linear-gradient(90deg,#f59e0b,#fbbf24); }
+    .budget-bar-fill.over { background:linear-gradient(90deg,#ef4444,#f87171); }
+
+    @media(max-width:1024px){ .post-container{ grid-template-columns:1fr; } .post-sidebar{ position:static; } }
+    @media(max-width:640px){ .grid-2{ grid-template-columns:1fr; } .action-buttons{ flex-direction:column; } }
+  </style>
+
+  <script>
+    /* ═══════════════════════════════════════════════
+       STATE
+    ═══════════════════════════════════════════════ */
+    let formState = {
+      taskTitle: '',
+      category: 'Web Development',
+      description: '',
+      skills: [],
+      deadline: '',
+      budget: 0,
+      currency: 'USD',
+      clientId: '',
+      auditEnabled: false,
+      milestones: [],
+      showMilestoneForm: false,
+      newMilestone: { title: '', description: '', budget: '', deadline: '' },
+    };
+    let editingMilestoneIndex = null;
+
+    /* ═══════════════════════════════════════════════
+       MILESTONE FUNCTIONS
+    ═══════════════════════════════════════════════ */
+
+    /** addMilestone – validates and adds to state */
+    function addMilestone() {
+      const nm = formState.newMilestone;
+      let valid = true;
+
+      // Title check
+      const titleEl = document.getElementById('mTitle');
+      if (!nm.title || nm.title.trim().length < 3) {
+        if (titleEl) { titleEl.classList.add('has-error'); }
+        showFieldMsg('mTitleErr', 'Title must be ≥ 3 characters'); valid = false;
+      } else { titleEl?.classList.remove('has-error'); hideFieldMsg('mTitleErr'); }
+
+      // Description check
+      const descEl = document.getElementById('mDesc');
+      if (!nm.description || nm.description.trim().length < 5) {
+        if (descEl) { descEl.classList.add('has-error'); }
+        showFieldMsg('mDescErr', 'Description is required'); valid = false;
+      } else { descEl?.classList.remove('has-error'); hideFieldMsg('mDescErr'); }
+
+      // Budget check
+      const budgetEl = document.getElementById('mBudget');
+      const budgetVal = parseFloat(nm.budget);
+      const totalBudget = parseFloat(formState.budget) || 0;
+      if (!nm.budget || budgetVal <= 0) {
+        if (budgetEl) { budgetEl.classList.add('has-error'); }
+        showFieldMsg('mBudgetErr', 'Must be greater than 0'); valid = false;
+      } else if (totalBudget > 0 && budgetVal > totalBudget) {
+        if (budgetEl) { budgetEl.classList.add('has-error'); }
+        showFieldMsg('mBudgetErr', 'Cannot exceed total budget'); valid = false;
+      } else { budgetEl?.classList.remove('has-error'); hideFieldMsg('mBudgetErr'); }
+
+      // Deadline check
+      const dlEl = document.getElementById('mDeadline');
+      if (!nm.deadline) {
+        if (dlEl) { dlEl.classList.add('has-error'); }
+        showFieldMsg('mDeadlineErr', 'Deadline is required'); valid = false;
+      } else if (formState.deadline && nm.deadline > formState.deadline) {
+        if (dlEl) { dlEl.classList.add('has-error'); }
+        showFieldMsg('mDeadlineErr', `Must be on or before project deadline (${formState.deadline})`); valid = false;
+      } else { dlEl?.classList.remove('has-error'); hideFieldMsg('mDeadlineErr'); }
+
+      if (!valid) return;
+
+      // Save
+      if (editingMilestoneIndex !== null) {
+        formState.milestones[editingMilestoneIndex] = { ...nm };
+        editingMilestoneIndex = null;
+      } else {
+        formState.milestones.push({ ...nm });
+      }
+
+      formState.newMilestone = { title: '', description: '', budget: '', deadline: '' };
+      formState.showMilestoneForm = false;
+      renderMilestones();
+      updateSummary();
+    }
+
+    /** removeMilestone – removes by index */
+    function removeMilestone(idx) {
+      formState.milestones.splice(idx, 1);
+      renderMilestones();
+      updateSummary();
+    }
+
+    /** editMilestone – populate form for editing */
+    function editMilestone(idx) {
+      editingMilestoneIndex = idx;
+      formState.newMilestone = { ...formState.milestones[idx] };
+      formState.showMilestoneForm = true;
+      renderMilestones();
+    }
+
+    /** calculateTotalMilestoneBudget */
+    function calculateTotalMilestoneBudget() {
+      return formState.milestones.reduce((sum, m) => sum + (parseFloat(m.budget) || 0), 0);
+    }
+
+    /** validateBudget – returns { valid, milestoneCost, totalBudget, diff } */
+    function validateBudget() {
+      const mc = calculateTotalMilestoneBudget();
+      const tb = parseFloat(formState.budget) || 0;
+      return { valid: tb > 0 && mc === tb, milestoneCost: mc, totalBudget: tb, diff: tb - mc };
+    }
+
+    /* ═══════════════════════════════════════════════
+       RENDER FUNCTIONS
+    ═══════════════════════════════════════════════ */
+
+    function showFieldMsg(id, msg) { const e = document.getElementById(id); if (e) { e.textContent = msg; e.classList.add('show'); } }
+    function hideFieldMsg(id)      { const e = document.getElementById(id); if (e) { e.textContent = ''; e.classList.remove('show'); } }
+
+    function renderMilestones() {
+      const container = document.getElementById('milestonesContainer');
+      const addBtn = document.getElementById('addMilestoneBtn');
+      if (!container) return;
+
+      if (!formState.showMilestoneForm && formState.milestones.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <i data-lucide="milestone" style="width:48px;height:48px;"></i>
+            <p>No milestones yet. Add at least one to post the task.</p>
+          </div>`;
+        if (addBtn) addBtn.style.display = '';
+        lucide.createIcons();
+        return;
+      }
+
+      let html = '';
+
+      // Milestone inline form
+      if (formState.showMilestoneForm) {
+        if (addBtn) addBtn.style.display = 'none';
+        html += `
+          <div class="milestone-form">
+            <div style="font-size:14px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:6px;">
+              <i data-lucide="${editingMilestoneIndex !== null ? 'pencil' : 'plus-circle'}" style="width:16px;height:16px;color:#0369a1;"></i>
+              ${editingMilestoneIndex !== null ? 'Edit' : 'Add'} Milestone
+            </div>
+            <div class="form-group">
+              <label class="form-label">Milestone Title <span class="required">*</span></label>
+              <input type="text" class="form-input" id="mTitle" value="${formState.newMilestone.title}"
+                oninput="formState.newMilestone.title = this.value; this.classList.remove('has-error'); hideFieldMsg('mTitleErr')"
+                placeholder="e.g. Design Phase" />
+              <div class="field-error" id="mTitleErr"></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Description <span class="required">*</span></label>
+              <textarea class="form-input" id="mDesc" rows="3"
+                oninput="formState.newMilestone.description = this.value; this.classList.remove('has-error'); hideFieldMsg('mDescErr')"
+                placeholder="What's the deliverable?">${formState.newMilestone.description}</textarea>
+              <div class="field-error" id="mDescErr"></div>
+            </div>
+            <div class="grid-2">
+              <div class="form-group">
+                <label class="form-label">Budget <span class="required">*</span></label>
+                <input type="number" class="form-input" id="mBudget" value="${formState.newMilestone.budget}"
+                  oninput="formState.newMilestone.budget = this.value; this.classList.remove('has-error'); hideFieldMsg('mBudgetErr')"
+                  placeholder="Amount" min="1" />
+                <div class="field-error" id="mBudgetErr"></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Deadline <span class="required">*</span></label>
+                <input type="date" class="form-input" id="mDeadline" value="${formState.newMilestone.deadline}"
+                  oninput="formState.newMilestone.deadline = this.value; this.classList.remove('has-error'); hideFieldMsg('mDeadlineErr')" />
+                <div class="field-error" id="mDeadlineErr"></div>
+              </div>
+            </div>
+            <div class="milestone-form-actions">
+              <button class="save" type="button" onclick="addMilestone()">
+                <i data-lucide="check" style="width:14px;height:14px;display:inline;"></i> ${editingMilestoneIndex !== null ? 'Update' : 'Save'} Milestone
+              </button>
+              <button class="cancel" type="button" onclick="formState.showMilestoneForm = false; editingMilestoneIndex = null; formState.newMilestone = {title:'',description:'',budget:'',deadline:''}; renderMilestones()">Cancel</button>
+            </div>
+          </div>`;
+      } else {
+        if (addBtn) addBtn.style.display = '';
+      }
+
+      // Existing milestones
+      html += formState.milestones.map((m, idx) => `
+        <div class="milestone-card" style="animation-delay:${idx*0.05}s">
+          <div class="milestone-content">
+            <div class="milestone-title">
+              <div class="milestone-index">${idx + 1}</div>
+              <h3>${m.title}</h3>
+            </div>
+            <div class="milestone-desc">${m.description || '<em style="opacity:0.5;">No description</em>'}</div>
+            <div class="milestone-meta">
+              <span class="milestone-budget">
+                <i data-lucide="dollar-sign" style="width:14px;height:14px;"></i>
+                ${formState.currency} ${parseFloat(m.budget).toLocaleString()}
+              </span>
+              <span class="milestone-deadline">
+                <i data-lucide="calendar" style="width:13px;height:13px;"></i>
+                ${m.deadline || 'No deadline'}
+              </span>
+            </div>
+          </div>
+          <div style="display:flex;gap:4px;">
+            <button class="milestone-delete" type="button" title="Edit" onclick="editMilestone(${idx})">
+              <i data-lucide="pencil" style="width:14px;height:14px;"></i>
+            </button>
+            <button class="milestone-delete" type="button" title="Remove" onclick="removeMilestone(${idx})">
+              <i data-lucide="x" style="width:16px;height:16px;"></i>
+            </button>
+          </div>
+        </div>`).join('');
+
+      container.innerHTML = html;
+      lucide.createIcons();
+    }
+
+    /** renderBudgetCheck – shows real-time budget status with progress bar */
+    function renderBudgetCheck() {
+      const { milestoneCost, totalBudget, diff, valid } = validateBudget();
+      const container = document.getElementById('budgetCheckContainer');
+      if (!container) return;
+
+      // No milestones or no budget yet
+      if (totalBudget <= 0 && formState.milestones.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+
+      const pct = totalBudget > 0 ? Math.min((milestoneCost / totalBudget) * 100, 100) : 0;
+      const exceeded = milestoneCost > totalBudget;
+      const matched  = milestoneCost === totalBudget && totalBudget > 0;
+      const under    = milestoneCost < totalBudget && totalBudget > 0;
+
+      const barClass = matched ? 'ok' : exceeded ? 'over' : 'warn';
+      const boxClass = matched ? 'ok' : exceeded ? 'exceeded' : 'warn';
+
+      let icon, message;
+      if (matched) {
+        icon = 'check-circle'; message = 'Budget is perfectly allocated across milestones.';
+      } else if (exceeded) {
+        icon = 'alert-triangle'; message = `Milestone costs exceed total budget by ${formState.currency} ${(milestoneCost - totalBudget).toLocaleString()}.`;
+      } else {
+        icon = 'info'; message = `${formState.currency} ${diff.toLocaleString()} remaining to allocate.`;
+      }
+
+      container.innerHTML = `
+        <div class="budget-check ${boxClass}">
+          <div class="budget-bar"><div class="budget-bar-fill ${barClass}" style="width:${Math.min(pct,100)}%"></div></div>
+          <div class="budget-check-item">
+            <span>Milestone total</span>
+            <strong>${formState.currency} ${milestoneCost.toLocaleString()}</strong>
+          </div>
+          <div class="budget-check-item">
+            <span>Project Budget</span>
+            <strong>${formState.currency} ${totalBudget.toLocaleString()}</strong>
+          </div>
+          <div class="budget-check-item budget-check-divider">
+            <span>${matched ? '✓ Fully allocated' : exceeded ? '✗ Over budget' : 'Remaining'}</span>
+            <strong>${formState.currency} ${Math.abs(diff).toLocaleString()}</strong>
+          </div>
+          <div class="budget-check-warning">
+            <i data-lucide="${icon}" style="width:14px;height:14px;"></i>
+            <p>${message}</p>
+          </div>
+        </div>`;
+      lucide.createIcons();
+    }
+
+    /** updateSummary – refreshes sidebar */
+    function updateSummary() {
+      const totalBudget = parseFloat(formState.budget || 0);
+      const mc = calculateTotalMilestoneBudget();
+      const { valid: budgetOk } = validateBudget();
+
+      const el = id => document.getElementById(id);
+
+      const budgetVal = el('sumBudget');
+      if (budgetVal) budgetVal.textContent = `${formState.currency} ${isNaN(totalBudget) ? 0 : totalBudget.toLocaleString()}`;
+
+      const msVal = el('sumMilestones');
+      if (msVal) msVal.textContent = formState.milestones.length;
+
+      const dlVal = el('sumDeadline');
+      if (dlVal) dlVal.textContent = formState.deadline ? formState.deadline : 'Not set';
+
+      const clVal = el('sumClient');
+      if (clVal) {
+        if (formState.clientId) {
+          const client = Store.getUserById(formState.clientId);
+          clVal.textContent = client ? client.name : 'Unknown';
+        } else {
+          clVal.textContent = 'Not selected';
+        }
+      }
+
+      renderBudgetCheck();
+      updateSubmitState();
+    }
+
+    /** validateTaskForm – returns true if all validation passes */
+    function validateTaskForm() {
+      let valid = true;
+      const title = document.getElementById('taskTitle')?.value.trim() || '';
+      const desc = document.getElementById('taskDesc')?.value.trim() || '';
+      const budget = formState.budget;
+
+      if (!title || title.length < 5) {
+        Validate.toast('Task title must be at least 5 characters.', 'error'); valid = false;
+      }
+      if (!desc || desc.length < 10) {
+        Validate.toast('Description must be at least 10 characters.', 'error'); valid = false;
+      }
+      if (!budget || parseFloat(budget) <= 0) {
+        Validate.toast('Please enter a valid budget.', 'error'); valid = false;
+      }
+      if (!formState.deadline) {
+        Validate.toast('Please set a project deadline.', 'error'); valid = false;
+      }
+      if (!formState.clientId) {
+        Validate.toast('Please select a client.', 'error'); valid = false;
+      }
+      if (formState.milestones.length === 0) {
+        Validate.toast('Add at least one milestone before posting.', 'error'); valid = false;
+      }
+      const { valid: budgetValid } = validateBudget();
+      if (!budgetValid && formState.milestones.length > 0) {
+        Validate.toast('Total milestone budgets must exactly equal the task budget.', 'error'); valid = false;
+      }
+      return valid;
+    }
+
+    /** updateSubmitState – enables/disables publish button */
+    function updateSubmitState() {
+      const btn = document.getElementById('publishBtn');
+      if (!btn) return;
+      const title = document.getElementById('taskTitle')?.value.trim() || '';
+      const desc = document.getElementById('taskDesc')?.value.trim() || '';
+      const { valid: budgetOk } = validateBudget();
+      const ready = title.length >= 5 && desc.length >= 10 &&
+                    parseFloat(formState.budget) > 0 && formState.deadline &&
+                    formState.clientId && formState.milestones.length > 0 && budgetOk;
+      btn.disabled = !ready;
+    }
+
+    /** handleTaskSubmit – final submit */
+    function handleTaskSubmit() {
+      if (!validateTaskForm()) return;
+
+      const btn = document.getElementById('publishBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="btn-spinner" style="width:18px;height:18px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;"></div> Publishing...';
+
+      setTimeout(() => {
+        const task = Store.createTask({
+          title: formState.taskTitle,
+          category: formState.category,
+          description: document.getElementById('taskDesc')?.value.trim() || '',
+          skills: formState.skills,
+          deadline: formState.deadline,
+          budget: parseFloat(formState.budget),
+          currency: formState.currency,
+          auditEnabled: formState.auditEnabled,
+          clientId: formState.clientId,
+          status: 'open',
+        });
+
+        formState.milestones.forEach(m => {
+          Store.createMilestone({
+            taskId: task.id,
+            title: m.title,
+            description: m.description,
+            budget: parseFloat(m.budget),
+            deadline: m.deadline,
+            workerId: null
+          });
+        });
+
+        Validate.toast('Task created and assigned to client successfully!', 'success');
+        btn.innerHTML = '<i data-lucide="check" style="width:16px;height:16px;"></i> Published!';
+        setTimeout(() => { window.location.href = 'superuser-tasks.html'; }, 1200);
+      }, 800);
+    }
+
+    /* ═══════════════════════════════════════════════
+       INIT
+    ═══════════════════════════════════════════════ */
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('superuser')) return;
+
+      // Get client list
+      const clients = Store.getUsers().filter(u => u.role === 'client');
+      const clientOptions = clients.map(c => `
+        <option value="${c.id}">${c.name} — ${c.email}</option>`).join('');
+
+      const content = `
+        <style>@keyframes spin { to { transform:rotate(360deg); } }</style>
+        <div class="post-container">
+          <div>
+            <!-- Basic Info -->
+            <div class="section-card">
+              <h2><i data-lucide="file-text" style="width:18px;height:18px;"></i> Basic Information</h2>
+              <div class="form-group">
+                <label class="form-label">Task Title <span class="required">*</span></label>
+                <input type="text" class="form-input" id="taskTitle" placeholder="e.g. E-commerce Website Redesign"
+                  oninput="formState.taskTitle = this.value; updateSubmitState()" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Category</label>
+                <select class="form-select" onchange="formState.category = this.value">
+                  <option>Web Development</option>
+                  <option>Mobile Development</option>
+                  <option>Backend / API</option>
+                  <option>UI/UX Design</option>
+                  <option>AI / Machine Learning</option>
+                  <option>DevOps / Cloud</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Description <span class="required">*</span></label>
+                <textarea class="form-textarea" rows="5" id="taskDesc" placeholder="Describe what you need done, goals, and requirements..."
+                  oninput="formState.description = this.value; updateSubmitState()"></textarea>
+              </div>
+            </div>
+
+            <!-- Client Assignment -->
+            <div class="section-card">
+              <h2><i data-lucide="user-check" style="width:18px;height:18px;"></i> Assign to Client</h2>
+              <div class="form-group">
+                <label class="form-label">Select Client <span class="required">*</span></label>
+                <select class="form-select" id="clientSelect" onchange="formState.clientId = this.value; updateSummary()">
+                  <option value="">— Select a client —</option>
+                  ${clientOptions}
+                </select>
+              </div>
+            </div>
+
+            <!-- Budget & Deadline -->
+            <div class="section-card">
+              <h2><i data-lucide="wallet" style="width:18px;height:18px;"></i> Budget & Deadline</h2>
+              <div class="grid-2">
+                <div class="form-group">
+                  <label class="form-label">Total Budget <span class="required">*</span></label>
+                  <div style="position:relative;">
+                    <i data-lucide="dollar-sign" class="input-icon"></i>
+                    <input type="number" class="form-input with-icon" id="taskBudget" placeholder="5000" min="1"
+                      oninput="formState.budget = this.value; updateSummary()" />
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Currency</label>
+                  <select class="form-select" onchange="formState.currency = this.value; updateSummary()">
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Project Deadline <span class="required">*</span></label>
+                <input type="date" class="form-input" id="taskDeadline"
+                  oninput="formState.deadline = this.value; updateSummary()" />
+              </div>
+              <div id="budgetCheckContainer"></div>
+            </div>
+
+            <!-- Milestones -->
+            <div class="section-card">
+              <h2><i data-lucide="milestone" style="width:18px;height:18px;"></i> Milestones</h2>
+              <div id="milestonesContainer"></div>
+              <button class="add-milestone-btn" id="addMilestoneBtn" type="button"
+                onclick="formState.showMilestoneForm = true; renderMilestones()">
+                <i data-lucide="plus" style="width:16px;height:16px;"></i>
+                Add Milestone
+              </button>
+            </div>
+
+            <!-- Actions -->
+            <div class="action-buttons">
+              <button type="button" class="save-draft" onclick="saveDraft()">
+                <i data-lucide="save" style="width:16px;height:16px;"></i> Save Draft
+              </button>
+              <button type="button" class="publish" id="publishBtn" disabled onclick="handleTaskSubmit()">
+                <i data-lucide="send" style="width:16px;height:16px;"></i> Post Task
+              </button>
+            </div>
+          </div>
+
+          <!-- Sidebar Summary -->
+          <div class="post-sidebar">
+            <div class="sidebar-card">
+              <h3>Task Summary</h3>
+
+              <div class="summary-item budget">
+                <div class="summary-label budget">
+                  <i data-lucide="dollar-sign" style="width:14px;height:14px;"></i> Budget
+                </div>
+                <div class="summary-value budget" id="sumBudget">USD 0</div>
+              </div>
+
+              <div class="summary-item milestones">
+                <div class="summary-label milestones">
+                  <i data-lucide="milestone" style="width:14px;height:14px;"></i> Milestones
+                </div>
+                <div class="summary-value milestones" id="sumMilestones">0</div>
+              </div>
+
+              <div class="summary-item deadline">
+                <div class="summary-label deadline">
+                  <i data-lucide="calendar" style="width:14px;height:14px;"></i> Deadline
+                </div>
+                <div class="summary-value deadline" id="sumDeadline">Not set</div>
+              </div>
+
+              <div class="summary-item client">
+                <div class="summary-label client">
+                  <i data-lucide="user" style="width:14px;height:14px;"></i> Assigned Client
+                </div>
+                <div class="summary-value client" id="sumClient">Not selected</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      initDashboard({
+        role: 'superuser',
+        activePath: 'superuser-create-task.html',
+        pageTitle: 'Create Task',
+        pageSubtitle: 'Create and assign a new task to a client',
+        content,
+      });
+
+      setTimeout(() => {
+        lucide.createIcons();
+        renderMilestones();
+        updateSummary();
+      }, 100);
+    });
+
+    function saveDraft() {
+      const title = document.getElementById('taskTitle')?.value.trim() || '';
+      if (!title) { Validate.toast('Enter a task title to save draft.', 'error'); return; }
+      Validate.toast('Draft saved successfully.', 'info');
+    }
+  </script>
+</head>
+<body></body>
+</html>

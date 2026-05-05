@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Projects — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .project-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:24px; transition:box-shadow 0.2s,transform 0.2s; }
+    .project-card:hover { box-shadow:0 8px 32px rgba(0,0,0,0.08); transform:translateY(-2px); }
+    .projects-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:16px; }
+    .tab-bar { display:flex; gap:4px; background:var(--input-bg); padding:4px; border-radius:12px; margin-bottom:20px; width:fit-content; }
+    .tab-btn { padding:7px 16px; border-radius:9px; font-size:14px; font-weight:500; cursor:pointer; transition:background 0.15s,color 0.15s; border:none; background:transparent; color:var(--muted-foreground); font-family:inherit; }
+    .tab-btn.active { background:var(--card); color:var(--foreground); box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+    .empty-state { text-align:center; padding:64px 32px; color:var(--muted-foreground); }
+    .empty-state-icon { width:56px; height:56px; background:var(--secondary); border-radius:16px; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; }
+    /* Edit modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; display:none; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:var(--card); border-radius:20px; padding:28px; max-width:480px; width:100%; box-shadow:0 24px 64px rgba(0,0,0,0.18); max-height:90vh; overflow-y:auto; }
+    .modal-title { font-size:18px; font-weight:600; margin-bottom:6px; }
+    .modal-sub { font-size:14px; color:var(--muted-foreground); margin-bottom:24px; }
+    .modal-field { margin-bottom:16px; }
+    .modal-field label { display:block; font-size:13px; font-weight:500; margin-bottom:6px; }
+    .modal-field input, .modal-field select, .modal-field textarea { width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--input-bg); font-size:14px; font-family:inherit; box-sizing:border-box; }
+    .modal-actions { display:flex; gap:10px; margin-top:24px; }
+    .btn-cancel-modal { flex:1; padding:10px; border-radius:12px; border:1px solid var(--border); background:var(--background); font-size:14px; font-weight:500; cursor:pointer; }
+    .btn-save-modal { flex:2; padding:10px; border-radius:12px; border:none; background:linear-gradient(to bottom,hsl(0,0%,16%),hsl(0,0%,10%)); color:#fff; font-size:14px; font-weight:500; cursor:pointer; }
+  </style>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('client')) return;
+
+      const session = Auth.getCurrentUser();
+      let activeTab = 'all';
+      let editingTaskId = null;
+
+      // ── Helpers ──────────────────────────────────────────────
+      function statusBadge(status) {
+        const map = {
+          'open': ['badge-gray','Open'],
+          'in-progress': ['badge-blue','In Progress'],
+          'completed': ['badge-green','Completed'],
+        };
+        const [cls, label] = map[status] || ['badge-gray', status];
+        return `<span class="badge ${cls}">${label}</span>`;
+      }
+      function taskCategory(status) {
+        if (status === 'completed') return 'completed';
+        if (status === 'open') return 'open';
+        return 'active';
+      }
+      function fmtDate(d) {
+        if (!d) return 'No deadline';
+        try { return new Date(d).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}); } catch(e) { return d; }
+      }
+
+      // ── Render ────────────────────────────────────────────────
+      function getProjects() {
+        const tasks = Store.getTasksByClient(session.userId);
+        return tasks.map(t => {
+          const worker = t.workerId ? Store.getUserById(t.workerId) : null;
+          const milestones = Store.getMilestonesByTask(t.id);
+          const doneList = milestones.filter(m => ['completed', 'approved', 'audit-passed', 'done', 'paid'].includes(m.status));
+          const done = doneList.length;
+          const calculatedProgress = milestones.length > 0 ? Math.round((done / milestones.length) * 100) : (t.progress || 0);
+          return {
+            id: t.id,
+            name: t.title,
+            worker: worker ? worker.name : 'Not Assigned',
+            workerAvatar: worker ? worker.avatar : '?',
+            workerColor: worker ? worker.avatarColor : '#e5e7eb',
+            progress: calculatedProgress,
+            deadline: fmtDate(t.deadline),
+            status: t.status,
+            milestones: `${done}/${milestones.length}`,
+            escrow: `$${(t.budget || 0).toLocaleString()}`,
+            category: taskCategory(t.status),
+            auditEnabled: t.auditEnabled
+          };
+        });
+      }
+
+      function renderCard(p) {
+        const actions = p.category === 'open'
+          ? `<button onclick="event.stopPropagation();window.location.href='worker-applications.html'" style="padding:10px;border:1px solid var(--border);border-radius:10px;background:white;color:var(--foreground);font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;flex:1;">
+               <i data-lucide="users" style="width:14px;height:14px;"></i>View Proposals
+             </button>`
+          : p.category === 'completed'
+          ? `<button onclick="event.stopPropagation();window.location.href='project-milestone-board.html?id=${p.id}'" style="padding:10px;border:1px solid var(--border);border-radius:10px;background:white;color:var(--foreground);font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;flex:1;">
+               <i data-lucide="eye" style="width:14px;height:14px;"></i>View Details
+             </button>`
+          : `<button onclick="event.stopPropagation();window.location.href='project-milestone-board.html?id=${p.id}'" style="padding:10px;border:1px solid var(--border);border-radius:10px;background:white;color:var(--foreground);font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;flex:1;">
+               <i data-lucide="layout-list" style="width:14px;height:14px;"></i>Milestones
+             </button>
+             <button onclick="event.stopPropagation();window.location.href='project-workroom.html?id=${p.id}'" style="padding:10px;border:1px solid var(--border);border-radius:10px;background:white;color:var(--foreground);font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;flex:1;">
+               <i data-lucide="message-circle" style="width:14px;height:14px;"></i>Workroom
+             </button>`;
+
+        const escrowBg = p.category === 'completed'
+          ? 'background:#d1fae5;border:1px solid #a7f3d0;color:#047857;'
+          : 'background:#dbeafe;border:1px solid #bfdbfe;color:#0369a1;';
+        const escrowIcon = p.category === 'completed' ? 'check-circle' : 'lock';
+        const escrowLabel = p.category === 'completed' ? 'Funds Released' : 'Escrow Locked';
+
+        return `
+          <div class="project-card" style="display:flex;flex-direction:column;" id="card-${p.id}">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;">
+              <h3 style="font-size:16px;font-weight:600;letter-spacing:-0.01em;flex:1;margin-right:12px;">${p.name}</h3>
+              <div style="display:flex;align-items:center;gap:6px;">
+                ${statusBadge(p.status)}
+                <button onclick="openEditModal('${p.id}')" title="Edit" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--muted-foreground);border-radius:6px;" onmouseenter="this.style.background='var(--secondary)'" onmouseleave="this.style.background='none'">
+                  <i data-lucide="pencil" style="width:14px;height:14px;"></i>
+                </button>
+                ${p.status === 'open' && p.worker === 'Not Assigned' ? `<button onclick="deleteTask('${p.id}')" title="Delete" style="background:none;border:none;cursor:pointer;padding:4px;color:#ef4444;border-radius:6px;" onmouseenter="this.style.background='#fee2e2'" onmouseleave="this.style.background='none'">
+                  <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+                </button>` : ''}
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+              <div style="width:32px;height:32px;border-radius:50%;background:${p.workerColor};display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;">${p.workerAvatar}</div>
+              <span style="font-size:13px;color:var(--foreground);">${p.worker}</span>
+              ${p.auditEnabled ? '<span style="font-size:11px;background:#f3e8ff;color:#7c3aed;padding:2px 8px;border-radius:99px;font-weight:500;margin-left:4px;">Audit On</span>' : ''}
+            </div>
+            <div style="margin-bottom:16px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                <span style="font-size:12px;color:var(--muted-foreground);">Milestone Progress</span>
+                <span style="font-size:12px;font-weight:700;color:var(--foreground);">${p.milestones} completed</span>
+              </div>
+              <div style="height:6px;border-radius:9999px;background:var(--muted);overflow:hidden;">
+                <div style="height:100%;border-radius:9999px;background:linear-gradient(90deg,#6366f1,#8b5cf6);width:${p.progress}%;transition:width 0.4s;"></div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;flex:1;">
+              <div style="${escrowBg}border-radius:12px;padding:12px;display:flex;flex-direction:column;align-items:flex-start;">
+                <div style="font-size:11px;margin-bottom:4px;display:flex;align-items:center;gap:4px;">
+                  <i data-lucide="${escrowIcon}" style="width:13px;height:13px;"></i>${escrowLabel}
+                </div>
+                <div style="font-size:15px;font-weight:700;">${p.escrow}</div>
+              </div>
+              <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;flex-direction:column;align-items:flex-start;">
+                <div style="font-size:11px;color:var(--muted-foreground);margin-bottom:4px;">
+                  <i data-lucide="calendar" style="width:13px;height:13px;display:inline;vertical-align:middle;margin-right:4px;"></i>Deadline
+                </div>
+                <div style="font-size:13px;font-weight:600;color:var(--foreground);">${p.deadline}</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;">${actions}</div>
+          </div>`;
+      }
+
+      function renderProjects(cat) {
+        const all = getProjects();
+        const list = cat === 'all' ? all : all.filter(p => p.category === cat);
+        if (!list.length) return `
+          <div class="empty-state">
+            <div class="empty-state-icon"><i data-lucide="folder-open" style="width:24px;height:24px;color:var(--muted-foreground);"></i></div>
+            <div style="font-size:16px;font-weight:600;margin-bottom:6px;">No projects yet</div>
+            <div style="font-size:14px;margin-bottom:20px;">Post a task to get started with your first project.</div>
+            <a href="post-task.html" class="btn-primary" style="display:inline-flex;align-items:center;gap:8px;">
+              <i data-lucide="plus" style="width:16px;height:16px;"></i> Post a Task
+            </a>
+          </div>`;
+        return `<div class="projects-grid">${list.map(renderCard).join('')}</div>`;
+      }
+
+      function rebuildContent() {
+        const all = getProjects();
+        const open = all.filter(p=>p.category==='open').length;
+        const active = all.filter(p=>p.category==='active').length;
+        const completed = all.filter(p=>p.category==='completed').length;
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+            <div class="tab-bar">
+              <button class="tab-btn active" onclick="switchTab('all',this)">All (${all.length})</button>
+              <button class="tab-btn" onclick="switchTab('open',this)">Open (${open})</button>
+              <button class="tab-btn" onclick="switchTab('active',this)">Active (${active})</button>
+              <button class="tab-btn" onclick="switchTab('completed',this)">Completed (${completed})</button>
+            </div>
+            <a href="post-task.html" class="btn-primary" style="display:inline-flex;align-items:center;gap:8px;">
+              <i data-lucide="plus" style="width:16px;height:16px;"></i> New Project
+            </a>
+          </div>
+          <div id="projectsContainer">${renderProjects('all')}</div>`;
+      }
+
+      initDashboard({
+        role: 'client',
+        activePath: 'client-my-projects.html',
+        pageTitle: 'My Projects',
+        pageSubtitle: 'Manage and track all your active and past projects',
+        content: rebuildContent()
+      });
+      lucide.createIcons();
+
+      // ── Tab switch ─────────────────────────────────────────────
+      window.switchTab = function(cat, btn) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeTab = cat;
+        const c = document.getElementById('projectsContainer');
+        if (c) { c.innerHTML = renderProjects(cat); lucide.createIcons(); }
+      };
+
+      // ── Edit modal ─────────────────────────────────────────────
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="editModal">
+          <div class="modal">
+            <div class="modal-title">Edit Project</div>
+            <div class="modal-sub">Update details for this task.</div>
+            <div class="modal-field">
+              <label>Title <span style="color:#ef4444">*</span></label>
+              <input type="text" id="editTitle" placeholder="Task title" />
+              <div id="editTitleErr" style="font-size:12px;color:#ef4444;margin-top:4px;display:none;"></div>
+            </div>
+            <div class="modal-field">
+              <label>Category</label>
+              <select id="editCategory">
+                <option value="Web Development">Web Development</option>
+                <option value="Mobile Development">Mobile Development</option>
+                <option value="Backend / API">Backend / API</option>
+                <option value="UI/UX Design">UI/UX Design</option>
+                <option value="Data Science">Data Science</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="modal-field">
+              <label>Budget ($)</label>
+              <input type="number" id="editBudget" min="1" placeholder="e.g. 2500" />
+              <div id="editBudgetErr" style="font-size:12px;color:#ef4444;margin-top:4px;display:none;"></div>
+            </div>
+            <div class="modal-field">
+              <label>Deadline</label>
+              <input type="date" id="editDeadline" />
+            </div>
+            <div class="modal-field">
+              <label>Status</label>
+              <select id="editStatus">
+                <option value="open">Open</option>
+                <option value="in-progress">In Progress</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+            <div class="modal-actions">
+              <button class="btn-cancel-modal" onclick="closeEditModal()">Cancel</button>
+              <button class="btn-save-modal" onclick="saveEdit()">Save Changes</button>
+            </div>
+          </div>
+        </div>`);
+
+      window.openEditModal = function(id) {
+        const task = Store.getTaskById(id);
+        if (!task) return;
+        editingTaskId = id;
+        document.getElementById('editTitle').value = task.title || '';
+        document.getElementById('editCategory').value = task.category || 'Web Development';
+        document.getElementById('editBudget').value = task.budget || '';
+        document.getElementById('editDeadline').value = task.deadline || '';
+        document.getElementById('editStatus').value = task.status || 'open';
+        document.getElementById('editModal').classList.add('open');
+      };
+
+      window.closeEditModal = function() {
+        document.getElementById('editModal').classList.remove('open');
+        editingTaskId = null;
+        ['editTitle','editBudget'].forEach(id => {
+          const err = document.getElementById(id+'Err');
+          if (err) { err.style.display='none'; err.textContent=''; }
+          const el = document.getElementById(id);
+          if (el) el.style.borderColor = '';
+        });
+      };
+
+      window.saveEdit = function() {
+        const title = document.getElementById('editTitle').value.trim();
+        const budget = parseFloat(document.getElementById('editBudget').value);
+        let valid = true;
+        const titleErr = document.getElementById('editTitleErr');
+        const budgetErr = document.getElementById('editBudgetErr');
+        titleErr.style.display = 'none'; budgetErr.style.display = 'none';
+        document.getElementById('editTitle').style.borderColor = '';
+        document.getElementById('editBudget').style.borderColor = '';
+
+        if (!title || title.length < 3) {
+          titleErr.textContent = 'Title must be at least 3 characters.';
+          titleErr.style.display = 'block';
+          document.getElementById('editTitle').style.borderColor = '#ef4444';
+          valid = false;
+        }
+        if (!budget || budget <= 0) {
+          budgetErr.textContent = 'Budget must be a positive number.';
+          budgetErr.style.display = 'block';
+          document.getElementById('editBudget').style.borderColor = '#ef4444';
+          valid = false;
+        }
+        if (!valid) return;
+
+        Store.updateTask(editingTaskId, {
+          title,
+          category: document.getElementById('editCategory').value,
+          budget,
+          deadline: document.getElementById('editDeadline').value,
+          status: document.getElementById('editStatus').value
+        });
+        closeEditModal();
+        refreshView();
+        Validate.toast('Project updated successfully.', 'success');
+      };
+
+      window.deleteTask = function(id) {
+        const task = Store.getTaskById(id);
+        if (!task) return;
+        if (task.status !== 'open' || task.workerId) {
+          Validate.toast('Only open tasks with no assigned worker can be deleted.', 'error');
+          return;
+        }
+        Validate.confirm(`Delete "${task.title}"? Any escrow funds will be refunded to your wallet.`, () => {
+          // Refund escrow to client
+          if (task.budget && task.budget > 0 && task.clientId) {
+            Store.addToWallet(task.clientId, task.budget);
+            Store.createTransaction({
+              type: 'escrow-refund',
+              amount: task.budget,
+              fromId: 'escrow',
+              toId: task.clientId,
+              taskId: task.id,
+              description: `Escrow refund — task "${task.title}" deleted`,
+            });
+          }
+          Store.deleteTask(id);
+          refreshView();
+          Validate.toast('Project deleted. Escrow funds refunded.', 'success');
+        });
+      };
+
+      function refreshView() {
+        const c = document.getElementById('projectsContainer');
+        if (c) { c.innerHTML = renderProjects(activeTab); lucide.createIcons(); }
+        // update tab counts
+        const all = getProjects();
+        const tabs = document.querySelectorAll('.tab-btn');
+        if (tabs.length >= 4) {
+          tabs[0].textContent = `All (${all.length})`;
+          tabs[1].textContent = `Open (${all.filter(p=>p.category==='open').length})`;
+          tabs[2].textContent = `Active (${all.filter(p=>p.category==='active').length})`;
+          tabs[3].textContent = `Completed (${all.filter(p=>p.category==='completed').length})`;
+        }
+      }
+
+      document.getElementById('editModal').addEventListener('click', function(e) {
+        if (e.target === this) closeEditModal();
+      });
+    });
+  </script>
+</head>
+<body></body>
+</html>

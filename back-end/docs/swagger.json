@@ -1,0 +1,2493 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/users/login": {
+      "post": {
+        "operationId": "UsersController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Login with email and password",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/users": {
+      "get": {
+        "operationId": "UsersController_findAll",
+        "parameters": [
+          {
+            "name": "role",
+            "required": false,
+            "in": "query",
+            "description": "Filter by role (client, worker, expert, superuser)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get all users",
+        "tags": [
+          "Users"
+        ]
+      },
+      "post": {
+        "operationId": "UsersController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Register a new user",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/users/{id}": {
+      "get": {
+        "operationId": "UsersController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get user by ID",
+        "tags": [
+          "Users"
+        ]
+      },
+      "patch": {
+        "operationId": "UsersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update user profile",
+        "tags": [
+          "Users"
+        ]
+      },
+      "delete": {
+        "operationId": "UsersController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Delete a user (superuser only)",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/users/{id}/wallet/add": {
+      "post": {
+        "operationId": "UsersController_addToWallet",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WalletDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Add funds to user wallet",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/users/{id}/wallet/deduct": {
+      "post": {
+        "operationId": "UsersController_deductFromWallet",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WalletDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Deduct funds from user wallet",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/tasks": {
+      "get": {
+        "operationId": "TasksController_findAll",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workerId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get all tasks (supports filtering)",
+        "tags": [
+          "Tasks"
+        ]
+      },
+      "post": {
+        "operationId": "TasksController_create",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTaskDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a new task",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/api/tasks/{id}": {
+      "get": {
+        "operationId": "TasksController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get task by ID",
+        "tags": [
+          "Tasks"
+        ]
+      },
+      "patch": {
+        "operationId": "TasksController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTaskDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update a task",
+        "tags": [
+          "Tasks"
+        ]
+      },
+      "delete": {
+        "operationId": "TasksController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Delete a task",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/api/milestones": {
+      "get": {
+        "operationId": "MilestonesController_findAll",
+        "parameters": [
+          {
+            "name": "taskId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get all milestones (supports ?taskId= filter)",
+        "tags": [
+          "Milestones"
+        ]
+      },
+      "post": {
+        "operationId": "MilestonesController_create",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMilestoneDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a new milestone",
+        "tags": [
+          "Milestones"
+        ]
+      }
+    },
+    "/api/milestones/{id}": {
+      "get": {
+        "operationId": "MilestonesController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get milestone by ID",
+        "tags": [
+          "Milestones"
+        ]
+      },
+      "patch": {
+        "operationId": "MilestonesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMilestoneDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update a milestone",
+        "tags": [
+          "Milestones"
+        ]
+      }
+    },
+    "/api/milestones/{id}/submit": {
+      "post": {
+        "operationId": "MilestonesController_submit",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitDeliverableDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Submit deliverable for a milestone",
+        "tags": [
+          "Milestones"
+        ]
+      }
+    },
+    "/api/milestones/{id}/approve": {
+      "post": {
+        "operationId": "MilestonesController_approve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Approve deliverable and release escrow payment",
+        "tags": [
+          "Milestones"
+        ]
+      }
+    },
+    "/api/transactions": {
+      "get": {
+        "operationId": "TransactionsController_findAll",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get all transactions (supports ?userId= filter)",
+        "tags": [
+          "Transactions"
+        ]
+      },
+      "post": {
+        "operationId": "TransactionsController_create",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTransactionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a transaction",
+        "tags": [
+          "Transactions"
+        ]
+      }
+    },
+    "/api/audit-requests": {
+      "get": {
+        "operationId": "AuditRequestsController_findAll",
+        "parameters": [
+          {
+            "name": "expertId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get all audit requests (supports ?expertId=&status= filters)",
+        "tags": [
+          "Audit Requests"
+        ]
+      },
+      "post": {
+        "operationId": "AuditRequestsController_create",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAuditRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create an audit request",
+        "tags": [
+          "Audit Requests"
+        ]
+      }
+    },
+    "/api/audit-requests/{id}": {
+      "get": {
+        "operationId": "AuditRequestsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get audit request by ID",
+        "tags": [
+          "Audit Requests"
+        ]
+      },
+      "patch": {
+        "operationId": "AuditRequestsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAuditRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update audit request status",
+        "tags": [
+          "Audit Requests"
+        ]
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "operationId": "NotificationsController_findAll",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get notifications (supports ?userId= filter)",
+        "tags": [
+          "Notifications"
+        ]
+      },
+      "post": {
+        "operationId": "NotificationsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNotificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a notification",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/notifications/{userId}/read-all": {
+      "patch": {
+        "operationId": "NotificationsController_markAllRead",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Mark all notifications as read for a user",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/proposals": {
+      "get": {
+        "operationId": "ProposalsController_findAll",
+        "parameters": [
+          {
+            "name": "taskId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workerId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "proposal",
+                "invitation"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get all proposals (supports ?taskId=&workerId=&type= filters)",
+        "tags": [
+          "Proposals"
+        ]
+      },
+      "post": {
+        "operationId": "ProposalsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProposalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a new proposal or invitation",
+        "tags": [
+          "Proposals"
+        ]
+      }
+    },
+    "/api/proposals/{id}": {
+      "get": {
+        "operationId": "ProposalsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get proposal by ID",
+        "tags": [
+          "Proposals"
+        ]
+      },
+      "patch": {
+        "operationId": "ProposalsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProposalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update a proposal",
+        "tags": [
+          "Proposals"
+        ]
+      }
+    },
+    "/api/proposals/{id}/hire": {
+      "post": {
+        "operationId": "ProposalsController_hire",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Hire worker (rejects other proposals, locks escrow)",
+        "tags": [
+          "Proposals"
+        ]
+      }
+    },
+    "/api/proposals/{id}/accept": {
+      "post": {
+        "operationId": "ProposalsController_accept",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Accept an invitation",
+        "tags": [
+          "Proposals"
+        ]
+      }
+    },
+    "/api/proposals/{id}/decline": {
+      "post": {
+        "operationId": "ProposalsController_decline",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Decline an invitation",
+        "tags": [
+          "Proposals"
+        ]
+      }
+    },
+    "/api/audit-reports": {
+      "get": {
+        "operationId": "AuditReportsController_findAll",
+        "parameters": [
+          {
+            "name": "taskId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "auditRequestId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get all audit reports (supports ?taskId=&auditRequestId= filters)",
+        "tags": [
+          "Audit Reports"
+        ]
+      },
+      "post": {
+        "operationId": "AuditReportsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAuditReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Submit audit report (updates milestone status on pass/fail)",
+        "tags": [
+          "Audit Reports"
+        ]
+      }
+    },
+    "/api/audit-reports/{id}": {
+      "get": {
+        "operationId": "AuditReportsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get audit report by ID",
+        "tags": [
+          "Audit Reports"
+        ]
+      }
+    },
+    "/api/disputes": {
+      "get": {
+        "operationId": "DisputesController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get all disputes",
+        "tags": [
+          "Disputes"
+        ]
+      },
+      "post": {
+        "operationId": "DisputesController_create",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDisputeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a dispute",
+        "tags": [
+          "Disputes"
+        ]
+      }
+    },
+    "/api/disputes/{id}": {
+      "get": {
+        "operationId": "DisputesController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get dispute by ID",
+        "tags": [
+          "Disputes"
+        ]
+      }
+    },
+    "/api/disputes/{id}/resolve": {
+      "post": {
+        "operationId": "DisputesController_resolve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveDisputeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Resolve a dispute (updates milestone status based on verdict)",
+        "tags": [
+          "Disputes"
+        ]
+      }
+    },
+    "/api/expert-applications": {
+      "get": {
+        "operationId": "ExpertApplicationsController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get all expert applications",
+        "tags": [
+          "Expert Applications"
+        ]
+      },
+      "post": {
+        "operationId": "ExpertApplicationsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExpertApplicationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Submit an expert application",
+        "tags": [
+          "Expert Applications"
+        ]
+      }
+    },
+    "/api/expert-applications/{id}": {
+      "get": {
+        "operationId": "ExpertApplicationsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get expert application by ID",
+        "tags": [
+          "Expert Applications"
+        ]
+      }
+    },
+    "/api/expert-applications/{id}/status": {
+      "patch": {
+        "operationId": "ExpertApplicationsController_updateStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateExpertApplicationStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Approve or reject expert application (auto-creates user on approval)",
+        "tags": [
+          "Expert Applications"
+        ]
+      }
+    },
+    "/api/messages": {
+      "get": {
+        "operationId": "MessagesController_findAll",
+        "parameters": [
+          {
+            "name": "taskId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get messages (supports ?taskId= and ?userId= filters)",
+        "tags": [
+          "Messages"
+        ]
+      },
+      "post": {
+        "operationId": "MessagesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMessageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Send a message",
+        "tags": [
+          "Messages"
+        ]
+      }
+    },
+    "/api/seed/reset": {
+      "post": {
+        "operationId": "SeedController_reset",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "header",
+            "description": "User role required",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Reset all data to seed state (superuser only)",
+        "tags": [
+          "Seed"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Lannent API",
+    "description": "Complete REST API for the Lannent freelance platform. Supports Users, Tasks, Milestones, Proposals, Audit Requests, Audit Reports, Disputes, Transactions, Expert Applications, and Notifications. Uses in-memory storage with seed data. Include \"role\" and \"user-id\" headers for RBAC.",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "schemas": {
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "client@gmail.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "Password@123"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "CreateUserDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "John Doe"
+          },
+          "email": {
+            "type": "string",
+            "example": "john@gmail.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "Password@123"
+          },
+          "role": {
+            "type": "string",
+            "example": "client",
+            "enum": [
+              "client",
+              "worker",
+              "expert",
+              "superuser"
+            ]
+          },
+          "avatar": {
+            "type": "string",
+            "example": "JD"
+          },
+          "avatarColor": {
+            "type": "string",
+            "example": "linear-gradient(135deg,#6366f1,#4f46e5)"
+          },
+          "company": {
+            "type": "string",
+            "example": "TechCorp"
+          },
+          "location": {
+            "type": "string",
+            "example": "New York, NY"
+          },
+          "skills": {
+            "example": [
+              "React",
+              "Node.js"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "specialization": {
+            "type": "string",
+            "example": "Full-Stack & Security"
+          }
+        },
+        "required": [
+          "name",
+          "email",
+          "password",
+          "role"
+        ]
+      },
+      "UpdateUserDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "John Doe"
+          },
+          "email": {
+            "type": "string",
+            "example": "john@gmail.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "Password@123"
+          },
+          "role": {
+            "type": "string",
+            "example": "client",
+            "enum": [
+              "client",
+              "worker",
+              "expert",
+              "superuser"
+            ]
+          },
+          "avatar": {
+            "type": "string",
+            "example": "JD"
+          },
+          "avatarColor": {
+            "type": "string",
+            "example": "linear-gradient(135deg,#6366f1,#4f46e5)"
+          },
+          "company": {
+            "type": "string",
+            "example": "TechCorp"
+          },
+          "location": {
+            "type": "string",
+            "example": "New York, NY"
+          },
+          "skills": {
+            "example": [
+              "React",
+              "Node.js"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "specialization": {
+            "type": "string",
+            "example": "Full-Stack & Security"
+          },
+          "status": {
+            "type": "string",
+            "example": "active",
+            "enum": [
+              "active",
+              "suspended"
+            ]
+          },
+          "walletBalance": {
+            "type": "number",
+            "example": 10000
+          },
+          "rating": {
+            "type": "number",
+            "example": 4.8
+          },
+          "completedProjects": {
+            "type": "number",
+            "example": 25
+          },
+          "reviewsDone": {
+            "type": "number",
+            "example": 50
+          }
+        }
+      },
+      "WalletDto": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "example": 500,
+            "description": "Amount to add or deduct"
+          }
+        },
+        "required": [
+          "amount"
+        ]
+      },
+      "CreateTaskDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "E-commerce Website Redesign"
+          },
+          "description": {
+            "type": "string",
+            "example": "Need a complete redesign of our platform"
+          },
+          "category": {
+            "type": "string",
+            "example": "Web Development"
+          },
+          "budget": {
+            "type": "number",
+            "example": 2500
+          },
+          "currency": {
+            "type": "string",
+            "example": "USD"
+          },
+          "deadline": {
+            "type": "string",
+            "example": "2026-04-15"
+          },
+          "skills": {
+            "example": [
+              "React",
+              "Figma"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "clientId": {
+            "type": "string",
+            "example": "u1"
+          },
+          "auditEnabled": {
+            "type": "boolean",
+            "example": false
+          }
+        },
+        "required": [
+          "title",
+          "description",
+          "category",
+          "budget",
+          "clientId"
+        ]
+      },
+      "UpdateTaskDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "E-commerce Website Redesign"
+          },
+          "description": {
+            "type": "string",
+            "example": "Need a complete redesign of our platform"
+          },
+          "category": {
+            "type": "string",
+            "example": "Web Development"
+          },
+          "budget": {
+            "type": "number",
+            "example": 2500
+          },
+          "currency": {
+            "type": "string",
+            "example": "USD"
+          },
+          "deadline": {
+            "type": "string",
+            "example": "2026-04-15"
+          },
+          "skills": {
+            "example": [
+              "React",
+              "Figma"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "clientId": {
+            "type": "string",
+            "example": "u1"
+          },
+          "auditEnabled": {
+            "type": "boolean",
+            "example": false
+          },
+          "status": {
+            "type": "string",
+            "example": "in-progress",
+            "enum": [
+              "open",
+              "in-progress",
+              "under-review",
+              "completed",
+              "cancelled"
+            ]
+          },
+          "workerId": {
+            "type": "string",
+            "example": "u5"
+          },
+          "progress": {
+            "type": "number",
+            "example": 75
+          }
+        }
+      },
+      "CreateMilestoneDto": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "example": "t1"
+          },
+          "title": {
+            "type": "string",
+            "example": "UI Design & Wireframes"
+          },
+          "description": {
+            "type": "string",
+            "example": "Complete wireframes for all pages"
+          },
+          "budget": {
+            "type": "number",
+            "example": 800
+          },
+          "workerId": {
+            "type": "string",
+            "example": "u5"
+          },
+          "dueDate": {
+            "type": "string",
+            "example": "2026-04-15"
+          },
+          "priority": {
+            "type": "string",
+            "example": "High",
+            "enum": [
+              "High",
+              "Medium",
+              "Low"
+            ]
+          }
+        },
+        "required": [
+          "taskId",
+          "title",
+          "budget"
+        ]
+      },
+      "UpdateMilestoneDto": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "example": "t1"
+          },
+          "title": {
+            "type": "string",
+            "example": "UI Design & Wireframes"
+          },
+          "description": {
+            "type": "string",
+            "example": "Complete wireframes for all pages"
+          },
+          "budget": {
+            "type": "number",
+            "example": 800
+          },
+          "workerId": {
+            "type": "string",
+            "example": "u5"
+          },
+          "dueDate": {
+            "type": "string",
+            "example": "2026-04-15"
+          },
+          "priority": {
+            "type": "string",
+            "example": "High",
+            "enum": [
+              "High",
+              "Medium",
+              "Low"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "example": "in-progress",
+            "enum": [
+              "pending",
+              "in-progress",
+              "submitted",
+              "review",
+              "completed",
+              "approved",
+              "disputed",
+              "audit-passed",
+              "revision-needed"
+            ]
+          },
+          "progress": {
+            "type": "number",
+            "example": 60
+          }
+        }
+      },
+      "SubmitDeliverableDto": {
+        "type": "object",
+        "properties": {
+          "deliverable": {
+            "type": "object",
+            "example": {
+              "title": "Deliverable v1",
+              "description": "Final version",
+              "link": "https://github.com/..."
+            }
+          }
+        }
+      },
+      "CreateTransactionDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "example": "escrow-lock",
+            "enum": [
+              "escrow-lock",
+              "milestone-release",
+              "deposit",
+              "refund",
+              "dispute-release"
+            ]
+          },
+          "amount": {
+            "type": "number",
+            "example": 2500
+          },
+          "fromId": {
+            "type": "string",
+            "example": "u1"
+          },
+          "toId": {
+            "type": "string",
+            "example": "escrow"
+          },
+          "taskId": {
+            "type": "string",
+            "example": "t1"
+          },
+          "milestoneId": {
+            "type": "string",
+            "example": "m1"
+          },
+          "description": {
+            "type": "string",
+            "example": "Escrow funded for project"
+          },
+          "status": {
+            "type": "string",
+            "example": "completed"
+          }
+        },
+        "required": [
+          "type",
+          "amount",
+          "fromId",
+          "toId"
+        ]
+      },
+      "CreateAuditRequestDto": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "example": "t2"
+          },
+          "milestoneId": {
+            "type": "string",
+            "example": "m6"
+          },
+          "workerId": {
+            "type": "string",
+            "example": "u6"
+          },
+          "clientId": {
+            "type": "string",
+            "example": "u1"
+          },
+          "expertId": {
+            "type": "string",
+            "example": "u3"
+          },
+          "status": {
+            "type": "string",
+            "example": "Pending"
+          },
+          "severity": {
+            "type": "string",
+            "example": "High"
+          },
+          "project": {
+            "type": "string",
+            "example": "Mobile App Development"
+          },
+          "worker": {
+            "type": "string",
+            "example": "Michael Chen"
+          },
+          "milestone": {
+            "type": "string",
+            "example": "Core UI Implementation"
+          },
+          "dueDate": {
+            "type": "string",
+            "example": "2026-04-01"
+          }
+        },
+        "required": [
+          "taskId",
+          "milestoneId",
+          "workerId",
+          "clientId"
+        ]
+      },
+      "UpdateAuditRequestDto": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "example": "t2"
+          },
+          "milestoneId": {
+            "type": "string",
+            "example": "m6"
+          },
+          "workerId": {
+            "type": "string",
+            "example": "u6"
+          },
+          "clientId": {
+            "type": "string",
+            "example": "u1"
+          },
+          "expertId": {
+            "type": "string",
+            "example": "u3"
+          },
+          "status": {
+            "type": "string",
+            "example": "Pending"
+          },
+          "severity": {
+            "type": "string",
+            "example": "High"
+          },
+          "project": {
+            "type": "string",
+            "example": "Mobile App Development"
+          },
+          "worker": {
+            "type": "string",
+            "example": "Michael Chen"
+          },
+          "milestone": {
+            "type": "string",
+            "example": "Core UI Implementation"
+          },
+          "dueDate": {
+            "type": "string",
+            "example": "2026-04-01"
+          }
+        }
+      },
+      "CreateNotificationDto": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "example": "u1"
+          },
+          "type": {
+            "type": "string",
+            "example": "milestone-approved"
+          },
+          "text": {
+            "type": "string",
+            "example": "Milestone \"Frontend UI\" approved"
+          },
+          "subtext": {
+            "type": "string",
+            "example": "E-commerce Redesign · 2 min ago"
+          }
+        },
+        "required": [
+          "userId",
+          "type",
+          "text"
+        ]
+      },
+      "CreateProposalDto": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "example": "t3"
+          },
+          "workerId": {
+            "type": "string",
+            "example": "u5"
+          },
+          "workerName": {
+            "type": "string",
+            "example": "Sarah Johnson"
+          },
+          "avatar": {
+            "type": "string",
+            "example": "SJ"
+          },
+          "avatarColor": {
+            "type": "string",
+            "example": "linear-gradient(135deg,#6366f1,#4f46e5)"
+          },
+          "rating": {
+            "type": "number",
+            "example": 4.9
+          },
+          "reviewCount": {
+            "type": "number",
+            "example": 127
+          },
+          "location": {
+            "type": "string",
+            "example": "San Francisco, CA"
+          },
+          "bidPrice": {
+            "type": "string",
+            "example": "$1,100"
+          },
+          "timeline": {
+            "type": "string",
+            "example": "1 week"
+          },
+          "coverLetter": {
+            "type": "string",
+            "example": "I can deliver clean code..."
+          },
+          "skills": {
+            "example": [
+              "Node.js",
+              "REST API"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "completedProjects": {
+            "type": "number",
+            "example": 89
+          },
+          "successRate": {
+            "type": "number",
+            "example": 98
+          },
+          "hourlyRate": {
+            "type": "string",
+            "example": "$85/hr"
+          },
+          "responseTime": {
+            "type": "string",
+            "example": "Within 2 hours"
+          },
+          "type": {
+            "type": "string",
+            "example": "proposal",
+            "enum": [
+              "proposal",
+              "invitation"
+            ]
+          }
+        },
+        "required": [
+          "taskId",
+          "workerId"
+        ]
+      },
+      "UpdateProposalDto": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "example": "t3"
+          },
+          "workerId": {
+            "type": "string",
+            "example": "u5"
+          },
+          "workerName": {
+            "type": "string",
+            "example": "Sarah Johnson"
+          },
+          "avatar": {
+            "type": "string",
+            "example": "SJ"
+          },
+          "avatarColor": {
+            "type": "string",
+            "example": "linear-gradient(135deg,#6366f1,#4f46e5)"
+          },
+          "rating": {
+            "type": "number",
+            "example": 4.9
+          },
+          "reviewCount": {
+            "type": "number",
+            "example": 127
+          },
+          "location": {
+            "type": "string",
+            "example": "San Francisco, CA"
+          },
+          "bidPrice": {
+            "type": "string",
+            "example": "$1,100"
+          },
+          "timeline": {
+            "type": "string",
+            "example": "1 week"
+          },
+          "coverLetter": {
+            "type": "string",
+            "example": "I can deliver clean code..."
+          },
+          "skills": {
+            "example": [
+              "Node.js",
+              "REST API"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "completedProjects": {
+            "type": "number",
+            "example": 89
+          },
+          "successRate": {
+            "type": "number",
+            "example": 98
+          },
+          "hourlyRate": {
+            "type": "string",
+            "example": "$85/hr"
+          },
+          "responseTime": {
+            "type": "string",
+            "example": "Within 2 hours"
+          },
+          "type": {
+            "type": "string",
+            "example": "proposal",
+            "enum": [
+              "proposal",
+              "invitation"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "example": "pending",
+            "enum": [
+              "pending",
+              "hired",
+              "rejected",
+              "completed"
+            ]
+          }
+        }
+      },
+      "CreateAuditReportDto": {
+        "type": "object",
+        "properties": {
+          "auditRequestId": {
+            "type": "string",
+            "example": "ar1"
+          },
+          "taskId": {
+            "type": "string",
+            "example": "t2"
+          },
+          "milestoneId": {
+            "type": "string",
+            "example": "m6"
+          },
+          "expertId": {
+            "type": "string",
+            "example": "u3"
+          },
+          "verdict": {
+            "type": "string",
+            "example": "pass",
+            "enum": [
+              "pass",
+              "fail",
+              "conditional"
+            ]
+          },
+          "overall": {
+            "type": "string",
+            "example": "Pass"
+          },
+          "findings": {
+            "type": "string",
+            "example": "Code quality is excellent."
+          },
+          "codequality": {
+            "type": "number",
+            "example": 5
+          },
+          "security": {
+            "type": "number",
+            "example": 5
+          },
+          "performance": {
+            "type": "number",
+            "example": 4
+          },
+          "documentation": {
+            "type": "number",
+            "example": 4
+          },
+          "milestoneTitle": {
+            "type": "string",
+            "example": "Core UI Implementation"
+          },
+          "projectTitle": {
+            "type": "string",
+            "example": "Mobile App Development"
+          },
+          "workerName": {
+            "type": "string",
+            "example": "Michael Chen"
+          }
+        },
+        "required": [
+          "auditRequestId",
+          "taskId",
+          "milestoneId",
+          "expertId"
+        ]
+      },
+      "CreateDisputeDto": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "example": "t1"
+          },
+          "milestoneId": {
+            "type": "string",
+            "example": "m3"
+          },
+          "raisedBy": {
+            "type": "string",
+            "example": "u1"
+          },
+          "raisedByName": {
+            "type": "string",
+            "example": "James Client"
+          },
+          "againstId": {
+            "type": "string",
+            "example": "u5"
+          },
+          "againstName": {
+            "type": "string",
+            "example": "Sarah Johnson"
+          },
+          "reason": {
+            "type": "string",
+            "example": "Backend integration incomplete"
+          },
+          "amount": {
+            "type": "string",
+            "example": "$500"
+          },
+          "project": {
+            "type": "string",
+            "example": "E-commerce Website Redesign"
+          },
+          "milestone": {
+            "type": "string",
+            "example": "Backend Integration"
+          }
+        },
+        "required": [
+          "taskId",
+          "raisedBy",
+          "againstId",
+          "reason"
+        ]
+      },
+      "ResolveDisputeDto": {
+        "type": "object",
+        "properties": {
+          "expertId": {
+            "type": "string",
+            "example": "u3"
+          },
+          "verdict": {
+            "type": "string",
+            "example": "worker-favour",
+            "enum": [
+              "worker-favour",
+              "client-favour",
+              "split"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "example": "After review, milestone is complete. Releasing escrow."
+          }
+        },
+        "required": [
+          "expertId",
+          "verdict",
+          "resolution"
+        ]
+      },
+      "CreateExpertApplicationDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Dr. Jane Smith"
+          },
+          "email": {
+            "type": "string",
+            "example": "jane@gmail.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "Expert@123"
+          },
+          "phone": {
+            "type": "string",
+            "example": "9876543210"
+          },
+          "phoneCountry": {
+            "type": "string",
+            "example": "+1"
+          },
+          "country": {
+            "type": "string",
+            "example": "United States"
+          },
+          "expertise": {
+            "type": "string",
+            "example": "Full-Stack Development"
+          },
+          "experience": {
+            "type": "string",
+            "example": "10+"
+          },
+          "linkedin": {
+            "type": "string",
+            "example": "https://linkedin.com/in/janesmith"
+          },
+          "github": {
+            "type": "string",
+            "example": "https://github.com/janesmith"
+          },
+          "motivation": {
+            "type": "string",
+            "example": "Passionate about code quality..."
+          }
+        },
+        "required": [
+          "name",
+          "email"
+        ]
+      },
+      "UpdateExpertApplicationStatusDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "approved",
+            "enum": [
+              "approved",
+              "rejected"
+            ]
+          },
+          "reviewedBy": {
+            "type": "string",
+            "example": "u4",
+            "description": "ID of superuser reviewing the application"
+          }
+        },
+        "required": [
+          "status",
+          "reviewedBy"
+        ]
+      },
+      "CreateMessageDto": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "example": "t1"
+          },
+          "senderId": {
+            "type": "string",
+            "example": "u1"
+          },
+          "receiverId": {
+            "type": "string",
+            "example": "u2"
+          },
+          "content": {
+            "type": "string",
+            "example": "Hello, how is progress going?"
+          },
+          "senderName": {
+            "type": "string",
+            "example": "James Client"
+          },
+          "senderAvatar": {
+            "type": "string",
+            "example": "JC"
+          },
+          "senderAvatarColor": {
+            "type": "string",
+            "example": "linear-gradient(135deg,#6366f1,#4f46e5)"
+          }
+        },
+        "required": [
+          "taskId",
+          "senderId",
+          "receiverId",
+          "content"
+        ]
+      }
+    }
+  }
+}
