@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Review Before Accepting — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .pv-grid { display:grid; gap:18px; align-items:start; }
+    @media (min-width:1000px) { .pv-grid { grid-template-columns: minmax(0,1fr) 340px; } }
+    .pv-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:22px; margin-bottom:18px; }
+    .pv-card h2 { font-size:15px; font-weight:700; margin:0 0 12px; }
+    .pv-meta { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin-bottom:16px; }
+    .pv-meta div { background:var(--secondary); border-radius:10px; padding:11px 13px; }
+    .pv-meta .k { font-size:11px; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:3px; }
+    .pv-meta .v { font-size:14px; font-weight:700; }
+    .pv-ms { display:flex; justify-content:space-between; gap:12px; padding:11px 0; border-top:1px solid var(--border); font-size:13px; }
+    .pv-ms:first-of-type { border-top:none; }
+    .pv-ms .st { font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--muted-foreground); }
+    .pv-claim { background:#fef2f2; border:1px solid #fecaca; border-radius:12px; padding:16px; font-size:13px; line-height:1.6; color:#7f1d1d; }
+    .offer-row { display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--border); font-size:13px; }
+    .offer-who { font-weight:600; min-width:70px; }
+    .offer-amt { font-weight:700; font-variant-numeric:tabular-nums; }
+    .offer-tag { font-size:10px; text-transform:uppercase; letter-spacing:0.05em; padding:3px 7px; border-radius:4px; background:var(--secondary); color:var(--muted-foreground); }
+    .offer-tag.pending { background:#fffbeb; color:#b45309; }
+    .offer-tag.accepted { background:#ecfdf5; color:#047857; }
+    .pv-fee { font-size:12px; color:var(--muted-foreground); margin-top:8px; line-height:1.5; }
+    .pv-actions { display:flex; flex-direction:column; gap:10px; margin-top:16px; }
+  </style>
+  <script>
+    let pv = null, arId = null;
+
+    const money = n => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    function render() {
+      const a = pv.auditRequest;
+      const p = pv.project;
+      const live = (pv.offers || []).find(o => o.status === 'pending');
+      const canAccept = live && live.offeredBy === 'client';
+      const negotiating = ['preview-sent', 'negotiating'].includes(a.status);
+      const session = Auth.getCurrentUser();
+
+      const offers = (pv.offers || []).length
+        ? pv.offers.map(o => `
+            <div class="offer-row">
+              <span class="offer-who">${o.offeredBy === 'expert' ? 'You' : 'Client'}</span>
+              <span class="offer-amt">${money(o.amount)}</span>
+              <span class="offer-tag ${o.status}">${o.status}</span>
+              <span style="color:var(--muted-foreground);flex:1;min-width:0;">${o.note || ''}</span>
+            </div>`).join('')
+        : '<div class="offer-row" style="color:var(--muted-foreground);">No offers yet — name your price below.</div>';
+
+      let actions = '';
+      if (canAccept) {
+        actions += `<button class="btn-primary" onclick="acceptOffer('${live.id}')">Accept ${money(live.amount)}</button>`;
+      }
+      if (a.status === 'escrow-funded') {
+        actions += `<button class="btn-primary" onclick="takeJob()">Accept engagement &amp; start</button>`;
+        actions += `<div class="pv-fee">${money(a.agreedAmount)} is already in escrow. You receive
+          ${money(Store.Fees.expertPayout(a.agreedAmount).net)} after the ${money(Store.Fees.expertPayout(a.agreedAmount).fee)} platform commission.</div>`;
+      }
+      if (a.status === 'agreed') {
+        actions += `<div class="pv-fee">Fee agreed at ${money(a.agreedAmount)}. Waiting for the client to fund escrow.</div>`;
+      }
+      if (a.status === 'in-progress') {
+        const target = a.kind === 'dispute-audit'
+          ? `resolve-dispute.html?id=${a.disputeId}`
+          : `expert-report-audit.html?id=${a.id}`;
+        actions += `<a href="${target}" class="btn-primary" style="text-decoration:none;text-align:center;">Go to your report</a>`;
+      }
+      if (!['paid','declined','cancelled','in-progress'].includes(a.status)) {
+        actions += `<button class="btn-outline" style="color:#b91c1c;border-color:#fca5a5;" onclick="decline()">Decline this audit</button>`;
+      }
+
+      const content = `
+        <div class="pv-grid">
+          <div>
+            <div class="pv-card">
+              <h2>${p ? p.title : 'Project'}</h2>
+              <div class="pv-meta">
+                <div><div class="k">Budget</div><div class="v">${p ? money(p.budget) : '—'}</div></div>
+                <div><div class="k">Category</div><div class="v">${p ? p.category : '—'}</div></div>
+                <div><div class="k">Deadline</div><div class="v">${p && p.deadline ? p.deadline : 'Not set'}</div></div>
+                <div><div class="k">Progress</div><div class="v">${p ? p.progress + '%' : '—'}</div></div>
+              </div>
+              <div style="font-size:13px;line-height:1.65;color:var(--muted-foreground);">${p ? p.description : ''}</div>
+              ${p && p.skills && p.skills.length ? `<div style="margin-top:14px;display:flex;gap:6px;flex-wrap:wrap;">
+                ${p.skills.map(sk => `<span style="font-size:11px;padding:4px 9px;border-radius:6px;background:var(--secondary);">${sk}</span>`).join('')}
+              </div>` : ''}
+            </div>
+
+            ${pv.dispute ? `
+              <div class="pv-card">
+                <h2>The dispute you would be arbitrating</h2>
+                <div class="pv-claim">${pv.dispute.reason}</div>
+                <div style="font-size:12px;color:var(--muted-foreground);margin-top:10px;">
+                  Raised by ${pv.dispute.raisedByName} against ${pv.dispute.againstName} · amount in question ${pv.dispute.amount || 'n/a'}
+                </div>
+              </div>` : ''}
+
+            <div class="pv-card">
+              <h2>Milestones (${pv.milestones.length})</h2>
+              ${pv.milestones.length
+                ? pv.milestones.map(m => `
+                    <div class="pv-ms">
+                      <div style="min-width:0;">
+                        <div style="font-weight:600;">${m.title}${pv.focusMilestone && pv.focusMilestone.id === m.id ? ' &nbsp;<span class="st" style="color:#b45309;">← under review</span>' : ''}</div>
+                        <div style="color:var(--muted-foreground);">${m.description || ''}</div>
+                      </div>
+                      <div style="text-align:right;flex:none;">
+                        <div style="font-weight:700;">${money(m.budget)}</div>
+                        <div class="st">${m.status}</div>
+                      </div>
+                    </div>`).join('')
+                : '<div style="font-size:13px;color:var(--muted-foreground);">No milestones defined yet.</div>'}
+            </div>
+          </div>
+
+          <div>
+            <div class="pv-card">
+              <h2>Client</h2>
+              <div style="display:flex;align-items:center;gap:11px;">
+                <div style="width:40px;height:40px;border-radius:50%;background:${pv.client ? pv.client.avatarColor : '#94a3b8'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">${pv.client ? pv.client.avatar : '?'}</div>
+                <div>
+                  <div style="font-weight:600;font-size:14px;">${pv.client ? pv.client.name : 'Unknown'}</div>
+                  <div style="font-size:12px;color:var(--muted-foreground);">${pv.client && pv.client.company ? pv.client.company : ''}</div>
+                </div>
+              </div>
+              ${pv.worker ? `
+                <h2 style="margin-top:18px;">Worker</h2>
+                <div style="display:flex;align-items:center;gap:11px;">
+                  <div style="width:40px;height:40px;border-radius:50%;background:${pv.worker.avatarColor};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">${pv.worker.avatar}</div>
+                  <div>
+                    <div style="font-weight:600;font-size:14px;">${pv.worker.name}</div>
+                    <div style="font-size:12px;color:var(--muted-foreground);">Rating ${pv.worker.rating || '—'}</div>
+                  </div>
+                </div>` : ''}
+            </div>
+
+            <div class="pv-card">
+              <h2>Your fee</h2>
+              ${offers}
+              ${negotiating ? `
+                <div style="display:flex;gap:8px;align-items:center;margin-top:14px;">
+                  <span style="font-weight:700;color:var(--muted-foreground);">$</span>
+                  <input class="form-input" type="number" min="1" step="1" id="quoteInput" placeholder="Your price" style="max-width:130px;" />
+                  <button class="btn-outline" onclick="quote()">Send</button>
+                </div>
+                <div class="pv-fee">The platform keeps 10% of the agreed fee. Nothing is committed until the client funds escrow.</div>
+              ` : ''}
+              <div class="pv-actions">${actions}</div>
+            </div>
+          </div>
+        </div>`;
+
+      initDashboard({
+        role: 'expert',
+        activePath: 'expert-audit-requests.html',
+        pageTitle: 'Review before accepting',
+        pageSubtitle: `${pv.kind === 'dispute-audit' ? 'Dispute audit' : 'Technical audit'} · status: ${a.status.replace(/-/g, ' ')}`,
+        content,
+      });
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function reload() {
+      pv = Store.getAuditPreview(arId);
+      if (!pv) {
+        renderEmptyState({
+          role: 'expert', activePath: 'expert-audit-requests.html', pageTitle: 'Review before accepting',
+          message: 'This audit request could not be loaded.',
+          linkHref: 'expert-audit-requests.html', linkLabel: 'Back to Audit Requests',
+        });
+        return;
+      }
+      render();
+    }
+
+    function quote() {
+      const amount = parseFloat(document.getElementById('quoteInput')?.value);
+      if (!amount || amount < 1) { Validate.toast('Enter a price greater than zero.', 'error'); return; }
+      const r = Store.makeAuditOffer(arId, { amount, offeredBy: 'expert', note: 'Quote from reviewer' });
+      if (!r) { Validate.toast('Could not send that quote.', 'error'); return; }
+      Validate.toast(`Quote of $${amount.toLocaleString()} sent to the client.`, 'success');
+      reload();
+    }
+
+    function acceptOffer(offerId) {
+      const r = Store.acceptAuditOffer(arId, offerId);
+      if (!r) { Validate.toast('Could not accept that offer.', 'error'); return; }
+      Validate.toast('Fee agreed. The client now funds escrow.', 'success');
+      reload();
+    }
+
+    function takeJob() {
+      const session = Auth.getCurrentUser();
+      const r = Store.acceptAuditEngagement(arId, session.userId);
+      if (!r) { Validate.toast('Could not accept the engagement.', 'error'); return; }
+      Validate.toast('Engagement accepted. You can now file your report.', 'success');
+      reload();
+    }
+
+    function decline() {
+      Validate.confirm('Decline this audit? The client will need to find another reviewer.', () => {
+        const r = Store.declineAuditEngagement(arId, 'Declined by reviewer');
+        if (!r) { Validate.toast('Could not decline.', 'error'); return; }
+        Validate.toast('Audit declined.', 'info');
+        window.location.href = 'expert-audit-requests.html';
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('expert')) return;
+      arId = new URLSearchParams(window.location.search).get('id');
+      if (!arId) {
+        renderEmptyState({
+          role: 'expert', activePath: 'expert-audit-requests.html', pageTitle: 'Review before accepting',
+          message: 'No audit request selected.',
+          linkHref: 'expert-audit-requests.html', linkLabel: 'Back to Audit Requests',
+        });
+        return;
+      }
+      reload();
+    });
+  </script>
+</head>
+<body></body>
+</html>

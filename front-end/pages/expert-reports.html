@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reports — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    /* ── Filter buttons ── */
+    .report-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .filter-btn {
+      height: 40px;
+      padding: 0 16px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      color: var(--muted-foreground);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .filter-btn:hover { background: var(--secondary); color: var(--foreground); }
+    .filter-btn.active {
+      background: var(--foreground);
+      color: var(--primary-foreground);
+      border-color: var(--foreground);
+    }
+
+    /* ── Table ── */
+    .reports-table-wrap {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .reports-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .reports-table thead {
+      background: rgba(0,0,0,0.025);
+      border-bottom: 1px solid var(--border);
+    }
+    .reports-table th {
+      text-align: left;
+      padding: 12px 16px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted-foreground);
+      white-space: nowrap;
+    }
+    .reports-table td {
+      padding: 14px 16px;
+      font-size: 13px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .reports-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+    .reports-table tbody tr:hover td {
+      background: rgba(0,0,0,0.018);
+    }
+
+    /* ── Report ID ── */
+    .report-id {
+      font-family: monospace;
+      font-size: 12px;
+      color: var(--muted-foreground);
+    }
+
+    /* ── Decision badge ── */
+    .decision-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid;
+      white-space: nowrap;
+    }
+    .decision-approved         { background:#d1fae5; border-color:#6ee7b7; color:#065f46; }
+    .decision-approved-with    { background:#d1fae5; border-color:#6ee7b7; color:#065f46; }
+    .decision-rejected         { background:#fee2e2; border-color:#fca5a5; color:#b91c1c; }
+    .decision-request-fix      { background:#fff7ed; border-color:#fdba74; color:#c2410c; }
+
+    /* ── Status badge ── */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid;
+      white-space: nowrap;
+    }
+    .status-published { background:#dbeafe; border-color:#93c5fd; color:#1d4ed8; }
+    .status-draft     { background:#f3f4f6; border-color:#d1d5db; color:#4b5563; }
+
+    /* ── Action buttons ── */
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--muted-foreground);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .action-btn:hover {
+      background: var(--secondary);
+      color: var(--foreground);
+    }
+
+    /* ── Date cell ── */
+    .date-cell {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--muted-foreground);
+      font-size: 12px;
+    }
+
+    /* ── Empty state ── */
+    .reports-empty {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 56px 24px;
+      text-align: center;
+      color: var(--muted-foreground);
+    }
+    .reports-empty svg { margin: 0 auto 14px; display: block; }
+    .reports-empty p { font-size: 14px; }
+  </style>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('expert')) return;
+      const session = Auth.getCurrentUser();
+
+      function loadReports() {
+        const auditReports = Store.getAuditReports().filter(r => r.verdict).map(r => ({
+          id: r.id,
+          auditRequestId: r.auditRequestId,
+          type: 'Technical Audit',
+          project: r.projectTitle || 'Unknown Project',
+          milestone: r.milestoneTitle || 'Milestone',
+          reportId: 'AUD-' + r.id.toUpperCase(),
+          generatedDate: r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Recent',
+          verdict: r.verdict === 'pass' ? 'Pass' : r.verdict === 'fail' ? 'Fail' : 'Pending',
+          worker: r.workerName || 'Worker',
+          summary: r.findings ? r.findings.substring(0, 100) + '...' : 'Report pending.',
+          status: 'Published',
+          raw: r
+        }));
+
+        const disputeReports = Store.getDisputes().filter(d => d.status === 'resolved' && d.expertId).map(d => ({
+          id: 'dr-' + d.id,
+          type: 'Dispute Resolution',
+          project: d.project || 'Unknown Project',
+          milestone: d.milestone || 'Dispute',
+          reportId: 'DIS-' + d.id.toUpperCase(),
+          generatedDate: d.resolvedAt ? new Date(d.resolvedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Recent',
+          verdict: d.verdict === 'worker-favour' ? 'Worker Favour' : d.verdict === 'client-favour' ? 'Client Favour' : 'Split',
+          worker: d.againstName || 'Worker',
+          summary: d.resolution ? d.resolution.substring(0, 100) + '...' : 'Resolution issued.',
+          status: 'Published',
+          raw: d
+        }));
+
+        return [...auditReports, ...disputeReports];
+      }
+
+      let reports = loadReports();
+      let activeFilter = 'All';
+      let searchQuery = '';
+
+      function filtered() {
+        return reports.filter(r => {
+          const q = searchQuery.toLowerCase();
+          const matchQ = !q || r.project.toLowerCase().includes(q) || r.type.toLowerCase().includes(q);
+          const matchF = activeFilter === 'All' || r.type === activeFilter;
+          return matchQ && matchF;
+        });
+      }
+
+      function verdictBadge(v) {
+        if (v === 'Pass') return 'badge-green';
+        if (v === 'Fail') return 'badge-red';
+        if (v === 'Worker Favour') return 'badge-green';
+        if (v === 'Client Favour') return 'badge-blue';
+        return 'badge-gray';
+      }
+
+      function render() {
+        const list = filtered();
+        const tbody = document.getElementById('reportsTbody');
+        const tableWrap = document.getElementById('reportsTableWrap');
+        const emptyWrap = document.getElementById('reportsEmpty');
+        if (!list.length) {
+          if (tableWrap) tableWrap.style.display = 'none';
+          if (emptyWrap) emptyWrap.style.display = 'block';
+          return;
+        }
+        if (tableWrap) tableWrap.style.display = '';
+        if (emptyWrap) emptyWrap.style.display = 'none';
+        if (tbody) {
+          tbody.innerHTML = list.map(r => {
+            // Build the correct link for the report type
+            const viewUrl = r.type === 'Technical Audit'
+              ? 'expert-report-audit.html?id=' + (r.auditRequestId || (r.raw ? r.raw.auditRequestId : ''))
+              : 'expert-report-dispute.html?id=' + (r.raw ? r.raw.id : '');
+            return `
+            <tr>
+              <td style="padding:14px 16px;font-weight:600;font-size:13px;">${r.reportId}</td>
+              <td style="padding:14px 16px;">
+                <span style="font-size:12px;padding:3px 10px;border-radius:99px;font-weight:500;background:${r.type==='Technical Audit'?'#eef2ff':'#faf5ff'};color:${r.type==='Technical Audit'?'#4f46e5':'#7c3aed'};">${r.type}</span>
+              </td>
+              <td style="padding:14px 16px;">
+                <div style="font-size:13px;font-weight:500;">${r.project}</div>
+                <div style="font-size:12px;color:var(--muted-foreground);">${r.milestone}</div>
+              </td>
+              <td style="padding:14px 16px;font-size:13px;color:var(--muted-foreground);">${r.worker}</td>
+              <td style="padding:14px 16px;"><span class="badge ${verdictBadge(r.verdict)}">${r.verdict}</span></td>
+              <td style="padding:14px 16px;font-size:13px;color:var(--muted-foreground);">${r.generatedDate}</td>
+              <td style="padding:14px 16px;"><span class="badge ${r.status==='Published'?'badge-green':'badge-gray'}">${r.status}</span></td>
+              <td style="padding:14px 16px;">
+                <a href="${viewUrl}" style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:12px;font-weight:500;color:var(--foreground);text-decoration:none;cursor:pointer;transition:background 0.15s;white-space:nowrap;" onmouseenter="this.style.background='var(--secondary)'" onmouseleave="this.style.background='var(--card)'">
+                  <i data-lucide="eye" style="width:13px;height:13px;"></i> View Report
+                </a>
+              </td>
+            </tr>`;
+          }).join('');
+          lucide.createIcons();
+        }
+        const totalCount     = reports.length;
+        const auditCount     = reports.filter(r => r.type === 'Technical Audit').length;
+        const disputeCount   = reports.filter(r => r.type === 'Dispute Resolution').length;
+        const publishedCount = reports.filter(r => r.status === 'Published').length;
+        const s = id => document.getElementById(id);
+        if (s('statTotal'))     s('statTotal').textContent     = totalCount;
+        if (s('statAudit'))     s('statAudit').textContent     = auditCount;
+        if (s('statDispute'))   s('statDispute').textContent   = disputeCount;
+        if (s('statPublished')) s('statPublished').textContent = publishedCount;
+      }
+
+      const content = `
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px;">
+          <div class="stat-card"><div><div class="stat-val" id="statTotal">${reports.length}</div><div class="stat-label">Total Reports</div></div><div class="stat-icon-wrap" style="background:#eef2ff;"><i data-lucide="file-text" style="width:20px;height:20px;color:#6366f1;"></i></div></div>
+          <div class="stat-card"><div><div class="stat-val" id="statAudit">${reports.filter(r=>r.type==='Technical Audit').length}</div><div class="stat-label">Technical Audits</div></div><div class="stat-icon-wrap" style="background:#ecfdf5;"><i data-lucide="clipboard-check" style="width:20px;height:20px;color:#10b981;"></i></div></div>
+          <div class="stat-card"><div><div class="stat-val" id="statDispute">${reports.filter(r=>r.type==='Dispute Resolution').length}</div><div class="stat-label">Dispute Reports</div></div><div class="stat-icon-wrap" style="background:#faf5ff;"><i data-lucide="scale" style="width:20px;height:20px;color:#a855f7;"></i></div></div>
+          <div class="stat-card"><div><div class="stat-val" id="statPublished" style="color:#10b981;">${reports.filter(r=>r.status==='Published').length}</div><div class="stat-label">Published</div></div><div class="stat-icon-wrap" style="background:#ecfdf5;"><i data-lucide="check-circle" style="width:20px;height:20px;color:#10b981;"></i></div></div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;">
+          <div style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              ${['All','Technical Audit','Dispute Resolution'].map((f,i) => `<button onclick="setReportFilter('${f}',this)" style="padding:6px 14px;border-radius:10px;border:1px solid var(--border);background:${i===0?'var(--foreground)':'var(--card)'};color:${i===0?'var(--primary-foreground)':'var(--muted-foreground)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;">${f}</button>`).join('')}
+            </div>
+            <div style="position:relative;">
+              <i data-lucide="search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--muted-foreground);pointer-events:none;"></i>
+              <input type="text" placeholder="Search reports..." oninput="setReportSearch(this.value)" style="padding:7px 12px 7px 32px;border-radius:10px;border:1px solid var(--border);font-size:13px;font-family:inherit;background:var(--input-bg);width:200px;" />
+            </div>
+          </div>
+          <div id="reportsEmpty" style="display:none;padding:64px 32px;text-align:center;color:var(--muted-foreground);">
+            <i data-lucide="file-x" style="width:40px;height:40px;opacity:0.4;margin:0 auto 12px;display:block;"></i>
+            <div style="font-size:16px;font-weight:600;margin-bottom:6px;">No reports yet</div>
+            <div style="font-size:14px;">Complete audit requests and dispute resolutions to see reports here.</div>
+          </div>
+          <div id="reportsTableWrap" style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;">
+              <thead>
+                <tr style="background:var(--secondary);border-bottom:1px solid var(--border);">
+                  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:0.05em;">Report ID</th>
+                  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:0.05em;">Type</th>
+                  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:0.05em;">Project / Milestone</th>
+                  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:0.05em;">Worker</th>
+                  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:0.05em;">Verdict</th>
+                  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:0.05em;">Date</th>
+                  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:0.05em;">Status</th>
+                  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:0.05em;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="reportsTbody"></tbody>
+            </table>
+          </div>
+        </div>`;
+
+      initDashboard({ role:'expert', activePath:'expert-reports.html', pageTitle:'My Reports', pageSubtitle:'All your technical audit and dispute resolution reports', content });
+      lucide.createIcons();
+      render();
+
+      window.setReportFilter = function(val, btn) {
+        activeFilter = val;
+        document.querySelectorAll('[onclick^="setReportFilter"]').forEach(b => {
+          b.style.background = 'var(--card)'; b.style.color = 'var(--muted-foreground)'; b.style.borderColor = 'var(--border)';
+        });
+        btn.style.background = 'var(--foreground)'; btn.style.color = 'var(--primary-foreground)';
+        render();
+      };
+      window.setReportSearch = function(val) { searchQuery = val; render(); };
+    });
+  </script>
+</head>
+<body></body>
+</html>

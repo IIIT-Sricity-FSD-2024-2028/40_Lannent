@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .ad-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:16px; margin-bottom:28px; }
+    .ad-stat { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px; display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+    .ad-val { font-size:26px; font-weight:800; letter-spacing:-0.02em; line-height:1.1; font-variant-numeric:tabular-nums; }
+    .ad-label { font-size:13px; color:var(--muted-foreground); margin-top:4px; }
+    .ad-sub { font-size:12px; color:var(--muted-foreground); margin-top:2px; }
+    .ad-icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex:none; }
+    .ad-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }
+    .ad-card { display:flex; gap:14px; align-items:flex-start; padding:18px; border-radius:14px; border:1px solid var(--border); background:var(--card); text-decoration:none; color:inherit; }
+    .ad-card:hover { border-color:var(--muted-foreground); }
+    .ad-card-title { font-size:14px; font-weight:700; margin-bottom:3px; }
+    .ad-card-desc { font-size:12.5px; color:var(--muted-foreground); line-height:1.5; }
+  </style>
+  <script>
+    const money = n => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('admin')) return;
+
+      const rev = Store.getRevenueSummary() || {};
+      const apps = Store.getExpertApplications() || [];
+      const pending = apps.filter(a => a.status === 'pending').length;
+      const approved = apps.filter(a => a.status === 'approved').length;
+      const experts = (Store.getUsers() || []).filter(u => u.role === 'expert').length;
+      const engagements = (Store.getAuditRequests() || []);
+      const liveAudits = engagements.filter(a =>
+        !['paid', 'declined', 'cancelled'].includes(a.status)).length;
+
+      const content = `
+        <div class="ad-grid">
+          <div class="ad-stat">
+            <div>
+              <div class="ad-val" style="color:#2a78d6;">${money(rev.totalRevenue)}</div>
+              <div class="ad-label">Platform revenue</div>
+              <div class="ad-sub">${rev.takeRate ?? 0}% of ${money(rev.grossVolume)} delivered</div>
+            </div>
+            <div class="ad-icon" style="background:#eff6ff;"><i data-lucide="trending-up" style="width:19px;height:19px;color:#2a78d6;"></i></div>
+          </div>
+          <div class="ad-stat">
+            <div>
+              <div class="ad-val">${money(rev.escrowHeld)}</div>
+              <div class="ad-label">Held in escrow</div>
+              <div class="ad-sub">${rev.activeContracts || 0} active · ${rev.draftProjects || 0} draft</div>
+            </div>
+            <div class="ad-icon" style="background:var(--secondary);"><i data-lucide="lock" style="width:19px;height:19px;color:var(--muted-foreground);"></i></div>
+          </div>
+          <div class="ad-stat">
+            <div>
+              <div class="ad-val" style="color:#b45309;">${pending}</div>
+              <div class="ad-label">Pending applications</div>
+              <div class="ad-sub">${approved} approved to date</div>
+            </div>
+            <div class="ad-icon" style="background:#fffbeb;"><i data-lucide="inbox" style="width:19px;height:19px;color:#b45309;"></i></div>
+          </div>
+          <div class="ad-stat">
+            <div>
+              <div class="ad-val" style="color:#0d9488;">${experts}</div>
+              <div class="ad-label">Expert Reviewers</div>
+              <div class="ad-sub">active on the platform</div>
+            </div>
+            <div class="ad-icon" style="background:#f0fdfa;"><i data-lucide="shield-check" style="width:19px;height:19px;color:#0d9488;"></i></div>
+          </div>
+          <div class="ad-stat">
+            <div>
+              <div class="ad-val" style="color:#4338ca;">${liveAudits}</div>
+              <div class="ad-label">Audits in flight</div>
+              <div class="ad-sub">${engagements.length} all-time</div>
+            </div>
+            <div class="ad-icon" style="background:#eef2ff;"><i data-lucide="clipboard-check" style="width:19px;height:19px;color:#4338ca;"></i></div>
+          </div>
+        </div>
+
+        <h2 style="font-size:18px;font-weight:600;margin-bottom:14px;">Your responsibilities</h2>
+        <div class="ad-actions">
+          <a href="admin-revenue.html" class="ad-card">
+            <div class="ad-icon" style="background:#eff6ff;"><i data-lucide="trending-up" style="width:19px;height:19px;color:#2a78d6;"></i></div>
+            <div>
+              <div class="ad-card-title">Revenue</div>
+              <div class="ad-card-desc">Where the money comes from, and what every user receives.</div>
+            </div>
+          </a>
+          <a href="admin-fee-config.html" class="ad-card">
+            <div class="ad-icon" style="background:#f0fdfa;"><i data-lucide="percent" style="width:19px;height:19px;color:#0d9488;"></i></div>
+            <div>
+              <div class="ad-card-title">Fee Configuration</div>
+              <div class="ad-card-desc">Tune every rate the platform charges, with a live worked example.</div>
+            </div>
+          </a>
+          <a href="admin-expert-applications.html" class="ad-card">
+            <div class="ad-icon" style="background:#fffbeb;"><i data-lucide="shield-check" style="width:19px;height:19px;color:#b45309;"></i></div>
+            <div>
+              <div class="ad-card-title">Expert Applications</div>
+              <div class="ad-card-desc">${pending} application${pending === 1 ? '' : 's'} waiting on your decision.</div>
+            </div>
+          </a>
+        </div>`;
+
+      initDashboard({
+        role: 'admin',
+        activePath: 'admin-dashboard.html',
+        pageTitle: 'Admin Dashboard',
+        pageSubtitle: 'Expert Reviewer intake and platform oversight',
+        content,
+      });
+      if (window.lucide) lucide.createIcons();
+    });
+  </script>
+</head>
+<body></body>
+</html>
