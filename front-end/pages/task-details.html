@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Task Details — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .detail-layout { display:grid; grid-template-columns:1fr 340px; gap:24px; }
+    .detail-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:24px; margin-bottom:20px; }
+    .milestone-item { display:flex; align-items:flex-start; gap:16px; padding:16px 0; border-bottom:1px solid rgba(0,0,0,0.05); }
+    .milestone-item:last-child { border-bottom:none; }
+    .milestone-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; margin-top:5px; }
+    @media(max-width:768px){ .detail-layout{ grid-template-columns:1fr; } }
+  </style>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('client', 'worker')) return;
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlId = urlParams.get('id');
+
+      let task = null;
+      if (typeof Store !== 'undefined' && urlId) task = Store.getTaskById(urlId);
+
+      if (!task) {
+        const demoTasks = {
+          's1': { title: 'E-commerce Website Redesign', description: 'Looking for an experienced frontend developer to redesign our e-commerce platform with modern UI/UX principles.', budget: '$1,500–$2,500', numBudget: 2500, skills: ['React', 'TypeScript', 'Tailwind CSS', 'Figma'], clientInitials: 'JT', clientName: 'James Thompson' },
+          's2': { title: 'Mobile App Development (React Native)', description: 'Need a skilled React Native developer to build a cross-platform mobile app with authentication and real-time features.', budget: '$3,000–$5,000', numBudget: 5000, skills: ['React Native', 'TypeScript', 'Firebase', 'Redux'], clientInitials: 'AW', clientName: 'Alex Worker' },
+          's3': { title: 'REST API Development with Node.js', description: 'Build a scalable REST API with authentication, rate limiting, and comprehensive documentation.', budget: '$800–$1,200', numBudget: 1200, skills: ['Node.js', 'Express', 'PostgreSQL', 'JWT'], clientInitials: 'JS', clientName: 'Jane Smith' },
+          's4': { title: 'UI/UX Design for SaaS Dashboard', description: 'Create wireframes and high-fidelity designs for a B2B SaaS analytics dashboard.', budget: '$600–$1,000', numBudget: 1000, skills: ['Figma', 'UI Design', 'Prototyping'], clientInitials: 'SA', clientName: 'Super Admin' },
+          's5': { title: 'Machine Learning Model Integration', description: 'Integrate an existing ML model into a production Flask API with proper error handling and monitoring.', budget: '$1,200–$2,000', numBudget: 2000, skills: ['Python', 'Flask', 'TensorFlow', 'Docker'], clientInitials: 'JT', clientName: 'James Thompson' }
+        };
+        task = demoTasks[urlId] || { 
+          id: 't1', 
+          title: 'E-commerce Website Redesign', 
+          description: 'We are looking for an experienced frontend developer to completely redesign our e-commerce platform. The current site is outdated and we want a modern, conversion-focused design that provides an excellent user experience across all devices.\n\nThe ideal candidate will have experience with React, TypeScript, and modern CSS frameworks. You should be comfortable working with Figma designs and have a good eye for detail.\n\nThis is a milestone-based project with clear deliverables for each phase. We value communication and will hold weekly progress meetings.', 
+          budget: '$1,500–$2,500', numBudget: 2500, 
+          skills: ['React', 'TypeScript', 'Tailwind CSS', 'Figma', 'REST APIs', 'Git', 'Responsive Design', 'Performance Optimization'],
+          clientName: 'James Thompson', clientInitials: 'JT'
+        };
+        task.id = urlId || 't1';
+      }
+
+      const clientInfo = task.clientId && typeof Store !== 'undefined' ? Store.getUserById(task.clientId) : null;
+      const clientName = clientInfo ? clientInfo.name : (task.clientName || 'Unknown Client');
+      const clientInitials = clientInfo ? clientInfo.avatar : (task.clientInitials || '??');
+      const clientMemberDate = clientInfo ? ('Member since ' + clientInfo.joinDate) : '';
+      const clientProjects = clientInfo ? (Store.getTasksByClient(task.clientId)?.length || 0) : 0;
+      const clientRating = clientInfo?.rating || 0;
+      const budgetDisplay = task.budget && typeof task.budget === 'number' ? ('$' + task.budget.toLocaleString()) : (task.budget || '$0');
+      const budgetNum = task.numBudget || (typeof task.budget === 'number' ? task.budget : parseInt(budgetDisplay.replace(/[^0-9]/g, '')) || 0);
+      const skillsHtml = (task.skills || []).map(s => `<span class="skill-tag" style="padding:6px 14px;font-size:13px;">${s}</span>`).join('');
+      const descriptionHtml = (task.description || '').split('\n').filter(p => p.trim()).map(p => `<p style="font-size:14px;color:#374151;line-height:1.7;margin-bottom:16px;">${p}</p>`).join('');
+      const taskMilestones = typeof Store !== 'undefined' ? Store.getMilestonesByTask(task.id) : [];
+      const taskProposals = typeof Store !== 'undefined' ? Store.getProposalsByTask(task.id).filter(p => p.type !== 'invitation') : [];
+      const taskStatus = task.status || 'open';
+      const statusLabel = taskStatus.charAt(0).toUpperCase() + taskStatus.slice(1).replace('-', ' ');
+      const statusBadgeClass = taskStatus === 'open' ? 'badge-green' : taskStatus === 'in-progress' ? 'badge-blue' : taskStatus === 'completed' ? 'badge-purple' : 'badge-yellow';
+      const milestoneColors = ['#6366f1','#10b981','#f59e0b','#a855f7','#ec4899','#14b8a6','#f97316','#8b5cf6'];
+
+      window.currentTaskId = task.id;
+
+      const content = `
+        <div style="margin-bottom:16px;">
+          <a href="browse-tasks.html" style="display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--muted-foreground);transition:color 0.15s;" onmouseenter="this.style.color='var(--foreground)'" onmouseleave="this.style.color='var(--muted-foreground)'">
+            <i data-lucide="arrow-left" style="width:16px;height:16px;"></i> Back to Browse
+          </a>
+        </div>
+
+        <div class="detail-layout">
+          <!-- LEFT: Main Details -->
+          <div>
+            <div class="detail-card">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;">
+                <div>
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                    ${task.auditEnabled ? '<span class="badge badge-purple">Audit Enabled</span>' : ''}
+                    <span class="badge ${statusBadgeClass}">${statusLabel}</span>
+                  </div>
+                  <h1 style="font-size:22px;font-weight:600;letter-spacing:-0.02em;margin-bottom:8px;">${task.title}</h1>
+                  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+                    <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted-foreground);">
+                      <i data-lucide="user" style="width:13px;height:13px;"></i> ${clientName}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted-foreground);">
+                      <i data-lucide="clock" style="width:13px;height:13px;"></i> Posted recently
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted-foreground);">
+                      <i data-lucide="map-pin" style="width:13px;height:13px;"></i> Remote
+                    </div>
+                  </div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-size:22px;font-weight:700;color:#10b981;">${budgetDisplay}</div>
+                  <div style="font-size:12px;color:var(--muted-foreground);">Fixed Price</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Description -->
+            <div class="detail-card">
+              <h3 style="font-size:16px;font-weight:600;margin-bottom:16px;">Project Description</h3>
+              ${descriptionHtml}
+            </div>
+
+            <!-- Milestones -->
+            <div class="detail-card">
+              <h3 style="font-size:16px;font-weight:600;margin-bottom:16px;">Project Milestones</h3>
+              <div>
+                ${taskMilestones.length > 0 ? taskMilestones.map((m, i) => {
+                  const color = milestoneColors[i % milestoneColors.length];
+                  const msStatus = m.status || 'pending';
+                  const msStatusLabel = msStatus === 'completed' ? '✓ Completed' : msStatus === 'submitted' ? '⬆ Submitted' : msStatus === 'in-progress' ? '⏳ In Progress' : msStatus === 'disputed' ? '⚠ Disputed' : '○ Pending';
+                  return `
+                  <div class="milestone-item">
+                    <div class="milestone-dot" style="background:${color};margin-top:6px;"></div>
+                    <div style="flex:1;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                        <span style="font-weight:600;font-size:14px;">Milestone ${i+1}: ${m.title}</span>
+                        <span style="font-weight:700;color:${color};">$${(m.budget || 0).toLocaleString()}</span>
+                      </div>
+                      <p style="font-size:13px;color:var(--muted-foreground);margin-bottom:4px;">${m.description || ''}</p>
+                      <span style="font-size:12px;color:var(--muted-foreground);">${msStatusLabel}</span>
+                    </div>
+                  </div>`;
+                }).join('') : '<p style="font-size:14px;color:var(--muted-foreground);">No milestones defined yet.</p>'}
+              </div>
+            </div>
+
+            <!-- Required Skills -->
+            <div class="detail-card">
+              <h3 style="font-size:16px;font-weight:600;margin-bottom:16px;">Required Skills</h3>
+              <div class="skills-list">
+                ${skillsHtml}
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT: Sidebar -->
+          <div>
+            <!-- Apply Card -->
+            <div class="detail-card" style="position:sticky;top:80px;">
+              <div style="text-align:center;padding:8px 0 20px;">
+                <div style="font-size:28px;font-weight:700;color:#10b981;margin-bottom:4px;">$${budgetNum.toLocaleString()}</div>
+                <div style="font-size:13px;color:var(--muted-foreground);">Total budget</div>
+              </div>
+              ${taskStatus === 'open' ? `
+              <button class="btn-primary" style="width:100%;padding:12px;border-radius:12px;font-size:15px;margin-bottom:12px;" onclick="document.getElementById('applyModal').style.display='flex'">
+                Apply Now
+              </button>
+              <button class="btn-outline" style="width:100%;padding:12px;border-radius:12px;font-size:15px;">
+                <i data-lucide="bookmark" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Save Task
+              </button>` : `
+              <div style="width:100%;padding:12px;border-radius:12px;font-size:14px;font-weight:600;text-align:center;margin-bottom:12px;background:${taskStatus === 'in-progress' ? '#eef2ff;color:#4f46e5;border:1px solid #c7d2fe' : taskStatus === 'completed' ? '#f0fdf4;color:#059669;border:1px solid #a7f3d0' : '#fef3c7;color:#d97706;border:1px solid #fde68a'};">
+                ${taskStatus === 'in-progress' ? '🔄 In Progress — Not Accepting Proposals' : taskStatus === 'completed' ? '✅ Completed' : '⚠️ ' + statusLabel}
+              </div>`}
+
+              <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
+                <div style="display:flex;justify-content:space-between;margin-bottom:12px;">
+                  <span style="font-size:13px;color:var(--muted-foreground);">Status</span>
+                  <span style="font-size:13px;font-weight:600;">${statusLabel}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:12px;">
+                  <span style="font-size:13px;color:var(--muted-foreground);">Category</span>
+                  <span style="font-size:13px;font-weight:600;">${task.category || 'General'}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:12px;">
+                  <span style="font-size:13px;color:var(--muted-foreground);">Milestones</span>
+                  <span style="font-size:13px;font-weight:600;">${taskMilestones.length} defined</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:12px;">
+                  <span style="font-size:13px;color:var(--muted-foreground);">Proposals</span>
+                  <span style="font-size:13px;font-weight:600;">${taskProposals.length} submitted</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:12px;">
+                  <span style="font-size:13px;color:var(--muted-foreground);">Progress</span>
+                  <span style="font-size:13px;font-weight:600;">${task.progress || 0}%</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;">
+                  <span style="font-size:13px;color:var(--muted-foreground);">Deadline</span>
+                  <span style="font-size:13px;font-weight:600;">${task.deadline ? new Date(task.deadline).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : 'TBD'}</span>
+                </div>
+              </div>
+
+              <div style="margin-top:20px;padding:16px;border-radius:12px;background:var(--input-bg);">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                  <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#4f46e5);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:13px;">${clientInitials}</div>
+                  <div>
+                    <p style="font-weight:600;font-size:14px;">${clientName}</p>
+                    <p style="font-size:12px;color:var(--muted-foreground);">${clientMemberDate}</p>
+                  </div>
+                </div>
+                <div style="display:flex;gap:12px;">
+                  <div style="text-align:center;flex:1;">
+                    <div style="font-weight:700;font-size:16px;">${clientProjects}</div>
+                    <div style="font-size:11px;color:var(--muted-foreground);">Projects</div>
+                  </div>
+                  <div style="text-align:center;flex:1;">
+                    <div style="font-weight:700;font-size:16px;">${clientRating > 0 ? clientRating + '★' : 'N/A'}</div>
+                    <div style="font-size:11px;color:var(--muted-foreground);">Rating</div>
+                  </div>
+                  <div style="text-align:center;flex:1;">
+                    <div style="font-weight:700;font-size:16px;">${task.auditEnabled ? 'Yes' : 'No'}</div>
+                    <div style="font-size:11px;color:var(--muted-foreground);">Audit</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Apply Modal -->
+        <div id="applyModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(4px);">
+          <div style="background:white;border-radius:24px;padding:32px;width:100%;max-width:480px;margin:0 16px;box-shadow:0 32px 80px rgba(0,0,0,0.15);">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+              <h2 style="font-size:20px;font-weight:600;">Submit Proposal</h2>
+              <button onclick="document.getElementById('applyModal').style.display='none'" style="background:none;border:none;cursor:pointer;color:var(--muted-foreground);">
+                <i data-lucide="x" style="width:20px;height:20px;"></i>
+              </button>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Delivery Timeline</label>
+              <select id="timelineInput" class="form-input filter-select" style="padding:12px 16px;">
+                <option>3 weeks</option>
+                <option>4 weeks</option>
+                <option>5 weeks</option>
+                <option>6 weeks</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Cover Letter</label>
+              <textarea id="coverLetterInput" class="form-input" rows="4" placeholder="Describe your relevant experience and why you're the best fit for this project..."></textarea>
+            </div>
+            <div style="display:flex;gap:12px;margin-top:8px;">
+              <button onclick="document.getElementById('applyModal').style.display='none'" class="btn-outline" style="flex:1;padding:12px;border-radius:12px;">Cancel</button>
+              <button class="btn-primary" style="flex:1;padding:12px;border-radius:12px;" onclick="submitProposal()">Submit Proposal</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      initDashboard({
+        role: (typeof Auth !== 'undefined' && Auth.getCurrentUser()?.role) || 'worker',
+        activePath: 'browse-tasks.html',
+        pageTitle: 'Task Details',
+        pageSubtitle: '',
+        content
+      });
+      lucide.createIcons();
+    });
+
+    function submitProposal() {
+      const timelineInput = document.getElementById('timelineInput');
+      const coverLetterInput = document.getElementById('coverLetterInput');
+      
+      const timeline = timelineInput ? timelineInput.value : '';
+      const coverLetter = coverLetterInput ? coverLetterInput.value : '';
+      
+      if (!coverLetter) {
+        if (typeof Validate !== 'undefined') Validate.toast('Please write a cover letter', 'error');
+        return;
+      }
+      
+      const currentUser = (typeof Auth !== 'undefined') ? Auth.getCurrentUser() : null;
+      if (!currentUser) {
+        if (typeof Validate !== 'undefined') Validate.toast('Please log in to submit a proposal', 'error');
+        return;
+      }
+
+      const task = Store.getTaskById(window.currentTaskId);
+
+      // ── Guard: only open tasks accept proposals ───────────────────
+      if (task && task.status !== 'open') {
+        if (typeof Validate !== 'undefined') Validate.toast('This project is no longer accepting proposals.', 'error');
+        document.getElementById('applyModal').style.display = 'none';
+        return;
+      }
+
+      const taskBudget = task ? (typeof task.budget === 'number' ? task.budget : parseInt(String(task.budget).replace(/[^0-9]/g, '')) || 1000) : 1000;
+
+      try {
+        Store.createProposal({
+          taskId: window.currentTaskId || 't1',
+          workerId: currentUser.userId,
+          workerName: currentUser.name || 'Worker',
+          avatar: currentUser.avatar || 'WK',
+          avatarColor: currentUser.avatarColor || '#6366f1',
+          bidPrice: '$' + taskBudget.toLocaleString(),
+          timeline: timeline,
+          coverLetter: coverLetter,
+          skills: currentUser.skills || [],
+          status: 'pending'
+        });
+
+        // Notify the task's client about the new proposal
+        if (task && task.clientId) {
+          Store.addNotification({
+            userId: task.clientId,
+            type: 'proposal',
+            text: `New proposal from ${currentUser.name || 'a worker'}`,
+            subtext: `${task.title} — Bid: $${taskBudget.toLocaleString()}, Timeline: ${timeline}`,
+          });
+        }
+      } catch(e) {
+        console.error('[submitProposal] Error:', e);
+      }
+
+      document.getElementById('applyModal').style.display = 'none';
+      if (typeof Validate !== 'undefined') {
+        Validate.toast('✓ Proposal submitted successfully!', 'success');
+      } else {
+        const toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#10b981;color:white;padding:14px 20px;border-radius:12px;font-size:14px;font-weight:500;z-index:300;box-shadow:0 8px 24px rgba(16,185,129,0.3);animation:fadeUp 0.4s ease;';
+        toast.innerHTML = '✓ Proposal submitted successfully!';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+      }
+    }
+  </script>
+</head>
+<body></body>
+</html>
