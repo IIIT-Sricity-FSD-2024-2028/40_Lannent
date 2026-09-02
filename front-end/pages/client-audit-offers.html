@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Audit Offers — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .ao-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:22px; margin-bottom:16px; }
+    .ao-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:14px; flex-wrap:wrap; }
+    .ao-title { font-size:16px; font-weight:700; margin-bottom:4px; }
+    .ao-sub { font-size:13px; color:var(--muted-foreground); }
+    .ao-status { font-size:11px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; padding:5px 10px; border-radius:6px; white-space:nowrap; }
+    .st-preview-sent  { background:#eff6ff; color:#1d4ed8; }
+    .st-negotiating   { background:#fffbeb; color:#b45309; }
+    .st-agreed        { background:#ecfdf5; color:#047857; }
+    .st-escrow-funded { background:#eef2ff; color:#4338ca; }
+    .st-in-progress   { background:#f0f9ff; color:#0369a1; }
+    .st-paid          { background:#f1f5f9; color:#475569; }
+    .st-declined, .st-cancelled { background:#fef2f2; color:#b91c1c; }
+    .offer-row { display:flex; align-items:center; gap:12px; padding:11px 0; border-top:1px solid var(--border); font-size:13px; }
+    .offer-who { font-weight:600; min-width:74px; }
+    .offer-amt { font-weight:700; font-variant-numeric:tabular-nums; }
+    .offer-tag { font-size:10px; text-transform:uppercase; letter-spacing:0.05em; padding:3px 7px; border-radius:4px; background:var(--secondary); color:var(--muted-foreground); }
+    .offer-tag.pending  { background:#fffbeb; color:#b45309; }
+    .offer-tag.accepted { background:#ecfdf5; color:#047857; }
+    .ao-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
+    .ao-counter { display:flex; gap:10px; align-items:center; margin-top:14px; flex-wrap:wrap; }
+    .ao-counter input { max-width:150px; }
+    .ao-empty { padding:56px 24px; text-align:center; background:var(--card); border:1px solid var(--border); border-radius:16px; }
+  </style>
+  <script>
+    let engagements = [];
+
+    function statusLabel(s) { return s.replace(/-/g, ' '); }
+
+    function money(n) {
+      return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function render() {
+      const box = document.getElementById('aoList');
+      if (!box) return;
+
+      if (!engagements.length) {
+        box.innerHTML = `
+          <div class="ao-empty">
+            <div style="font-size:16px;font-weight:600;margin-bottom:6px;">No audit engagements</div>
+            <div style="color:var(--muted-foreground);font-size:14px;margin-bottom:18px;">
+              Enable Technical Audit when posting a project to hire an Expert Reviewer.
+            </div>
+            <a href="post-task.html" class="btn-primary" style="text-decoration:none;">Post a Task</a>
+          </div>`;
+        return;
+      }
+
+      box.innerHTML = engagements.map(a => {
+        const task = Store.getTaskById(a.taskId);
+        const expert = a.expertId ? Store.getUserById(a.expertId) : null;
+        const live = (a.offers || []).find(o => o.status === 'pending');
+        const canAccept = live && live.offeredBy === 'expert';
+        const negotiating = ['preview-sent', 'negotiating'].includes(a.status);
+
+        const offers = (a.offers || []).length
+          ? a.offers.map(o => `
+              <div class="offer-row">
+                <span class="offer-who">${o.offeredBy === 'client' ? 'You' : 'Reviewer'}</span>
+                <span class="offer-amt">${money(o.amount)}</span>
+                <span class="offer-tag ${o.status}">${o.status}</span>
+                <span style="color:var(--muted-foreground);flex:1;min-width:0;">${escapeHtml(o.note || '')}</span>
+              </div>`).join('')
+          : '<div class="offer-row" style="color:var(--muted-foreground);">No offers yet.</div>';
+
+        let actions = '';
+        if (canAccept) {
+          actions += `<button class="btn-primary" onclick="acceptOffer('${a.id}','${live.id}')">Accept ${money(live.amount)}</button>`;
+        }
+        if (a.status === 'agreed') {
+          actions += `<button class="btn-primary" onclick="fundEscrow('${a.id}')">Fund ${money(a.agreedAmount)} into escrow</button>`;
+        }
+        if (a.status === 'escrow-funded') {
+          actions += `<span class="ao-sub">Waiting for the reviewer to start.</span>`;
+        }
+        if (a.status === 'declined' && task && task.status === 'draft') {
+          actions += `<button class="btn-primary" onclick="findAnotherReviewer('${a.taskId}')">Find another reviewer</button>`;
+        }
+        if (task && task.status === 'draft') {
+          actions += `<button class="btn-outline" style="color:#b91c1c;border-color:#fca5a5;" onclick="cancelDraft('${a.taskId}')">Cancel draft project</button>`;
+        }
+
+        return `
+          <div class="ao-card">
+            <div class="ao-head">
+              <div>
+                <div class="ao-title">${task ? task.title : a.project || 'Project'}</div>
+                <div class="ao-sub">
+                  ${a.kind === 'dispute-audit' ? 'Dispute audit' : 'Technical audit'}
+                  ${task ? ' · budget ' + money(task.budget) : ''}
+                  ${expert ? ' · ' + expert.name : ''}
+                  ${task && task.status === 'draft' ? ' · <strong>project is a draft until a reviewer accepts</strong>' : ''}
+                </div>
+              </div>
+              <span class="ao-status st-${a.status}">${statusLabel(a.status)}</span>
+            </div>
+
+            ${a.agreedAmount ? `<div class="ao-sub" style="margin-bottom:10px;">Agreed fee: <strong>${money(a.agreedAmount)}</strong></div>` : ''}
+            ${offers}
+
+            ${negotiating ? `
+              <div class="ao-counter">
+                <span style="font-weight:700;color:var(--muted-foreground);">$</span>
+                <input class="form-input" type="number" min="1" step="1" id="counter_${a.id}" placeholder="Your price" />
+                <button class="btn-outline" onclick="counter('${a.id}')">Send offer</button>
+              </div>` : ''}
+
+            <div class="ao-actions">${actions}</div>
+          </div>`;
+      }).join('');
+
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function reload() {
+      const session = Auth.getCurrentUser();
+      const draftTaskIds = new Set(
+        Store.getTasksByClient(session.userId).filter(t => t.status === 'draft').map(t => t.id)
+      );
+      engagements = Store.getAuditRequests()
+        .filter(a => a.clientId === session.userId)
+        // Hide finished engagements, but keep a declined one while its project
+        // is still a draft — that card carries the "find another reviewer" action.
+        .filter(a => a.status !== 'cancelled')
+        .filter(a => a.status !== 'declined' || draftTaskIds.has(a.taskId))
+        .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+      render();
+    }
+
+    function counter(id) {
+      const el = document.getElementById('counter_' + id);
+      const amount = parseFloat(el?.value);
+      if (!amount || amount < 1) {
+        Validate.toast('Enter a price greater than zero.', 'error');
+        return;
+      }
+      const r = Store.makeAuditOffer(id, { amount, offeredBy: 'client', note: 'Counter-offer' });
+      if (!r) { Validate.toast('Could not send that offer. Please try again.', 'error'); return; }
+      Validate.toast(`Offer of $${amount.toLocaleString()} sent to the reviewer.`, 'success');
+      reload();
+    }
+
+    function acceptOffer(id, offerId) {
+      const r = Store.acceptAuditOffer(id, offerId);
+      if (!r) { Validate.toast('Could not accept that offer.', 'error'); return; }
+      Validate.toast('Fee agreed. Fund the escrow to hire the reviewer.', 'success');
+      reload();
+    }
+
+    function fundEscrow(id) {
+      const ar = Store.getAuditRequestById(id);
+      Validate.confirm(
+        `Move $${Number(ar.agreedAmount).toLocaleString()} into escrow for this audit? The reviewer is paid from it once they file their report.`,
+        () => {
+          const r = Store.fundAuditEscrow(id);
+          if (!r) { Validate.toast('Funding failed. Check your wallet balance.', 'error'); return; }
+          Validate.toast('Escrow funded. The reviewer can now start.', 'success');
+          reload();
+        }
+      );
+    }
+
+    function findAnotherReviewer(taskId) {
+      const task = Store.getTaskById(taskId);
+      const r = Store.createAuditRequest({
+        kind: 'project-audit',
+        taskId,
+        clientId: task.clientId,
+        project: task.title,
+        severity: 'Medium',
+        openingOffer: undefined,
+      });
+      if (!r) { Validate.toast('Could not open a new audit request.', 'error'); return; }
+      Validate.toast('New audit request opened. Reviewers can now quote for it.', 'success');
+      reload();
+    }
+
+    function cancelDraft(taskId) {
+      Validate.confirm(
+        'Cancel this draft project? Any audit escrow is refunded to your wallet.',
+        () => {
+          const r = Store.cancelDraftTask(taskId);
+          if (!r) { Validate.toast('Could not cancel the draft.', 'error'); return; }
+          Validate.toast('Draft cancelled and escrow refunded.', 'success');
+          reload();
+        }
+      );
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('client')) return;
+
+      initDashboard({
+        role: 'client',
+        activePath: 'client-audit-offers.html',
+        pageTitle: 'Audit Offers',
+        pageSubtitle: 'Agree a price with an Expert Reviewer, then fund the audit',
+        content: '<div id="aoList"></div>',
+      });
+
+      reload();
+      if (window.lucide) lucide.createIcons();
+    });
+  </script>
+</head>
+<body></body>
+</html>

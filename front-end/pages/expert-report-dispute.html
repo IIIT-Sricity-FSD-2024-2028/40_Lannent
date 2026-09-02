@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dispute Resolution Report — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    /* ── Layout ── */
+    .report-layout {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 960px) { .report-layout { grid-template-columns: 1fr; } }
+
+    /* ── Shared card ── */
+    .rc {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      margin-bottom: 18px;
+    }
+    .rc:last-child { margin-bottom: 0; }
+    .rc-head {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .rc-head-icon {
+      width: 30px; height: 30px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .rc-head-title { font-size: 14px; font-weight: 600; }
+    .rc-body { padding: 20px; }
+
+    /* ── Report header banner ── */
+    .report-header {
+      background: linear-gradient(135deg, #1c1917 0%, #44403c 60%, #78716c 100%);
+      border-radius: 16px;
+      padding: 28px 32px;
+      margin-bottom: 24px;
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+    }
+    .report-header::after {
+      content: '';
+      position: absolute;
+      top: -40px; right: -40px;
+      width: 180px; height: 180px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.05);
+    }
+    .report-id-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      padding: 4px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: monospace;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+    }
+    .report-title-main { font-size: 22px; font-weight: 700; margin-bottom: 4px; line-height: 1.3; }
+    .report-subtitle   { font-size: 13px; opacity: 0.75; margin-bottom: 20px; }
+    .report-meta-row   { display: flex; gap: 20px; flex-wrap: wrap; }
+    .report-meta-item  { display: flex; flex-direction: column; gap: 2px; }
+    .report-meta-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.6; }
+    .report-meta-value { font-size: 13px; font-weight: 600; }
+
+    /* ── Verdict banner ── */
+    .verdict-banner {
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 20px;
+      border: 1.5px solid;
+    }
+    .verdict-worker   { background:#d1fae5; border-color:#6ee7b7; }
+    .verdict-client   { background:#dbeafe; border-color:#93c5fd; }
+    .verdict-split    { background:#fff7ed; border-color:#fdba74; }
+    .verdict-fix      { background:#f3f4f6; border-color:#d1d5db; }
+
+    .verdict-icon-wrap {
+      width: 44px; height: 44px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .verdict-worker .verdict-icon-wrap { background:#10b981; }
+    .verdict-client .verdict-icon-wrap { background:#3b82f6; }
+    .verdict-split .verdict-icon-wrap  { background:#f59e0b; }
+    .verdict-fix .verdict-icon-wrap    { background:#6b7280; }
+
+    .verdict-label {
+      font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.07em;
+      margin-bottom: 2px;
+    }
+    .verdict-worker .verdict-label { color:#065f46; }
+    .verdict-client .verdict-label { color:#1d4ed8; }
+    .verdict-split  .verdict-label { color:#92400e; }
+    .verdict-fix    .verdict-label { color:#374151; }
+
+    .verdict-text { font-size: 14px; font-weight: 600; }
+    .verdict-worker .verdict-text { color:#065f46; }
+    .verdict-client .verdict-text { color:#1d4ed8; }
+    .verdict-split  .verdict-text { color:#92400e; }
+    .verdict-fix    .verdict-text { color:#374151; }
+
+    /* ── Party cards ── */
+    .party-card {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px;
+      border-radius: 12px;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+    }
+    .party-avatar {
+      width: 44px; height: 44px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; color: #fff;
+      flex-shrink: 0;
+    }
+    .party-name  { font-size: 14px; font-weight: 600; }
+    .party-role  { font-size: 12px; color: var(--muted-foreground); margin-top: 2px; }
+    .party-tag   {
+      margin-left: auto;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 11px; font-weight: 600;
+      border: 1px solid;
+    }
+    .tag-raiser     { background:#fee2e2; border-color:#fca5a5; color:#b91c1c; }
+    .tag-respondent { background:#dbeafe; border-color:#93c5fd; color:#1d4ed8; }
+
+    /* ── Timeline ── */
+    .timeline { position: relative; padding-left: 24px; }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 7px; top: 8px; bottom: 8px;
+      width: 2px;
+      background: var(--border);
+    }
+    .tl-item { position: relative; margin-bottom: 18px; }
+    .tl-item:last-child { margin-bottom: 0; }
+    .tl-dot {
+      position: absolute;
+      left: -21px; top: 4px;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+    }
+    .tl-dot.red    { background:#ef4444; box-shadow:0 0 0 2px #fca5a5; }
+    .tl-dot.orange { background:#f59e0b; box-shadow:0 0 0 2px #fde68a; }
+    .tl-dot.blue   { background:#6366f1; box-shadow:0 0 0 2px #c7d2fe; }
+    .tl-dot.green  { background:#10b981; box-shadow:0 0 0 2px #6ee7b7; }
+    .tl-time { font-size: 11px; color: var(--muted-foreground); margin-bottom: 3px; }
+    .tl-text { font-size: 13px; font-weight: 500; }
+    .tl-sub  { font-size: 12px; color: var(--muted-foreground); margin-top: 2px; line-height: 1.4; }
+
+    /* ── Info grid ── */
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .info-cell  { display: flex; flex-direction: column; gap: 3px; }
+    .info-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted-foreground); }
+    .info-value { font-size: 14px; font-weight: 500; }
+    .info-value.mono { font-family: monospace; font-size: 13px; }
+
+    /* ── Severity badge ── */
+    .sev-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border-radius: 9999px;
+      font-size: 11px; font-weight: 600; border: 1px solid;
+    }
+    .sev-high   { background:#fee2e2; border-color:#fca5a5; color:#b91c1c; }
+    .sev-medium { background:#fff7ed; border-color:#fdba74; color:#c2410c; }
+    .sev-low    { background:#fffbeb; border-color:#fde68a; color:#854d0e; }
+
+    /* ── File row ── */
+    .file-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 0; border-bottom: 1px solid rgba(0,0,0,0.05);
+    }
+    .file-row:last-child { border-bottom: none; }
+    .file-icon-wrap {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .file-name { font-size: 13px; font-weight: 500; }
+    .file-size { font-size: 11px; color: var(--muted-foreground); margin-top: 2px; }
+
+    /* ── Summary box ── */
+    .summary-box {
+      background: var(--input-bg);
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 14px;
+      color: var(--foreground);
+      line-height: 1.7;
+    }
+
+    /* ── Expert sig ── */
+    .expert-sig {
+      background: linear-gradient(145deg, #fafaf9, #f5f5f4);
+      border: 1.5px solid #d6d3d1;
+      border-radius: 14px;
+      padding: 20px;
+      text-align: center;
+    }
+    .expert-avatar {
+      width: 56px; height: 56px;
+      border-radius: 16px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 700; color: #fff;
+      background: linear-gradient(135deg, #78716c, #57534e);
+      margin: 0 auto 10px;
+    }
+    .expert-name { font-size: 15px; font-weight: 700; color: #1c1917; margin-bottom: 2px; }
+    .expert-role { font-size: 12px; color: #78716c; }
+
+    /* ── Action btn ── */
+    .btn-act {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; padding: 10px 18px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px; font-weight: 500; font-family: inherit;
+      cursor: pointer; transition: background 0.15s; color: var(--foreground);
+      margin-bottom: 8px;
+    }
+    .btn-act:hover { background: var(--secondary); }
+    .section-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+    /* ── Evidence quote ── */
+    .evidence-quote {
+      border-left: 3px solid #6366f1;
+      padding: 10px 14px;
+      border-radius: 0 8px 8px 0;
+      background: #eef2ff;
+      font-size: 13px;
+      color: #1e1b4b;
+      line-height: 1.6;
+      margin-bottom: 10px;
+    }
+    .evidence-quote:last-child { margin-bottom: 0; }
+    .evidence-label {
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      color: #6366f1; margin-bottom: 4px;
+    }
+  </style>
+
+  <script>
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('expert', 'client', 'worker')) return;
+      const params = new URLSearchParams(window.location.search);
+      const rid = params.get('id') || params.get('disputeId') || '';
+      const role = params.get('role') || 'expert';
+
+      // Load from Store — fall back to first resolved dispute
+      let rawDispute = rid ? Store.getDisputeById(rid) : null;
+      if (!rawDispute) {
+        const all = Store.getDisputes();
+        rawDispute = all.find(d => d.status === 'resolved') || all[0] || null;
+      }
+      if (!rawDispute) {
+        renderEmptyState({
+          role: 'expert',
+          activePath: 'expert-dispute-cases.html',
+          pageTitle: 'Dispute Report',
+          message: 'No dispute report found.',
+          linkHref: 'expert-dispute-cases.html',
+          linkLabel: 'Back to Cases',
+        });
+        return;
+      }
+      const _task = Store.getTaskById(rawDispute.taskId);
+      const _raiser = Store.getUserById(rawDispute.raisedBy);
+      const _respondent = Store.getUserById(rawDispute.againstId);
+      const _expert = rawDispute.expertId ? Store.getUserById(rawDispute.expertId) : null;
+
+      // Severity is set on the audit engagement the dispute opened.
+      const _engagement = (Store.getAuditRequests() || []).find(a => a.disputeId === rawDispute.id);
+      const _severity = _engagement ? _engagement.severity : 'Medium';
+
+      // What the reviewer actually examines: the claim, and the disputed
+      // milestone's submission.
+      const _milestone = rawDispute.milestoneId ? Store.getMilestoneById(rawDispute.milestoneId) : null;
+      const _deliverable = _milestone ? _milestone.deliverable : null;
+
+      const _evidence = [
+        { label: 'The claim', text: rawDispute.reason || 'No reason recorded.' },
+      ];
+      if (_milestone) {
+        _evidence.push({
+          label: 'Disputed milestone',
+          text: `${escapeHtml(_milestone.title)} — $${Number(_milestone.budget || 0).toLocaleString()}, status ${_milestone.status}`,
+        });
+      }
+      if (_deliverable) {
+        _evidence.push({
+          label: 'Worker submission',
+          text: [_deliverable.title, _deliverable.description].filter(Boolean).join(' — ')
+                || 'Submitted without a description.',
+        });
+      } else if (_milestone) {
+        _evidence.push({ label: 'Worker submission', text: 'Nothing was submitted for this milestone.' });
+      }
+
+      // Real attachments only. There is no file store yet, so a link is all
+      // there is to show — inventing a file list would be worse than none.
+      const _files = [];
+      if (_deliverable && _deliverable.link) {
+        _files.push({ name: _deliverable.link, size: 'Submitted link', icon: 'link' });
+      }
+      if (_deliverable && Array.isArray(_deliverable.files)) {
+        _deliverable.files.forEach(f => _files.push({
+          name: f.name || String(f), size: f.size || 'Attached file', icon: 'file-text',
+        }));
+      }
+
+      const r = {
+        reportId: 'DSP-' + rawDispute.id.toUpperCase(),
+        type: 'Dispute Resolution',
+        project: rawDispute.project || (_task ? _task.title : 'Unknown'),
+        milestone: rawDispute.milestone || 'Milestone',
+        issue: rawDispute.reason ? rawDispute.reason.substring(0,80) : 'Dispute',
+        generatedDate: rawDispute.resolvedAt ? new Date(rawDispute.resolvedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Recently',
+        status: rawDispute.status === 'resolved' ? 'Published' : 'Draft',
+        verdict: rawDispute.verdict === 'worker-favour' ? 'In Favour of Worker' : rawDispute.verdict === 'client-favour' ? 'In Favour of Client' : rawDispute.verdict || 'Pending',
+        verdictClass: rawDispute.verdict === 'worker-favour' ? 'verdict-worker' : rawDispute.verdict === 'client-favour' ? 'verdict-client' : 'verdict-pending',
+        escrow: rawDispute.amount || '$0',
+        raisedByName: _raiser ? _raiser.name : (rawDispute.raisedByName || 'Unknown'),
+        raisedByRole: _raiser ? _raiser.role : 'user',
+        raisedByInitials: _raiser ? _raiser.avatar : '?',
+        raisedByColor: _raiser ? _raiser.avatarColor : '#6366f1',
+        respondentName: _respondent ? _respondent.name : (rawDispute.againstName || 'Unknown'),
+        respondentRole: _respondent ? _respondent.role : 'user',
+        respondentInitials: _respondent ? _respondent.avatar : '?',
+        respondentColor: _respondent ? _respondent.avatarColor : '#10b981',
+        expertName: _expert ? _expert.name : 'Expert Reviewer',
+        expertInitials: _expert ? _expert.avatar : 'ER',
+        expertColor: _expert ? _expert.avatarColor : 'linear-gradient(135deg,#a855f7,#7c3aed)',
+        expertTitle: _expert ? (_expert.jobTitle || 'Expert Reviewer') : 'Expert Reviewer',
+        resolution: rawDispute.resolution || 'Resolution pending.',
+        decision: rawDispute.verdict === 'worker-favour' ? 'In Favour of Worker'
+                : rawDispute.verdict === 'client-favour' ? 'In Favour of Client'
+                : rawDispute.verdict || 'Pending Review',
+        verdictIcon: rawDispute.verdict === 'worker-favour' ? 'check-circle'
+                   : rawDispute.verdict === 'client-favour' ? 'user-check'
+                   : 'clock',
+        // Severity lives on the audit engagement the dispute opened, not on the
+        // dispute itself.
+        severity: _severity,
+        severityClass: _severity === 'High' ? 'sev-high' : _severity === 'Low' ? 'sev-low' : 'sev-medium',
+        caseId: '#DIS-' + (rawDispute.id || '0000').toString().toUpperCase(),
+        raisedDate: rawDispute.createdAt ? new Date(rawDispute.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'N/A',
+        raisedBy: _raiser ? (_raiser.role === 'worker' ? 'Gig Worker' : 'Client') : 'User',
+        respondent: _respondent ? (_respondent.role === 'worker' ? 'Gig Worker' : 'Client') : 'User',
+        disputeDescription: rawDispute.reason || 'No description provided for this dispute.',
+        // The evidence is the disputed milestone itself — the claim, and what
+        // the worker actually submitted.
+        evidenceReviewed: _evidence,
+        // The reviewer's own words, or an honest gap. It used to invent a
+        // paragraph of analysis for every unresolved case.
+        expertAnalysis: rawDispute.resolution || null,
+        files: _files,
+        timeline: [
+          { dot:'blue',   time: rawDispute.createdAt ? new Date(rawDispute.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—', text:'Dispute raised', sub: _expert ? `Escrow frozen. Assigned to ${escapeHtml(_expert.name)}.` : 'Escrow frozen. Awaiting a reviewer.' },
+          { dot:'purple', time: rawDispute.resolvedAt ? new Date(rawDispute.resolvedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—', text:'Expert reviewed case', sub: rawDispute.resolvedAt ? 'Deliverable and dispute details reviewed.' : 'Not yet reviewed.' },
+          { dot:'green',  time: rawDispute.resolvedAt ? new Date(rawDispute.resolvedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—', text:'Verdict issued', sub: rawDispute.resolution ? rawDispute.resolution.substring(0,80)+'...' : 'Resolution issued.' },
+        ],
+        findings: rawDispute.resolution || null,
+        recommendation: rawDispute.verdict === 'worker-favour' ? 'Release escrow funds to the worker.' : rawDispute.verdict === 'client-favour' ? 'Return escrow to client. Worker must revise.' : 'Awaiting resolution.',
+      };
+
+      const timelineHTML = r.timeline.map(t => `
+        <div class="tl-item">
+          <div class="tl-dot ${t.dot}"></div>
+          <div class="tl-time">${t.time}</div>
+          <div class="tl-text">${escapeHtml(t.text)}</div>
+          <div class="tl-sub">${t.sub}</div>
+        </div>
+      `).join('');
+
+      const evidenceHTML = (r.evidenceReviewed && r.evidenceReviewed.length)
+        ? r.evidenceReviewed.map(e => `
+          <div class="evidence-quote">
+            <div class="evidence-label">${escapeHtml(e.label)}</div>
+            ${escapeHtml(e.text)}
+          </div>
+        `).join('')
+        : '<div style="font-size:13px;color:var(--muted-foreground);padding:12px;">No specific evidence items recorded.</div>';
+
+      const filesHTML = (r.files && r.files.length)
+        ? r.files.map(f => `
+          <div class="file-row">
+            <div class="file-icon-wrap" style="background:${f.iconBg || '#f3f4f6'};">
+              <i data-lucide="${f.icon || 'file'}" style="width:16px;height:16px;color:${f.iconColor || '#6b7280'};"></i>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div class="file-name">${escapeHtml(f.name)}</div>
+              <div class="file-size">${f.size}</div>
+            </div>
+            ${/^https?:\/\//.test(f.name)
+              ? `<a class="btn-act" style="width:auto;padding:5px 12px;font-size:12px;margin-bottom:0;text-decoration:none;"
+                    href="${escapeHtml(f.name)}" target="_blank" rel="noopener noreferrer">
+                   <i data-lucide="external-link" style="width:12px;height:12px;"></i> Open
+                 </a>`
+              : ''}
+          </div>
+        `).join('')
+        : '<div style="font-size:13px;color:var(--muted-foreground);padding:12px;">The worker submitted no files or links for the disputed milestone.</div>';
+
+      const analysisParagraphs = (r.expertAnalysis || '')
+        .split('\n\n')
+        .filter(p => p.trim())
+        .map(p => `<p style="margin-bottom:12px;">${p}</p>`)
+        .join('') || '<p style="color:var(--muted-foreground);">No detailed analysis recorded.</p>';
+
+      const content = `
+        <!-- Back link -->
+        <div style="margin-bottom:16px;">
+          <a href="${role === 'expert' ? 'expert-reports.html' : 'milestone-reports.html?role=' + role}" style="display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--muted-foreground);transition:color 0.15s;" onmouseenter="this.style.color='var(--foreground)'" onmouseleave="this.style.color='var(--muted-foreground)'">
+            <i data-lucide="arrow-left" style="width:16px;height:16px;"></i> Back to Reports
+          </a>
+        </div>
+
+        <!-- Report Header -->
+        <div class="report-header">
+          <div class="report-id-badge">
+            <i data-lucide="scale" style="width:12px;height:12px;"></i>
+            ${r.reportId}
+          </div>
+          <div class="report-title-main">${r.type} Report</div>
+          <div class="report-subtitle">${escapeHtml(r.project)} · ${escapeHtml(r.milestone)}</div>
+          <div class="report-meta-row">
+            <div class="report-meta-item">
+              <span class="report-meta-label">Case ID</span>
+              <span class="report-meta-value">${r.caseId}</span>
+            </div>
+            <div class="report-meta-item">
+              <span class="report-meta-label">Issue</span>
+              <span class="report-meta-value">${r.issue}</span>
+            </div>
+            <div class="report-meta-item">
+              <span class="report-meta-label">Date Raised</span>
+              <span class="report-meta-value">${r.raisedDate}</span>
+            </div>
+            <div class="report-meta-item">
+              <span class="report-meta-label">Report Date</span>
+              <span class="report-meta-value">${r.generatedDate}</span>
+            </div>
+            <div class="report-meta-item">
+              <span class="report-meta-label">Escrow</span>
+              <span class="report-meta-value">${r.escrow}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Verdict Banner -->
+        <div class="verdict-banner ${r.verdictClass}">
+          <div class="verdict-icon-wrap">
+            <i data-lucide="${r.verdictIcon}" style="width:22px;height:22px;color:white;"></i>
+          </div>
+          <div>
+            <div class="verdict-label">Expert Verdict</div>
+            <div class="verdict-text">${r.decision}</div>
+          </div>
+          <div style="margin-left:auto;">
+            <span class="sev-badge ${r.severityClass}">
+              <i data-lucide="alert-triangle" style="width:11px;height:11px;"></i>
+              ${r.severity.charAt(0).toUpperCase() + r.severity.slice(1)} Severity
+            </span>
+          </div>
+        </div>
+
+        <div class="report-layout">
+          <!-- ═══ LEFT COLUMN ═══ -->
+          <div>
+
+            <!-- Parties Involved -->
+            <div class="rc">
+              <div class="rc-head">
+                <div class="rc-head-icon" style="background:#faf5ff;">
+                  <i data-lucide="users" style="width:15px;height:15px;color:#a855f7;"></i>
+                </div>
+                <span class="rc-head-title">Parties Involved</span>
+              </div>
+              <div class="rc-body" style="display:flex;flex-direction:column;gap:10px;">
+                <div class="party-card">
+                  <div class="party-avatar" style="background:${r.raisedByColor};">${r.raisedByInitials}</div>
+                  <div>
+                    <div class="party-name">${escapeHtml(r.raisedByName)}</div>
+                    <div class="party-role">${r.raisedBy}</div>
+                  </div>
+                  <span class="party-tag tag-raiser">Dispute Raiser</span>
+                </div>
+                <div class="party-card">
+                  <div class="party-avatar" style="background:${r.respondentColor};">${r.respondentInitials}</div>
+                  <div>
+                    <div class="party-name">${r.respondentName}</div>
+                    <div class="party-role">${r.respondent}</div>
+                  </div>
+                  <span class="party-tag tag-respondent">Respondent</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dispute Description -->
+            <div class="rc">
+              <div class="rc-head">
+                <div class="rc-head-icon" style="background:#fee2e2;">
+                  <i data-lucide="alert-circle" style="width:15px;height:15px;color:#ef4444;"></i>
+                </div>
+                <span class="rc-head-title">Dispute Description</span>
+              </div>
+              <div class="rc-body">
+                <div class="summary-box">${r.disputeDescription}</div>
+              </div>
+            </div>
+
+            <!-- Evidence Reviewed -->
+            <div class="rc">
+              <div class="rc-head">
+                <div class="rc-head-icon" style="background:#eff6ff;">
+                  <i data-lucide="search" style="width:15px;height:15px;color:#3b82f6;"></i>
+                </div>
+                <span class="rc-head-title">Evidence Reviewed</span>
+                <span style="margin-left:auto;font-size:12px;color:var(--muted-foreground);">${r.evidenceReviewed.length} item${r.evidenceReviewed.length !== 1 ? 's' : ''}</span>
+              </div>
+              <div class="rc-body">${evidenceHTML}</div>
+            </div>
+
+            <!-- Expert Analysis -->
+            <div class="rc">
+              <div class="rc-head">
+                <div class="rc-head-icon" style="background:#fafaf9;">
+                  <i data-lucide="scale" style="width:15px;height:15px;color:#78716c;"></i>
+                </div>
+                <span class="rc-head-title">Expert Analysis & Reasoning</span>
+              </div>
+              <div class="rc-body">
+                <div class="summary-box">${analysisParagraphs}</div>
+              </div>
+            </div>
+
+            <!-- Case Timeline -->
+            <div class="rc">
+              <div class="rc-head">
+                <div class="rc-head-icon" style="background:#ecfdf5;">
+                  <i data-lucide="clock" style="width:15px;height:15px;color:#10b981;"></i>
+                </div>
+                <span class="rc-head-title">Case Timeline</span>
+              </div>
+              <div class="rc-body">
+                <div class="timeline">${timelineHTML}</div>
+              </div>
+            </div>
+
+            <!-- Resolution & Next Steps -->
+            <div class="rc">
+              <div class="rc-head">
+                <div class="rc-head-icon" style="background:#fffbeb;">
+                  <i data-lucide="check-square" style="width:15px;height:15px;color:#f59e0b;"></i>
+                </div>
+                <span class="rc-head-title">Resolution & Next Steps</span>
+              </div>
+              <div class="rc-body">
+                <div class="summary-box">${escapeHtml(r.resolution)}</div>
+              </div>
+            </div>
+
+            <!-- Reviewed Files -->
+            <div class="rc">
+              <div class="rc-head">
+                <div class="rc-head-icon" style="background:#f3f4f6;">
+                  <i data-lucide="folder" style="width:15px;height:15px;color:#6b7280;"></i>
+                </div>
+                <span class="rc-head-title">Evidence Files Reviewed</span>
+              </div>
+              <div class="rc-body">${filesHTML}</div>
+            </div>
+
+          </div>
+
+          <!-- ═══ RIGHT COLUMN ═══ -->
+          <div style="position:sticky;top:80px;">
+
+            <!-- Expert Signature -->
+            <div class="expert-sig" style="margin-bottom:16px;">
+              <div class="expert-avatar">${r.expertInitials}</div>
+              <div class="expert-name">${escapeHtml(r.expertName)}</div>
+              <div class="expert-role">${r.expertTitle}</div>
+              <hr class="section-divider" />
+              <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:#78716c;margin-bottom:6px;">Final Verdict</div>
+              <div style="font-size:14px;font-weight:700;color:#1c1917;">${r.decision}</div>
+            </div>
+
+            <!-- Report Details -->
+            <div class="rc" style="margin-bottom:16px;">
+              <div class="rc-head">
+                <div class="rc-head-icon" style="background:#f3f4f6;">
+                  <i data-lucide="info" style="width:15px;height:15px;color:#6b7280;"></i>
+                </div>
+                <span class="rc-head-title">Report Details</span>
+              </div>
+              <div class="rc-body">
+                <div style="display:flex;flex-direction:column;gap:12px;">
+                  <div class="info-cell">
+                    <span class="info-label">Report ID</span>
+                    <span class="info-value mono">${r.reportId}</span>
+                  </div>
+                  <div class="info-cell">
+                    <span class="info-label">Case ID</span>
+                    <span class="info-value mono">${r.caseId}</span>
+                  </div>
+                  <div class="info-cell">
+                    <span class="info-label">Project</span>
+                    <span class="info-value">${escapeHtml(r.project)}</span>
+                  </div>
+                  <div class="info-cell">
+                    <span class="info-label">Milestone</span>
+                    <span class="info-value">${escapeHtml(r.milestone)}</span>
+                  </div>
+                  <div class="info-cell">
+                    <span class="info-label">Escrow Amount</span>
+                    <span class="info-value" style="color:#10b981;font-weight:700;">${r.escrow}</span>
+                  </div>
+                  <div class="info-cell">
+                    <span class="info-label">Status</span>
+                    <span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:9999px;font-size:11px;font-weight:600;${r.status === 'Published' ? 'background:#dbeafe;border:1px solid #93c5fd;color:#1d4ed8;' : 'background:#f3f4f6;border:1px solid #d1d5db;color:#4b5563;'}">${r.status}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div>
+              <button class="btn-act" onclick="window.print()">
+                <i data-lucide="printer" style="width:14px;height:14px;"></i>
+                Print Report
+              </button>
+              <button class="btn-act" onclick="alert('Downloading PDF…')">
+                <i data-lucide="download" style="width:14px;height:14px;"></i>
+                Download PDF
+              </button>
+            </div>
+
+          </div>
+        </div>
+      `;
+
+      initDashboard({
+        role: role,
+        activePath: role === 'worker' ? 'worker-milestone-board.html' : role === 'client' ? 'client-my-projects.html' : 'expert-reports.html',
+        pageTitle: 'Dispute Resolution Report',
+        pageSubtitle: `${r.reportId} · ${escapeHtml(r.project)}`,
+        content,
+      });
+
+      lucide.createIcons();
+    });
+  </script>
+</head>
+<body></body>
+</html>
