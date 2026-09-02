@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Proposals — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('worker')) return;
+      const session = Auth.getCurrentUser();
+      let proposals = [];
+
+      function loadProposals() {
+        const raw = Store.getProposalsByWorker(session.userId);
+        proposals = raw.map(p => {
+          const task = Store.getTaskById(p.taskId);
+          const client = task && task.clientId ? Store.getUserById(task.clientId) : null;
+          return {
+            id: p.id,
+            projectName: task ? task.title : 'Unknown Task',
+            client: client ? client.name : 'Unknown Client',
+            bidAmount: parseFloat((p.bidPrice || '').toString().replace(/[^\d.-]/g, '')) || (task ? task.budget : 0),
+            status: p.status === 'hired' ? 'Accepted' : p.status === 'rejected' ? 'Rejected' : 'Pending',
+            rawStatus: p.status,
+            submitted: p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Recently',
+            delivery: p.timeline || '14 days',
+            letter: p.coverLetter || '',
+            taskId: p.taskId
+          };
+        });
+      }
+
+      function renderProposals(filter) {
+        const list = filter === 'all' ? proposals : proposals.filter(p => p.status.toLowerCase() === filter);
+        if (!list.length) return `
+          <div style="padding:64px 32px;text-align:center;color:var(--muted-foreground);">
+            <div style="width:48px;height:48px;background:var(--secondary);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
+              <i data-lucide="file-text" style="width:22px;height:22px;"></i>
+            </div>
+            <div style="font-size:16px;font-weight:600;margin-bottom:6px;">No proposals yet</div>
+            <div style="font-size:14px;margin-bottom:20px;">Browse open tasks and submit your first proposal.</div>
+            <a href="browse-tasks.html" class="btn-primary" style="display:inline-flex;align-items:center;gap:8px;">
+              <i data-lucide="search" style="width:16px;height:16px;"></i> Browse Tasks
+            </a>
+          </div>`;
+        const statusBadgeMap = { 'Pending': 'badge-orange', 'Accepted': 'badge-green', 'Rejected': 'badge-red' };
+        return list.map(p => `
+          <div id="proposal-row-${p.id}" style="padding:20px 24px;border-bottom:1px solid rgba(0,0,0,0.05);display:flex;align-items:flex-start;gap:16px;transition:background 0.15s;" onmouseenter="this.style.background='#f8f9fb'" onmouseleave="this.style.background='transparent'">
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
+                <span style="font-weight:600;font-size:15px;">${p.projectName}</span>
+                <span class="badge ${statusBadgeMap[p.status]}">${p.status}</span>
+              </div>
+              <div style="display:flex;gap:16px;margin-bottom:10px;flex-wrap:wrap;">
+                <span style="font-size:12px;color:var(--muted-foreground);display:flex;align-items:center;gap:4px;"><i data-lucide="user" style="width:12px;height:12px;"></i>${p.client}</span>
+                <span style="font-size:12px;color:var(--muted-foreground);display:flex;align-items:center;gap:4px;"><i data-lucide="calendar" style="width:12px;height:12px;"></i>${p.submitted}</span>
+                <span style="font-size:12px;color:var(--muted-foreground);display:flex;align-items:center;gap:4px;"><i data-lucide="clock" style="width:12px;height:12px;"></i>${p.delivery}</span>
+              </div>
+              <p style="font-size:13px;color:#475569;line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${p.letter}</p>
+            </div>
+            <div style="text-align:right;flex-shrink:0;">
+              <div style="font-size:18px;font-weight:700;color:#10b981;margin-bottom:8px;">$${typeof p.bidAmount === 'number' ? p.bidAmount.toLocaleString() : p.bidAmount}</div>
+              ${p.status === 'Accepted' ? `<a href="worker-workroom.html?id=${p.taskId}" class="btn-primary" style="display:inline-block;font-size:13px;padding:6px 14px;border-radius:10px;text-decoration:none;">Open Workroom</a>` : ''}
+
+              ${p.status === 'Pending' ? `<button class="btn-outline" style="font-size:13px;padding:6px 14px;border-radius:10px;color:#ef4444;border-color:#fecaca;" onclick="withdrawProposal('${p.id}')">Withdraw</button>` : ''}
+            </div>
+          </div>`).join('');
+      }
+
+      function buildContent() {
+        loadProposals();
+        const counts = {
+          all: proposals.length,
+          pending: proposals.filter(p=>p.status==='Pending').length,
+          accepted: proposals.filter(p=>p.status==='Accepted').length,
+          rejected: proposals.filter(p=>p.status==='Rejected').length,
+        };
+        return `
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
+            <div class="stat-card"><div><div class="stat-val">${counts.all}</div><div class="stat-label">Total</div></div><div class="stat-icon-wrap" style="background:#eef2ff;"><i data-lucide="file-text" style="width:20px;height:20px;color:#6366f1;"></i></div></div>
+            <div class="stat-card"><div><div class="stat-val">${counts.pending}</div><div class="stat-label">Pending</div></div><div class="stat-icon-wrap" style="background:#fff7ed;"><i data-lucide="clock" style="width:20px;height:20px;color:#f97316;"></i></div></div>
+            <div class="stat-card"><div><div class="stat-val" style="color:#10b981;">${counts.accepted}</div><div class="stat-label">Accepted</div></div><div class="stat-icon-wrap" style="background:#ecfdf5;"><i data-lucide="check-circle" style="width:20px;height:20px;color:#10b981;"></i></div></div>
+            <div class="stat-card"><div><div class="stat-val">${counts.rejected}</div><div class="stat-label">Rejected</div></div><div class="stat-icon-wrap" style="background:#fee2e2;"><i data-lucide="x-circle" style="width:20px;height:20px;color:#ef4444;"></i></div></div>
+          </div>
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;">
+            <div style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+              <div id="filterBar" style="display:flex;gap:4px;background:var(--input-bg);padding:4px;border-radius:12px;overflow-x:auto;">
+                ${[['all','All'],['pending','Pending'],['accepted','Accepted'],['rejected','Rejected']].map(([val,label],i) => `
+                  <button onclick="filterProposals('${val}',this)" style="padding:6px 14px;border-radius:9px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;border:none;background:${i===0?'var(--card)':'transparent'};color:${i===0?'var(--foreground)':'var(--muted-foreground)'};box-shadow:${i===0?'0 1px 4px rgba(0,0,0,0.08)':'none'};white-space:nowrap;">${label}</button>`).join('')}
+              </div>
+              <a href="browse-tasks.html" class="btn-primary" style="font-size:13px;padding:7px 16px;display:inline-flex;align-items:center;gap:6px;">
+                <i data-lucide="search" style="width:14px;height:14px;"></i>Browse Tasks
+              </a>
+            </div>
+            <div id="proposalsContainer">${renderProposals('all')}</div>
+          </div>`;
+      }
+
+      initDashboard({ role:'worker', activePath:'my-proposals.html', pageTitle:'My Proposals', pageSubtitle:'Track all your submitted proposals', content: buildContent() });
+      lucide.createIcons();
+
+      window.filterProposals = function(filter, btn) {
+        document.querySelectorAll('#filterBar button').forEach(b => {
+          b.style.background = 'transparent'; b.style.color = 'var(--muted-foreground)'; b.style.boxShadow = 'none';
+        });
+        btn.style.background = 'var(--card)'; btn.style.color = 'var(--foreground)'; btn.style.boxShadow = '0 1px 4px rgba(0,0,0,0.08)';
+        const c = document.getElementById('proposalsContainer');
+        if (c) { c.innerHTML = renderProposals(filter); lucide.createIcons(); }
+      };
+
+      window.viewCompletedProposal = function(taskId) {
+        window.location.href = 'worker-my-projects.html?view=' + taskId;
+      };
+
+      window.withdrawProposal = function(id) {
+        Validate.confirm('Withdraw this proposal? This action cannot be undone.', () => {
+          Store.updateProposal(id, { status: 'withdrawn' });
+          loadProposals();
+          const row = document.getElementById('proposal-row-' + id);
+          if (row) { row.style.transition = 'opacity 0.3s'; row.style.opacity = '0'; setTimeout(() => { row.remove(); }, 300); }
+          Validate.toast('Proposal withdrawn.', 'success');
+        });
+      };
+    });
+  </script>
+</head>
+<body></body>
+</html>

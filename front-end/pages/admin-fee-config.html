@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fee Configuration — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .fc-layout { display:grid; gap:18px; align-items:start; }
+    @media (min-width:1040px) { .fc-layout { grid-template-columns:minmax(0,1fr) 360px; } }
+    .fc-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:22px; margin-bottom:18px; }
+    .fc-card h2 { font-size:15px; font-weight:700; margin:0 0 3px; }
+    .fc-card p.hint { font-size:12.5px; color:var(--muted-foreground); margin:0 0 16px; line-height:1.55; }
+    .fc-row { display:flex; align-items:center; gap:12px; padding:11px 0; border-top:1px solid var(--border); }
+    .fc-row:first-of-type { border-top:none; }
+    .fc-row label { flex:1; font-size:13.5px; min-width:0; }
+    .fc-row .fc-note { display:block; font-size:11.5px; color:var(--muted-foreground); margin-top:2px; }
+    .fc-input { width:96px; padding:7px 10px; border:1px solid var(--border); border-radius:8px;
+      background:var(--background); font-size:13px; font-family:inherit; text-align:right;
+      font-variant-numeric:tabular-nums; color:var(--foreground); }
+    .fc-unit { font-size:12px; color:var(--muted-foreground); width:16px; }
+    .fc-example { position:sticky; top:24px; }
+    .fc-ex-row { display:flex; justify-content:space-between; gap:12px; padding:9px 0; font-size:13px; border-top:1px solid var(--border); }
+    .fc-ex-row:first-of-type { border-top:none; }
+    .fc-ex-row .v { font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap; }
+    .fc-ex-fee .v { color:#b45309; }
+    .fc-ex-net { border-top:1px solid var(--border); margin-top:4px; padding-top:11px; }
+    .fc-ex-net .v { color:#0d9488; font-weight:800; }
+    .fc-ex-title { font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted-foreground); margin:18px 0 6px; }
+    .fc-ex-title:first-of-type { margin-top:0; }
+    .fc-actions { display:flex; gap:10px; align-items:center; }
+    .fc-dirty { font-size:12.5px; color:#b45309; }
+  </style>
+  <script>
+    const money = n => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const r2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+
+    let cfg = null;      // what the server currently has
+    let draft = null;    // local edits
+
+    function readDraft() {
+      const num = id => parseFloat(document.getElementById(id).value);
+      return {
+        depositPercent: num('depositPercent'),
+        depositFixed: num('depositFixed'),
+        clientMarketplacePercent: num('marketplacePercent'),
+        expertServicePercent: num('expertPercent'),
+        withdrawalPercent: num('withdrawalPercent'),
+        withdrawalFixed: num('withdrawalFixed'),
+        workerServicePercents: cfg.workerService.map((_, i) => num('workerTier' + i)),
+        contractInitiationFees: cfg.contractInitiation.map((_, i) => num('initBand' + i)),
+      };
+    }
+
+    // The worked example is computed from the DRAFT, so the effect of a change
+    // is visible before it is saved.
+    function renderExample() {
+      draft = readDraft();
+      const bad = Object.values(draft).flat().some(v => typeof v !== 'number' || isNaN(v) || v < 0);
+      const box = document.getElementById('fcExample');
+      if (bad) {
+        box.innerHTML = '<div style="font-size:13px;color:#b91c1c;">Every rate must be zero or greater.</div>';
+        return;
+      }
+
+      const depFee = r2(1000 * (draft.depositPercent / 100) + draft.depositFixed);
+      const mkt = r2(2500 * (draft.clientMarketplacePercent / 100));
+      const init = draft.contractInitiationFees[2];              // the $2k–$10k band
+      const wFee = r2(800 * (draft.workerServicePercents[1] / 100)); // the mid tier
+      const eFee = r2(300 * (draft.expertServicePercent / 100));
+      const wd = r2(Math.max(500 * (draft.withdrawalPercent / 100) + draft.withdrawalFixed, 0.25));
+
+      box.innerHTML = `
+        <div class="fc-ex-title">Client tops up $1,000</div>
+        <div class="fc-ex-row"><span>Charged</span><span class="v">${money(1000)}</span></div>
+        <div class="fc-ex-row fc-ex-fee"><span>Processing fee</span><span class="v">−${money(depFee)}</span></div>
+        <div class="fc-ex-row fc-ex-net"><span>Credited to wallet</span><span class="v">${money(1000 - depFee)}</span></div>
+
+        <div class="fc-ex-title">Funding a $2,500 project</div>
+        <div class="fc-ex-row"><span>Into escrow</span><span class="v">${money(2500)}</span></div>
+        <div class="fc-ex-row fc-ex-fee"><span>Marketplace fee</span><span class="v">+${money(mkt)}</span></div>
+        <div class="fc-ex-row fc-ex-fee"><span>Contract initiation</span><span class="v">+${money(init)}</span></div>
+        <div class="fc-ex-row fc-ex-net"><span>Client pays</span><span class="v">${money(2500 + mkt + init)}</span></div>
+
+        <div class="fc-ex-title">Releasing an $800 milestone</div>
+        <div class="fc-ex-row"><span>From escrow</span><span class="v">${money(800)}</span></div>
+        <div class="fc-ex-row fc-ex-fee"><span>Service fee (mid tier)</span><span class="v">−${money(wFee)}</span></div>
+        <div class="fc-ex-row fc-ex-net"><span>Worker receives</span><span class="v">${money(800 - wFee)}</span></div>
+
+        <div class="fc-ex-title">Paying a $300 audit</div>
+        <div class="fc-ex-row fc-ex-fee"><span>Commission</span><span class="v">−${money(eFee)}</span></div>
+        <div class="fc-ex-row fc-ex-net"><span>Reviewer receives</span><span class="v">${money(300 - eFee)}</span></div>
+
+        <div class="fc-ex-title">Worker withdraws $500</div>
+        <div class="fc-ex-row fc-ex-fee"><span>Payout fee</span><span class="v">−${money(wd)}</span></div>
+        <div class="fc-ex-row fc-ex-net"><span>Reaches their bank</span><span class="v">${money(500 - wd)}</span></div>`;
+
+      const changed = JSON.stringify(draft) !== JSON.stringify(serverShape(cfg));
+      document.getElementById('fcDirty').textContent = changed ? 'Unsaved changes' : '';
+    }
+
+    function serverShape(c) {
+      return {
+        depositPercent: c.deposit.percent,
+        depositFixed: c.deposit.fixed,
+        clientMarketplacePercent: c.clientMarketplace.percent,
+        expertServicePercent: c.expertService.percent,
+        withdrawalPercent: c.withdrawal.percent,
+        withdrawalFixed: c.withdrawal.fixed,
+        workerServicePercents: c.workerService.map(t => t.percent),
+        contractInitiationFees: c.contractInitiation.map(t => t.fee),
+      };
+    }
+
+    function saveConfig() {
+      const patch = readDraft();
+      const bad = Object.values(patch).flat().some(v => typeof v !== 'number' || isNaN(v) || v < 0);
+      if (bad) { Validate.toast('Every rate must be zero or greater.', 'error'); return; }
+
+      const result = Store.updateFeeConfig(patch);
+      if (!result) { Validate.toast('Could not save the fee configuration.', 'error'); return; }
+      cfg = result;
+      Validate.toast('Fee rates saved. They apply to future charges only.', 'success');
+      renderExample();
+    }
+
+    function resetForm() {
+      const s = serverShape(cfg);
+      document.getElementById('depositPercent').value = s.depositPercent;
+      document.getElementById('depositFixed').value = s.depositFixed;
+      document.getElementById('marketplacePercent').value = s.clientMarketplacePercent;
+      document.getElementById('expertPercent').value = s.expertServicePercent;
+      document.getElementById('withdrawalPercent').value = s.withdrawalPercent;
+      document.getElementById('withdrawalFixed').value = s.withdrawalFixed;
+      s.workerServicePercents.forEach((p, i) => document.getElementById('workerTier' + i).value = p);
+      s.contractInitiationFees.forEach((f, i) => document.getElementById('initBand' + i).value = f);
+      renderExample();
+    }
+
+    const band = n => n === Infinity || n === null || n > 1e9 ? 'above' : '$' + Number(n).toLocaleString();
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('admin')) return;
+
+      cfg = Store.getFeeConfig();
+      if (!cfg) {
+        renderEmptyState({
+          role: 'admin', activePath: 'admin-fee-config.html', pageTitle: 'Fee Configuration',
+          message: 'Fee rates could not be loaded. Check that the API is running, then reload.',
+          linkHref: 'admin-dashboard.html', linkLabel: 'Back to Dashboard',
+        });
+        return;
+      }
+
+      const numRow = (id, label, note, value, unit) => `
+        <div class="fc-row">
+          <label for="${id}">${label}<span class="fc-note">${note}</span></label>
+          <span class="fc-unit">${unit === '%' ? '' : '$'}</span>
+          <input class="fc-input" id="${id}" type="number" min="0" step="0.01" value="${value}" oninput="renderExample()" />
+          <span class="fc-unit">${unit === '%' ? '%' : ''}</span>
+        </div>`;
+
+      const tierLabels = ['first band', 'middle band', 'top band'];
+
+      const content = `
+        <div class="fc-layout">
+          <div>
+            <div class="fc-card">
+              <h2>Money entering and leaving</h2>
+              <p class="hint">Charged when a client tops up a wallet, and when anyone withdraws to an external account.</p>
+              ${numRow('depositPercent', 'Deposit processing rate', 'Percentage of the amount deposited', cfg.deposit.percent, '%')}
+              ${numRow('depositFixed', 'Deposit fixed fee', 'Flat amount added to every deposit', cfg.deposit.fixed, '$')}
+              ${numRow('withdrawalPercent', 'Withdrawal payout rate', 'Percentage of the amount withdrawn', cfg.withdrawal.percent, '%')}
+              ${numRow('withdrawalFixed', 'Withdrawal fixed fee', `Flat amount, with a ${money(cfg.withdrawal.min)} minimum`, cfg.withdrawal.fixed, '$')}
+            </div>
+
+            <div class="fc-card">
+              <h2>What the client pays</h2>
+              <p class="hint">Charged on top of the project budget when a worker is hired.</p>
+              ${numRow('marketplacePercent', 'Marketplace fee', 'Percentage of the project budget', cfg.clientMarketplace.percent, '%')}
+              ${cfg.contractInitiation.map((t, i) => numRow('initBand' + i,
+                `Contract initiation — up to ${band(t.upTo)}`,
+                i === cfg.contractInitiation.length - 1 ? 'Budgets above the previous band' : 'One-time fee per contract',
+                t.fee, '$')).join('')}
+            </div>
+
+            <div class="fc-card">
+              <h2>What providers pay</h2>
+              <p class="hint">Deducted from a payout before it reaches the recipient. The worker tier is chosen by their lifetime billings with that client, so long relationships get cheaper.</p>
+              ${cfg.workerService.map((t, i) => numRow('workerTier' + i,
+                `Worker service fee — ${tierLabels[i] || 'band ' + (i + 1)}`,
+                `Applies up to ${band(t.upTo)} of lifetime billings`, t.percent, '%')).join('')}
+              ${numRow('expertPercent', 'Reviewer commission', 'Percentage of an agreed audit fee', cfg.expertService.percent, '%')}
+            </div>
+
+            <div class="fc-card">
+              <div class="fc-actions">
+                <button class="btn-primary" onclick="saveConfig()">Save rates</button>
+                <button class="btn-outline" onclick="resetForm()">Discard changes</button>
+                <span class="fc-dirty" id="fcDirty"></span>
+              </div>
+              <p class="hint" style="margin:14px 0 0;">Changes apply to future charges only — revenue already recorded keeps the rate it was charged at.</p>
+            </div>
+          </div>
+
+          <div class="fc-example">
+            <div class="fc-card">
+              <h2>What this costs, worked through</h2>
+              <p class="hint">Updates as you type, before anything is saved.</p>
+              <div id="fcExample"></div>
+            </div>
+          </div>
+        </div>`;
+
+      initDashboard({
+        role: 'admin',
+        activePath: 'admin-fee-config.html',
+        pageTitle: 'Fee Configuration',
+        pageSubtitle: 'Every rate the platform charges',
+        content,
+      });
+
+      renderExample();
+      if (window.lucide) lucide.createIcons();
+    });
+  </script>
+</head>
+<body></body>
+</html>

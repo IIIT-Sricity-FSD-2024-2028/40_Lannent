@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Settings — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .ss-wrap { max-width:640px; }
+    .ss-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:26px; margin-bottom:18px; }
+    .ss-card h2 { font-size:15px; font-weight:700; margin:0 0 4px; }
+    .ss-card p.hint { font-size:13px; color:var(--muted-foreground); margin:0 0 18px; }
+    .ss-field { margin-bottom:16px; }
+    .ss-field label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; }
+    .ss-id { display:flex; align-items:center; gap:14px; margin-bottom:20px; }
+    .ss-avatar { width:52px; height:52px; border-radius:50%; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:16px; flex:none; }
+    .ss-role { display:inline-block; font-size:11px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; padding:4px 9px; border-radius:6px; background:var(--secondary); color:var(--muted-foreground); }
+    .ss-scope { font-size:13px; line-height:1.7; color:var(--muted-foreground); margin:0; padding-left:18px; }
+  </style>
+  <script>
+    // SuperUser and Admin previously had no settings page at all: the user menu
+    // sent them to profile-settings.html, which is client-guarded and bounced
+    // them straight back to their dashboard — an inescapable loop.
+    const SCOPES = {
+      superuser: [
+        'Manage user accounts — create, edit, suspend, delete',
+        'Create and administer tasks across all clients',
+        'Inspect escrow balances and the transaction ledger',
+        'Review and override dispute verdicts',
+      ],
+      admin: [
+        'Oversee the platform revenue model and fee configuration',
+        'Review Expert Reviewer applications',
+      ],
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('superuser', 'admin')) return;
+
+      const session = Auth.getCurrentUser();
+      const user = Store.getUserById(session.userId);
+      if (!user) {
+        renderEmptyState({
+          role: session.role,
+          activePath: 'staff-settings.html',
+          pageTitle: 'Settings',
+          message: 'Your account could not be loaded. Check that the API is running, then reload.',
+          linkHref: Auth.getDashboardUrl(session.role),
+          linkLabel: 'Back to Dashboard',
+        });
+        return;
+      }
+
+      const scope = SCOPES[user.role] || [];
+
+      initDashboard({
+        role: user.role,
+        activePath: 'staff-settings.html',
+        pageTitle: 'Settings',
+        pageSubtitle: 'Your staff account',
+        content: `
+          <div class="ss-wrap">
+            <div class="ss-card">
+              <div class="ss-id">
+                <div class="ss-avatar" style="background:${user.avatarColor};">${user.avatar}</div>
+                <div>
+                  <div style="font-size:16px;font-weight:700;">${user.name}</div>
+                  <div style="font-size:13px;color:var(--muted-foreground);margin-bottom:6px;">${user.email}</div>
+                  <span class="ss-role">${user.role}</span>
+                </div>
+              </div>
+
+              <div class="ss-field">
+                <label for="ssName">Display name</label>
+                <input id="ssName" class="form-input" type="text" value="${user.name}" />
+              </div>
+              <div class="ss-field">
+                <label for="ssEmail">Email</label>
+                <input id="ssEmail" class="form-input" type="email" value="${user.email}" />
+              </div>
+              <button class="btn-primary" onclick="saveStaffProfile()">Save changes</button>
+            </div>
+
+            <div class="ss-card">
+              <h2>What this account can do</h2>
+              <p class="hint">Staff permissions are fixed by role and cannot be edited here.</p>
+              <ul class="ss-scope">
+                ${scope.map(line => `<li>${line}</li>`).join('')}
+              </ul>
+            </div>
+          </div>`,
+      });
+      if (window.lucide) lucide.createIcons();
+    });
+
+    function saveStaffProfile() {
+      const session = Auth.getCurrentUser();
+      const name = document.getElementById('ssName').value.trim();
+      const email = document.getElementById('ssEmail').value.trim();
+
+      if (name.length < 2) { Validate.toast('Enter a display name.', 'error'); return; }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { Validate.toast('Enter a valid email address.', 'error'); return; }
+
+      const updated = Store.updateUser(session.userId, { name, email });
+      if (!updated) { Validate.toast('Could not save. Please try again.', 'error'); return; }
+
+      // Keep the session in step so the top bar does not show a stale name.
+      try {
+        localStorage.setItem('lannent_session', JSON.stringify({ ...session, name, email }));
+      } catch (e) {}
+      Validate.toast('Settings saved.', 'success');
+      setTimeout(() => window.location.reload(), 700);
+    }
+  </script>
+</head>
+<body></body>
+</html>
