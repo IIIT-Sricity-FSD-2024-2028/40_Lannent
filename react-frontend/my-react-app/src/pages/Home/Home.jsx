@@ -5,6 +5,8 @@ function Home() {
       <p>This is the default route page for unmatched URLs.</p>
       <p>Route details:</p>
       <ul>
+        <li><a href="/login">/login</a></li>
+        <li><a href="/worker-dashboard">/worker-dashboard</a></li>
         <li>/signup</li>
         <li>/forgot-password</li>
         <li>/404</li>

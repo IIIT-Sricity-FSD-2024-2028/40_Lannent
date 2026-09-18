@@ -3,11 +3,15 @@ import ForgotPassword from '../pages/ForgotPassword/forgot-password.jsx'
 import SignupPage from '../pages/SignupPage/SignupPage.jsx'
 import Home from '../pages/Home/Home.jsx'
 import Page404 from '../pages/NotFound/404.jsx'
+import LoginPage from '../pages/Login/Login.jsx'
+import WorkerDashboard from '../pages/WorkerDashboard/WorkerDashboard.jsx'
 
 function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/worker-dashboard" element={<WorkerDashboard />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/404" element={<Page404 />} />
