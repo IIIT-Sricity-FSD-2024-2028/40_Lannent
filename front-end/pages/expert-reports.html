@@ -163,7 +163,7 @@
       const session = Auth.getCurrentUser();
 
       function loadReports() {
-        const auditReports = Store.getAuditReports().filter(r => r.verdict).map(r => ({
+        const auditReports = Store.getAuditReports().filter(r => r.verdict && r.expertId === session.userId).map(r => ({
           id: r.id,
           auditRequestId: r.auditRequestId,
           type: 'Technical Audit',
@@ -178,7 +178,7 @@
           raw: r
         }));
 
-        const disputeReports = Store.getDisputes().filter(d => d.status === 'resolved' && d.expertId).map(d => ({
+        const disputeReports = Store.getDisputes().filter(d => d.status === 'resolved' && d.expertId === session.userId).map(d => ({
           id: 'dr-' + d.id,
           type: 'Dispute Resolution',
           project: d.project || 'Unknown Project',

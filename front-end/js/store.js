@@ -164,8 +164,15 @@ const Store = (() => {
       ['notifications', '/notifications'],
       ['messages', '/messages'],
     ];
+    // Expert applications hold applicants' contact details and are admin-only.
+    // Fetching them for every role logged a 403 on every page load, which buries
+    // real errors in the console.
+    let role = null;
+    try { role = JSON.parse(localStorage.getItem('lannent_session') || '{}').role; } catch {}
+    const allowed = endpoints.filter(([key]) => key !== 'expertApplications' || role === 'admin');
+
     _reachedEndpoints = 0;
-    for (const [key, path] of endpoints) {
+    for (const [key, path] of allowed) {
       // One failing endpoint must not abort the rest.
       let data = null;
       try { data = _syncFetch(API + path); } catch (e) { data = null; }
@@ -229,6 +236,13 @@ const Store = (() => {
   // Deposits and withdrawals carry a platform fee, so these return the fee
   // breakdown ({ gross, fee, net, balance }) rather than the user record.
   // The cached user is refreshed from the server afterwards.
+  // The server writes a ledger row for every wallet movement. Without this the
+  // wallet pages showed a stale history and a frozen "Total Deposited" until reload.
+  function _refreshTransactions() {
+    const txs = _syncFetch(`${API}/transactions`);
+    if (txs) _cache.transactions = txs;
+  }
+
   function _refreshUser(userId) {
     const fresh = _syncFetch(`${API}/users/${userId}`);
     if (fresh) {
@@ -244,6 +258,7 @@ const Store = (() => {
     const result = _syncPost(`${API}/users/${userId}/wallet/add`, { amount });
     if (!result) return null;
     _refreshUser(userId);
+    _refreshTransactions();
     return result;
   }
 
@@ -254,6 +269,7 @@ const Store = (() => {
     const result = _syncPost(`${API}/users/${userId}/wallet/withdraw`, { amount });
     if (!result) return null;
     _refreshUser(userId);
+    _refreshTransactions();
     return result;
   }
 
@@ -338,6 +354,8 @@ const Store = (() => {
   }
   function getRevenueByUser()       { return _syncFetch(`${API}/revenue/by-user`) || []; }
   function getRevenueDistribution() { return _syncFetch(`${API}/revenue/distribution`); }
+  function getRevenueByProject()    { return _syncFetch(`${API}/revenue/by-project`) || []; }
+  function getProjectBreakdown(taskId) { return _syncFetch(`${API}/revenue/project/${taskId}`); }
   function getFeeConfig()           { return _syncFetch(`${API}/revenue/fee-config`); }
   function updateFeeConfig(patch)   { return _syncPatch(`${API}/revenue/fee-config`, patch); }
 
@@ -597,37 +615,14 @@ const Store = (() => {
       if (ms) _cache.milestones = ms;
       return result;
     }
-    // Retry with explicit expert role header
-    console.warn('[Store] First POST failed, retrying with explicit role header...');
-    try {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${API}/audit-reports`, false);
-      xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.setRequestHeader('role', 'expert');
-      const session = JSON.parse(localStorage.getItem('lannent_session') || '{}');
-      if (session.userId) xhr.setRequestHeader('user-id', session.userId);
-      xhr.send(JSON.stringify(data));
-      console.log('[Store] Retry status:', xhr.status, 'response:', xhr.responseText.substring(0, 200));
-      if (xhr.status >= 200 && xhr.status < 300) {
-        const json = JSON.parse(xhr.responseText);
-        const retryResult = json.data !== undefined ? json.data : json;
-        if (retryResult) {
-          const existing = _cache.auditReports.findIndex(r => r.auditRequestId === data.auditRequestId);
-          if (existing >= 0) _cache.auditReports[existing] = retryResult;
-          else _cache.auditReports.push(retryResult);
-          const ar = _syncFetch(`${API}/audit-requests`);
-          if (ar) _cache.auditRequests = ar;
-          return retryResult;
-        }
-      }
-    } catch (e) {
-      console.error('[Store] Retry also failed:', e);
-    }
-    // Final fallback — local only
-    console.warn('[Store] All POST attempts failed, saving locally only');
-    const report = { id: 'rep_' + Date.now(), createdAt: new Date().toISOString().slice(0, 10), ...data };
-    _cache.auditReports.push(report);
-    return report;
+    // No retry, and no local fallback.
+    //
+    // This used to re-POST with a hardcoded `role: expert` header, which let ANY
+    // signed-in user file an audit report — and filing one releases escrow to a
+    // reviewer. It then cached a fake report locally when the server refused,
+    // so the UI showed a report the backend had never accepted.
+    console.error('[Store] Audit report was rejected by the server.');
+    return null;
   }
 
   // ─── DISPUTES ─────────────────────────────────────────────────────────────
@@ -776,7 +771,7 @@ const Store = (() => {
     init, resetToSeed, isOnline,
     getUsers, getUserById, getUserByEmail, createUser, updateUser, deleteUser, deductFromWallet, addToWallet, withdrawFromWallet, Fees, getLedgerSummary, getEscrowForTask,
     getRevenueSummary, getRevenueByFeeType, getRevenueTimeseries, getRevenueByUser,
-    getRevenueDistribution, getFeeConfig, updateFeeConfig,
+    getRevenueDistribution, getRevenueByProject, getProjectBreakdown, getFeeConfig, updateFeeConfig,
     getTasks, getTaskById, getTasksByClient, getTasksByWorker, getOpenTasks, createTask, updateTask, deleteTask,
     getMilestones, getMilestonesByTask, getMilestoneById, createMilestone, updateMilestone, submitDeliverable, approveDeliverable,
     getProposals, getProposalsByTask, getProposalsByWorker, getInvitationsByWorker, createProposal, updateProposal, hireWorker, acceptInvitation, declineInvitation,

@@ -203,7 +203,10 @@
     const severityIconClass = { high:'severity-icon-high', medium:'severity-icon-medium', low:'severity-icon-low' };
 
     function loadDisputes() {
-      return Store.getDisputes().map(d => {
+      const session = Auth.getCurrentUser();
+      return Store.getDisputes()
+        .filter(d => !d.expertId || d.expertId === session.userId)
+        .map(d => {
         const task = Store.getTaskById(d.taskId);
         const raiser = Store.getUserById(d.raisedBy);
         return {

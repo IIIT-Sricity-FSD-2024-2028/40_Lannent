@@ -9,6 +9,7 @@
   <script src="../js/store.js"></script>
   <script src="../js/auth.js"></script>
   <script src="../js/validation.js"></script>
+  <script src="../js/expert-picker.js"></script>
   <script src="../js/main.js"></script>
   <script src="../js/dashboard.js"></script>
   <style>
@@ -70,10 +71,18 @@
       outcome,
       raisedBy: session?.userId || null,
       raisedByName: session?.name || session?.email || 'Client',
+      expertId: ExpertPicker.selected(),
       againstId: worker ? worker.id : target.workerId || null,
       againstName: worker ? worker.name : target.workerName || target.worker || 'Worker',
       status: 'open'
     };
+
+    if (!ExpertPicker.selected()) {
+      const err = document.getElementById('disputeExpertErr');
+      if (err) err.style.display = 'block';
+      showToast('Select an Expert Reviewer to handle this dispute.', 'warn');
+      return;
+    }
 
     try {
       Store.createDispute(disputeData);
@@ -131,6 +140,14 @@
     const amtEl = document.getElementById('disputeAmountField');
     if (msEl) msEl.textContent = target.title || 'Untitled milestone';
     if (amtEl) amtEl.textContent = target.amount || '$0';
+
+    // Offer only reviewers who cover this project's category.
+    const t = target.taskId ? Store.getTaskById(target.taskId) : null;
+    ExpertPicker.render({
+      containerId: 'disputeExpertList',
+      category: t ? t.category : null,
+      onChange: () => { const e = document.getElementById('disputeExpertErr'); if (e) e.style.display = 'none'; },
+    });
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -155,6 +172,18 @@
             <div class="field-group"><label for="disputeReason">Reason</label><select id="disputeReason" class="field-select"><option value="">Select reason</option><option value="Incomplete work">Incomplete work</option><option value="Quality issues">Quality issues</option><option value="Scope mismatch">Scope mismatch</option><option value="Missed deadline">Missed deadline</option><option value="Other">Other</option></select></div>
             <div class="field-group"><label for="disputeDetails">Details</label><textarea id="disputeDetails" class="field-textarea" placeholder="Describe what is wrong and what you'd like changed"></textarea></div>
             <div class="field-group"><label for="disputeOutcome">Desired outcome</label><input id="disputeOutcome" class="field-input" placeholder="E.g., revision, partial refund, cancellation" /></div>
+
+            <div class="field-group">
+              <label>Expert Reviewer</label>
+              <div style="font-size:12px;color:var(--muted-foreground);margin-bottom:10px;">
+                Choose who arbitrates this dispute. Only reviewers covering this project's category are shown,
+                and only they will be able to see the case.
+              </div>
+              <div id="disputeExpertList"></div>
+              <div class="field-error" id="disputeExpertErr" style="display:none;color:#ef4444;font-size:12px;margin-top:6px;">
+                Select an Expert Reviewer to continue.
+              </div>
+            </div>
 
             <div style="display:flex;gap:10px;margin-top:14px;">
               <button class="btn-primary btn-action" onclick="submitDispute()">Submit Dispute</button>

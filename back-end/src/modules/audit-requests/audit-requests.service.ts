@@ -4,6 +4,7 @@ import { UpdateAuditRequestDto } from './dto/update-audit-request.dto';
 import { CreateOfferDto, AcceptAuditDto, DeclineAuditDto } from './dto/audit-offer.dto';
 import { AuditRequestsRepository } from './audit-requests.repository';
 import { AUDIT_STATUS, AUDIT_KIND, NEGOTIABLE, TERMINAL } from './audit-request.constants';
+import { canViewTask, assertCanViewTask, isStaff } from '../../common/guards/viewer.util';
 import { TasksService } from '../tasks/tasks.service';
 import { MilestonesService } from '../milestones/milestones.service';
 import { UsersService } from '../users/users.service';
@@ -28,14 +29,29 @@ export class AuditRequestsService {
     @Inject(forwardRef(() => LedgerService)) private ledger: LedgerService,
   ) {}
 
-  findAll(query?: { expertId?: string; status?: string; taskId?: string; kind?: string }) {
-    return this.auditRequestsRepository.findAll(query);
+  findAll(query?: { expertId?: string; status?: string; taskId?: string; kind?: string },
+          viewer?: { id?: string; role?: string }) {
+    const all = this.auditRequestsRepository.findAll(query);
+    if (!viewer || isStaff(viewer.role)) return all;
+    // An engagement is only visible to its assigned reviewer and the parties to
+    // the work. Previously every reviewer saw every project's audit.
+    return all.filter((ar: any) =>
+      canViewTask(viewer.id, viewer.role, this.taskOf(ar), ar.expertId, ar.clientId, ar.workerId),
+    );
   }
 
-  findById(id: string) {
+  findById(id: string, viewer?: { id?: string; role?: string }) {
     const ar = this.auditRequestsRepository.findById(id);
     if (!ar) throw new NotFoundException(`Audit request with id "${id}" not found`);
+    if (viewer) {
+      assertCanViewTask(viewer.id, viewer.role, this.taskOf(ar), ar.expertId, ar.clientId, ar.workerId);
+    }
     return ar;
+  }
+
+  /** Best-effort task lookup for scoping; a missing task must not throw here. */
+  private taskOf(ar: any) {
+    return ar?.taskId ? this.safe(() => this.tasks.findById(ar.taskId)) : null;
   }
 
   create(dto: CreateAuditRequestDto) {
@@ -57,6 +73,7 @@ export class AuditRequestsService {
       agreedAmount: null as number | null,
       offers: [] as any[],
     };
+    if (ar.expertId) this.assertAssignableExpert(ar.expertId, dto.category);
     this.auditRequestsRepository.insert(ar);
 
     // A client can open with a price so experts see a number in their queue.
@@ -77,8 +94,8 @@ export class AuditRequestsService {
    * project, its milestones, the client, and for a dispute audit the claim
    * itself. Previously an expert accepted with no visibility at all.
    */
-  preview(id: string) {
-    const ar = this.findById(id);
+  preview(id: string, viewer?: { id?: string; role?: string }) {
+    const ar = this.findById(id, viewer);
     const task = this.safe(() => this.tasks.findById(ar.taskId));
     const client = this.safe(() => this.users.findById(ar.clientId));
     const worker = ar.workerId ? this.safe(() => this.users.findById(ar.workerId)) : null;
@@ -182,16 +199,11 @@ export class AuditRequestsService {
         `An audit can only be accepted once its fee is in escrow (current status: ${ar.status}).`,
       );
     }
-    // The payee comes from the request body, so it has to be checked: without
-    // this, an audit could name a client — or any user — as the reviewer and
-    // pay them the fee.
-    const expert = this.safe(() => this.users.findById(dto.expertId));
-    if (!expert) throw new BadRequestException(`No user found with id "${dto.expertId}".`);
-    if (expert.role !== 'expert') {
-      throw new BadRequestException(`${expert.name} is not an Expert Reviewer.`);
-    }
-    if (expert.status !== 'active') {
-      throw new BadRequestException(`${expert.name}'s account is not active.`);
+    // The payee comes from the request body, so it has to be checked.
+    this.assertAssignableExpert(dto.expertId);
+    // The reviewer accepting must be the one the client assigned.
+    if (ar.expertId && ar.expertId !== dto.expertId) {
+      throw new BadRequestException('This audit is assigned to a different Expert Reviewer.');
     }
 
     ar.expertId = dto.expertId;
@@ -211,6 +223,9 @@ export class AuditRequestsService {
     }
     ar.status = AUDIT_STATUS.DECLINED;
     ar.declineReason = dto.reason || null;
+    // Release the assignment so the client can pick someone else.
+    ar.declinedBy = ar.expertId;
+    ar.expertId = null;
     return this.auditRequestsRepository.update(id, ar);
   }
 
@@ -241,6 +256,23 @@ export class AuditRequestsService {
     });
 
     return { auditRequest: this.auditRequestsRepository.findById(id), payout };
+  }
+
+  /**
+   * A reviewer must exist, be an expert, and be active. When a category is
+   * given, their domains must cover it — the client only ever sees
+   * domain-matched reviewers, so a mismatch means a tampered request.
+   */
+  assertAssignableExpert(expertId: string, category?: string) {
+    const expert = this.safe(() => this.users.findById(expertId));
+    if (!expert) throw new BadRequestException(`No user found with id "${expertId}".`);
+    if (expert.role !== 'expert') throw new BadRequestException(`${expert.name} is not an Expert Reviewer.`);
+    if (expert.status !== 'active') throw new BadRequestException(`${expert.name}'s account is not active.`);
+    if (category && Array.isArray(expert.domains) && expert.domains.length
+        && !expert.domains.includes(category)) {
+      throw new BadRequestException(`${expert.name} does not review ${category} work.`);
+    }
+    return expert;
   }
 
   private assertNegotiable(ar: any) {

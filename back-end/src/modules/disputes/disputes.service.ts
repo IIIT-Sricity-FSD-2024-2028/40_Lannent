@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { CreateDisputeDto } from './dto/create-dispute.dto';
 import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
 import { DisputesRepository } from './disputes.repository';
 import { MilestonesService } from '../milestones/milestones.service';
 import { TasksService } from '../tasks/tasks.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { canViewTask, isStaff } from '../../common/guards/viewer.util';
 import { AuditRequestsService } from '../audit-requests/audit-requests.service';
 
 /**
@@ -23,14 +24,32 @@ export class DisputesService {
     @Inject(forwardRef(() => AuditRequestsService)) private auditRequests: AuditRequestsService,
   ) {}
 
-  findAll() {
-    return this.disputesRepository.findAll();
+  findAll(viewer?: { id?: string; role?: string }) {
+    const all = this.disputesRepository.findAll();
+    if (!viewer || isStaff(viewer.role)) return all;
+    // Visible to the parties and the reviewer arbitrating it — not to every
+    // reviewer on the platform, which is what an unguarded GET allowed.
+    return all.filter((d: any) => this.canView(d, viewer));
   }
 
-  findById(id: string) {
+  findById(id: string, viewer?: { id?: string; role?: string }) {
     const d = this.disputesRepository.findById(id);
     if (!d) throw new NotFoundException(`Dispute with id "${id}" not found`);
+    if (viewer && !this.canView(d, viewer)) {
+      throw new ForbiddenException(
+        'You do not have access to this dispute. Only the people involved can view it.',
+      );
+    }
     return d;
+  }
+
+  private canView(d: any, viewer: { id?: string; role?: string }): boolean {
+    const task = d.taskId ? this.safe(() => this.tasksService.findById(d.taskId)) : null;
+    return canViewTask(viewer.id, viewer.role, task, d.expertId, d.raisedBy, d.againstId);
+  }
+
+  private safe<T>(fn: () => T): T | null {
+    try { return fn(); } catch { return null; }
   }
 
   create(dto: CreateDisputeDto) {
@@ -64,6 +83,9 @@ export class DisputesService {
         clientId: task.clientId,
         workerId: task.workerId,
         disputeId: dispute.id,
+        // Assigned to the reviewer the client chose; no other reviewer sees it.
+        expertId: dto.expertId,
+        category: task.category,
         severity: 'High',
         project: task.title,
         milestone: dto.milestone,

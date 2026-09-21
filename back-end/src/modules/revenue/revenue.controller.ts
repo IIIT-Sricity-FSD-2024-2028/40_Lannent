@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Body, Query, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { RevenueService } from './revenue.service';
 import { UpdateFeeConfigDto } from './dto/update-fee-config.dto';
@@ -51,6 +51,23 @@ export class RevenueController {
   @ApiOperation({ summary: 'How every escrowed dollar splits between workers, reviewers and the platform' })
   distribution() {
     return this.revenue.distribution();
+  }
+
+  @Get('by-project')
+  @Roles(ROLES.ADMIN)
+  @ApiOperation({ summary: 'Every project with its platform revenue' })
+  byProject() {
+    return this.revenue.byProject();
+  }
+
+  @Get('project/:taskId')
+  @Roles(ROLES.ADMIN)
+  @ApiOperation({
+    summary: 'Complete money flow for one project',
+    description: 'What the client paid, what the worker and reviewers took, split by audit vs dispute, and what the platform kept.',
+  })
+  projectBreakdown(@Param('taskId') taskId: string) {
+    return this.revenue.projectBreakdown(taskId);
   }
 
   @Get('fee-config')

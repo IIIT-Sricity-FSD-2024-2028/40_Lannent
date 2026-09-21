@@ -248,7 +248,14 @@
 
     // Build audit requests from store
     function getAuditRequests() {
-      return Store.getAuditRequests().map(a => ({
+      const session = Auth.getCurrentUser();
+      return Store.getAuditRequests()
+        // Project audits only — a dispute engagement belongs on Dispute Cases,
+        // and used to appear on both pages because kind was never filtered.
+        .filter(a => a.kind !== 'dispute-audit')
+        // And only what this reviewer is assigned to, or is still open to them.
+        .filter(a => !a.expertId || a.expertId === session.userId)
+        .map(a => ({
         id: a.id,
         milestoneId: a.milestoneId,
         project: a.project,

@@ -251,6 +251,124 @@
       });
     }
 
+    // ── Projects, and one project's full money flow ────────────────────────
+    function renderProjects() {
+      const rows = data.byProject || [];
+      const box = document.getElementById('projectTable');
+      if (!rows.length) {
+        box.innerHTML = '<div style="padding:26px;text-align:center;color:var(--muted-foreground);font-size:13px;">No project activity yet.</div>';
+        return;
+      }
+      box.innerHTML = `
+        <table class="viz-table">
+          <thead><tr>
+            <th>Project</th><th>Status</th>
+            <th class="num">Funded</th><th class="num">Held</th>
+            <th class="num">Platform revenue</th><th></th>
+          </tr></thead>
+          <tbody>${rows.map(p => `
+            <tr>
+              <td>${esc(p.title)}</td>
+              <td><span class="rev-role">${esc(p.status)}</span></td>
+              <td class="num">${money(p.funded)}</td>
+              <td class="num">${money(p.escrowHeld)}</td>
+              <td class="num" style="font-weight:600;">${money(p.platformRevenue)}</td>
+              <td class="num"><button class="viz-toggle" onclick="showProject('${p.taskId}')">Breakdown</button></td>
+            </tr>`).join('')}</tbody>
+        </table>`;
+    }
+
+    function line(label, value, opts = {}) {
+      const color = opts.fee ? '#b45309' : opts.good ? '#0d9488' : 'inherit';
+      const weight = opts.total ? '700' : '400';
+      const border = opts.total ? 'border-top:1px solid var(--border);margin-top:4px;padding-top:9px;' : '';
+      return `<div style="display:flex;justify-content:space-between;gap:14px;padding:6px 0;font-size:13px;${border}">
+        <span style="color:var(--muted-foreground);font-weight:${weight};">${label}</span>
+        <span style="font-variant-numeric:tabular-nums;font-weight:${opts.total ? '700' : '600'};color:${color};">${value}</span></div>`;
+    }
+
+    function showProject(taskId) {
+      const b = Store.getProjectBreakdown(taskId);
+      const box = document.getElementById('projectDetail');
+      if (!b) { box.innerHTML = '<div style="padding:18px;color:var(--muted-foreground);">Could not load that project.</div>'; return; }
+
+      const card = (title, body) => `
+        <div style="background:var(--secondary);border-radius:12px;padding:16px;">
+          <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-foreground);margin-bottom:8px;">${title}</div>
+          ${body}
+        </div>`;
+
+      box.innerHTML = `
+        <div style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border);">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:14px;">
+            <div>
+              <div style="font-size:15px;font-weight:700;">${esc(b.project.title)}</div>
+              <div style="font-size:12.5px;color:var(--muted-foreground);">
+                ${esc(b.project.category)} · budget ${money(b.project.budget)}
+                ${b.project.client ? ' · client ' + esc(b.project.client.name) : ''}
+                ${b.project.worker ? ' · worker ' + esc(b.project.worker.name) : ''}
+              </div>
+            </div>
+            <button class="viz-toggle" onclick="document.getElementById('projectDetail').innerHTML=''">Close</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;">
+            ${card('Client paid in',
+              line('Into project escrow', money(b.clientPaid.intoProjectEscrow)) +
+              line('Into audit escrow', money(b.clientPaid.intoAuditEscrow)) +
+              line('Marketplace fee', money(b.clientPaid.marketplaceFee), { fee: true }) +
+              line('Contract initiation', money(b.clientPaid.initiationFee), { fee: true }) +
+              line('Total charged', money(b.clientPaid.total), { total: true }))}
+
+            ${card('Gig worker' + (b.worker.name ? ' — ' + esc(b.worker.name) : ''),
+              line('Gross released', money(b.worker.grossReleased)) +
+              line('Service fees', '−' + money(b.worker.serviceFees), { fee: true }) +
+              line('Net received', money(b.worker.netReceived), { total: true, good: true }) +
+              line('Milestones paid', String(b.worker.milestonesPaid)))}
+
+            ${card('Reviewer — audit',
+              line('Agreed fees', money(b.reviewerAudit.grossFees)) +
+              line('Platform commission', '−' + money(b.reviewerAudit.commission), { fee: true }) +
+              line('Net received', money(b.reviewerAudit.netReceived), { total: true, good: true }) +
+              line('Audits', String(b.reviewerAudit.count) + (b.reviewerAudit.reviewers.length ? ' · ' + b.reviewerAudit.reviewers.map(esc).join(', ') : '')))}
+
+            ${card('Reviewer — disputes',
+              line('Agreed fees', money(b.reviewerDispute.grossFees)) +
+              line('Platform commission', '−' + money(b.reviewerDispute.commission), { fee: true }) +
+              line('Net received', money(b.reviewerDispute.netReceived), { total: true, good: true }) +
+              line('Disputes', String(b.reviewerDispute.count) + (b.reviewerDispute.reviewers.length ? ' · ' + b.reviewerDispute.reviewers.map(esc).join(', ') : '')))}
+
+            ${card('Still held &amp; refunded',
+              line('Project escrow', money(b.stillHeld.project)) +
+              line('Audit escrow', money(b.stillHeld.audit)) +
+              line('Refunded to client', money(b.refundedToClient)) +
+              line('Total held', money(b.stillHeld.total), { total: true }))}
+
+            ${card('Platform earnings',
+              line('Marketplace fee', money(b.platformEarnings.marketplaceFee)) +
+              line('Contract initiation', money(b.platformEarnings.initiationFee)) +
+              line('Worker service fees', money(b.platformEarnings.workerServiceFees)) +
+              line('Reviewer commission', money(b.platformEarnings.reviewerCommission)) +
+              line('Total earned', money(b.platformEarnings.total), { total: true, good: true }))}
+          </div>
+
+          <div style="margin-top:16px;">
+            <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-foreground);margin-bottom:8px;">Every movement on this project</div>
+            <div class="viz-table-wrap">
+              <table class="viz-table">
+                <thead><tr><th>Movement</th><th>From</th><th>To</th><th class="num">Gross</th><th class="num">Fee</th><th class="num">Net</th><th>Date</th></tr></thead>
+                <tbody>${b.ledger.map(t => `<tr>
+                  <td>${esc(t.type)}</td><td>${esc(t.from)}</td><td>${esc(t.to)}</td>
+                  <td class="num">${money(t.gross)}</td>
+                  <td class="num" style="color:${t.fee ? '#b45309' : 'inherit'};">${t.fee ? money(t.fee) : '—'}</td>
+                  <td class="num">${money(t.net)}</td><td>${esc(t.createdAt)}</td></tr>`).join('')}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>`;
+      box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
     // ── Per-user table ─────────────────────────────────────────────────────
     function renderByUser() {
       const rows = data.byUser || [];
@@ -305,6 +423,7 @@
         timeseries: Store.getRevenueTimeseries(period),
         byUser: Store.getRevenueByUser(),
         distribution: Store.getRevenueDistribution(),
+        byProject: Store.getRevenueByProject(),
       };
     }
 
@@ -397,6 +516,13 @@
           </div>
 
           <div class="viz-card">
+            <div class="viz-title">Revenue by project</div>
+            <div class="viz-sub">Select a project to see exactly where its money came from and went.</div>
+            <div class="viz-table-wrap" id="projectTable"></div>
+            <div id="projectDetail"></div>
+          </div>
+
+          <div class="viz-card">
             <div class="viz-title">What each user receives</div>
             <div class="viz-sub">Gross earned is before fees; net received is what reached their wallet.</div>
             <div class="viz-table-wrap" id="userTable"></div>
@@ -414,6 +540,7 @@
       renderTimeseries();
       renderByFeeType();
       renderDistribution();
+      renderProjects();
       renderByUser();
       if (window.lucide) lucide.createIcons();
     });

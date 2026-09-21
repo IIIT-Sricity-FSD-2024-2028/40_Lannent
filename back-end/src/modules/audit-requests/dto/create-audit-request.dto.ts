@@ -57,4 +57,8 @@ export class CreateAuditRequestDto {
   @ApiPropertyOptional({ example: 250, description: 'Opening offer from the client' })
   @IsOptional() @IsNumber()
   openingOffer?: number;
+
+  @ApiPropertyOptional({ example: 'Web Development', description: 'Task category, used to check the reviewer covers this domain' })
+  @IsOptional() @IsString()
+  category?: string;
 }

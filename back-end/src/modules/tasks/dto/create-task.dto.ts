@@ -46,4 +46,8 @@ export class CreateTaskDto {
   @ApiPropertyOptional({ example: 'Web Development', description: 'Expert domain the audit should match' })
   @IsOptional() @IsString()
   auditDomain?: string;
+
+  @ApiPropertyOptional({ example: 'u3', description: 'The Expert Reviewer the client selected for the audit' })
+  @IsOptional() @IsString()
+  auditExpertId?: string;
 }

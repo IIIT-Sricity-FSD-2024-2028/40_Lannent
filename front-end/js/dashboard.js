@@ -27,7 +27,7 @@ function initDashboard(config = {}) {
     { icon: 'shield-check', label: 'Audit Offers', path: 'client-audit-offers.html' },
     { icon: 'wallet', label: 'Wallet', path: 'client-wallet.html' },
     { icon: 'message-square', label: 'Messages', path: 'messages.html' },
-    { icon: 'bar-chart-3', label: 'Analytics', path: 'analytics.html' },
+    { icon: 'file-text', label: 'Reports', path: 'milestone-reports.html' },
     { icon: 'settings', label: 'Settings', path: 'profile-settings.html' },
   ];
   const workerItems = [
@@ -38,7 +38,7 @@ function initDashboard(config = {}) {
     { icon: 'file-text', label: 'My Proposals', path: 'my-proposals.html' },
     { icon: 'wallet', label: 'Wallet', path: 'worker-wallet.html' },
     { icon: 'message-square', label: 'Messages', path: 'messages.html' },
-    { icon: 'bar-chart-3', label: 'Performance', path: 'performance-analytics.html' },
+    { icon: 'file-text', label: 'Reports', path: 'milestone-reports.html' },
     { icon: 'settings', label: 'Settings', path: 'worker-settings.html' },
   ];
   const expertItems = [

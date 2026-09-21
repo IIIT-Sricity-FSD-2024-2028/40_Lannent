@@ -127,6 +127,23 @@
       margin-bottom: 10px;
     }
 
+    .report-verdict {
+      display: inline-block;
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 7px;
+      border: 1px solid;
+      margin-bottom: 8px;
+    }
+    .report-findings {
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: var(--muted-foreground);
+      margin-bottom: 10px;
+      max-width: 68ch;
+    }
+
     .report-meta-row {
       display: flex;
       align-items: center;
@@ -306,13 +323,6 @@
   </style>
   <script>
     // ── Data — merged from store + static ──
-    const STATIC_REPORTS = [
-      { id:'R-001', milestoneName:'Database Schema & Migration', milestoneId:6, type:'technical-audit', reviewer:'Dr. James Wilson', reviewerInitials:'JW', reviewerColor:'linear-gradient(135deg,#6366f1,#4f46e5)', date:'Mar 8, 2026', status:'completed', viewUrl:'expert-report-audit.html' },
-      { id:'R-002', milestoneName:'Payment Gateway Integration', milestoneId:5, type:'technical-audit', reviewer:'Dr. James Wilson', reviewerInitials:'JW', reviewerColor:'linear-gradient(135deg,#6366f1,#4f46e5)', date:'Mar 7, 2026', status:'completed', viewUrl:'expert-report-audit.html' },
-      { id:'R-003', milestoneName:'Payment Gateway Integration', milestoneId:5, type:'dispute-resolution', reviewer:'Expert Panel', reviewerInitials:'EP', reviewerColor:'linear-gradient(135deg,#f59e0b,#d97706)', date:'Mar 7, 2026', status:'in-progress', viewUrl:'expert-report-dispute.html' },
-      { id:'R-004', milestoneName:'Backend API Development', milestoneId:4, type:'technical-audit', reviewer:'Dr. Sarah Mitchell', reviewerInitials:'SM', reviewerColor:'linear-gradient(135deg,#ec4899,#be185d)', date:'Mar 6, 2026', status:'pending', viewUrl:'expert-report-audit.html' },
-      { id:'R-005', milestoneName:'UI/UX Design System', milestoneId:7, type:'technical-audit', reviewer:'Dr. James Wilson', reviewerInitials:'JW', reviewerColor:'linear-gradient(135deg,#6366f1,#4f46e5)', date:'Mar 5, 2026', status:'completed', viewUrl:'expert-report-audit.html' },
-    ];
 
     function getReports(taskId) {
       // Pull real audit reports from store
@@ -328,7 +338,7 @@
           reviewerInitials: (typeof Store !== 'undefined' ? Store.getUserById(r.expertId)?.avatar : null) || 'ER',
           reviewerColor: (typeof Store !== 'undefined' ? Store.getUserById(r.expertId)?.avatarColor : null) || 'linear-gradient(135deg,#a855f7,#7c3aed)',
           date: r.createdAt,
-          status: r.verdict === 'pass' ? 'completed' : r.verdict === 'fail' ? 'in-progress' : 'pending',
+          status: r.verdict === 'pass' ? 'completed' : r.verdict === 'fail' ? 'failed' : 'pending',
           verdict: r.verdict,
           findings: r.findings,
           project: r.projectTitle,
@@ -351,7 +361,9 @@
           date: d.createdAt,
           status: d.status === 'resolved' ? 'completed' : d.status === 'open' ? 'in-progress' : 'pending',
           verdict: d.verdict,
+          findings: d.resolution,
           project: d.project,
+          workerName: d.againstName,
           viewUrl: 'expert-report-dispute.html?id=' + d.id,
           fromStore: true,
         }));
@@ -370,7 +382,7 @@
       }
 
       // No project filter: merge store + static data
-      return [...storeReports, ...storeDisputes, ...STATIC_REPORTS];
+      return [...storeReports, ...storeDisputes];
     }
 
     let REPORTS = [];
@@ -379,10 +391,47 @@
     let activeMilestoneFilter = 'all';
     let role = 'client'; // will be set from URL param on DOMContentLoaded
 
+    /** The outcome, stated plainly — a client should not have to open the report to see it. */
+    function verdictChip(r) {
+      const map = {
+        'pass':          { bg:'#ecfdf5', border:'#a7f3d0', text:'#047857', label:'Passed audit' },
+        'fail':          { bg:'#fef2f2', border:'#fecaca', text:'#b91c1c', label:'Failed audit' },
+        'conditional':   { bg:'#fffbeb', border:'#fde68a', text:'#b45309', label:'Passed with conditions' },
+        'worker-favour': { bg:'#ecfdf5', border:'#a7f3d0', text:'#047857', label:'Resolved for the worker' },
+        'client-favour': { bg:'#eff6ff', border:'#bfdbfe', text:'#1d4ed8', label:'Resolved for the client' },
+        'split':         { bg:'#f5f3ff', border:'#ddd6fe', text:'#6d28d9', label:'Split decision' },
+      };
+      const v = map[r.verdict];
+      if (!v) {
+        return `<div class="report-verdict" style="background:var(--secondary);border-color:var(--border);color:var(--muted-foreground);">
+          ${r.type === 'dispute-resolution' ? 'Awaiting a verdict' : 'Awaiting review'}
+        </div>`;
+      }
+      return `<div class="report-verdict" style="background:${v.bg};border-color:${v.border};color:${v.text};">${v.label}</div>`;
+    }
+
+    /** A readable opening of the reviewer's reasoning, not the whole report. */
+    function excerpt(text, max = 160) {
+      const t = String(text || '').trim();
+      if (t.length <= max) return t;
+      const cut = t.slice(0, max);
+      const stop = cut.lastIndexOf(' ');
+      return (stop > 60 ? cut.slice(0, stop) : cut) + '…';
+    }
+
+    /** Store dates are ISO slices; the cards read better in the page's format. */
+    function fmtDate(d) {
+      if (!d) return 'Unknown date';
+      const dt = new Date(d);
+      if (isNaN(dt)) return d;
+      return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
     function statusConfig(status) {
       switch (status) {
         case 'completed':  return { bg:'#ecfdf5', border:'#a7f3d0', text:'#059669', dot:'#10b981', label:'Completed' };
         case 'in-progress':return { bg:'#eff6ff', border:'#bae6fd', text:'#0284c7', dot:'#38bdf8', label:'In Progress' };
+        case 'failed':     return { bg:'#fef2f2', border:'#fecaca', text:'#b91c1c', dot:'#ef4444', label:'Failed' };
         case 'pending':    return { bg:'#fffbeb', border:'#fde68a', text:'#b45309', dot:'#f59e0b', label:'Pending' };
         default:           return { bg:'#f9fafb', border:'#e5e7eb', text:'#6b7280', dot:'#9ca3af', label: status };
       }
@@ -442,7 +491,13 @@
               </div>
               <div class="report-info">
                 <div class="report-milestone-name">${r.milestoneName}</div>
-                <div class="report-type-label">${tc.label} &nbsp;·&nbsp; <span style="font-family:monospace;font-size:11px;">${r.id}</span></div>
+                <div class="report-type-label">
+                  ${tc.label}
+                  ${r.project ? '&nbsp;·&nbsp; ' + r.project : ''}
+                  &nbsp;·&nbsp; <span style="font-family:monospace;font-size:11px;">${r.id}</span>
+                </div>
+                ${verdictChip(r)}
+                ${r.findings ? `<div class="report-findings">${excerpt(r.findings)}</div>` : ''}
                 <div class="report-meta-row">
                   <span class="status-pill" style="background:${sc.bg};border-color:${sc.border};color:${sc.text};">
                     <span class="status-dot" style="background:${sc.dot};"></span>
@@ -452,9 +507,13 @@
                     <div style="width:22px;height:22px;border-radius:50%;background:${r.reviewerColor};display:flex;align-items:center;justify-content:center;color:white;font-size:8px;font-weight:700;flex-shrink:0;">${r.reviewerInitials}</div>
                     <strong>${r.reviewer}</strong>
                   </div>
+                  ${r.workerName ? `<div class="report-meta-item">
+                    <i data-lucide="user" style="width:13px;height:13px;"></i>
+                    <strong>${r.workerName}</strong>
+                  </div>` : ''}
                   <div class="report-meta-item">
                     <i data-lucide="calendar" style="width:13px;height:13px;"></i>
-                    <strong>${r.date}</strong>
+                    <strong>${fmtDate(r.date)}</strong>
                   </div>
                 </div>
               </div>

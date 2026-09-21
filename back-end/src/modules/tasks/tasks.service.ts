@@ -56,18 +56,34 @@ export class TasksService {
     // An audited project opens its expert engagement immediately, carrying the
     // client's opening offer. The project stays a draft until an expert accepts.
     if (task.auditEnabled) {
+      // The client must name the reviewer. Without one the engagement belongs to
+      // nobody, so no reviewer can ever see it and the project stays a draft
+      // forever.
+      if (!dto.auditExpertId) {
+        this.tasksRepository.update(task.id, { status: 'cancelled' });
+        throw new BadRequestException(
+          'Select an Expert Reviewer for the technical audit before publishing.',
+        );
+      }
       try {
         this.auditRequests.create({
           kind: 'project-audit',
           taskId: task.id,
           clientId: task.clientId,
+          // The client picks one reviewer; only they can see this engagement.
+          expertId: dto.auditExpertId,
+          category: task.category,
           severity: 'Medium',
           project: task.title,
           status: 'preview-sent',
           openingOffer: dto.auditFee,
           dueDate: task.deadline,
         });
-      } catch {}
+      } catch (e) {
+        // An invalid reviewer must not leave a draft with no engagement.
+        this.tasksRepository.update(task.id, { status: 'cancelled' });
+        throw e;
+      }
     }
 
     return this.tasksRepository.findById(task.id);

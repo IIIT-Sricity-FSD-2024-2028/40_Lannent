@@ -3,6 +3,7 @@ import { LedgerService } from '../ledger/ledger.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { UsersService } from '../users/users.service';
 import { TasksService } from '../tasks/tasks.service';
+import { AuditRequestsService } from '../audit-requests/audit-requests.service';
 import { FEE_CONFIG, round2 } from '../ledger/fee-config';
 import { UpdateFeeConfigDto } from './dto/update-fee-config.dto';
 
@@ -23,7 +24,12 @@ export class RevenueService {
     @Inject(forwardRef(() => TransactionsService)) private readonly transactions: TransactionsService,
     @Inject(forwardRef(() => UsersService)) private readonly users: UsersService,
     @Inject(forwardRef(() => TasksService)) private readonly tasks: TasksService,
+    @Inject(forwardRef(() => AuditRequestsService)) private readonly auditRequests: AuditRequestsService,
   ) {}
+
+  private safe<T>(fn: () => T): T | null {
+    try { return fn(); } catch { return null; }
+  }
 
   private gross(t: any): number {
     return t.grossAmount ?? t.amount ?? 0;
@@ -194,6 +200,144 @@ export class RevenueService {
       segments: segments.map((s) => ({
         ...s,
         share: funded > 0 ? round2((s.amount / funded) * 100) : 0,
+      })),
+    };
+  }
+
+  /** One row per project, for the Admin list. */
+  byProject() {
+    const txs = this.transactions.findAll();
+    const revenue = this.ledger.getRevenue();
+    const taskIds = new Set<string>();
+    txs.forEach((t: any) => t.taskId && taskIds.add(t.taskId));
+    revenue.forEach((r) => r.taskId && taskIds.add(r.taskId));
+
+    return [...taskIds]
+      .map((taskId) => {
+        const task = this.safe(() => this.tasks.findById(taskId));
+        const rev = round2(
+          revenue.filter((r) => r.taskId === taskId).reduce((a, r) => a + r.amount, 0),
+        );
+        const funded = round2(
+          txs
+            .filter((t: any) => ['escrow-lock', 'audit-escrow-lock'].includes(t.type) && t.taskId === taskId)
+            .reduce((a: number, t: any) => a + (t.netAmount ?? t.amount ?? 0), 0),
+        );
+        return {
+          taskId,
+          title: task?.title || 'Unknown project',
+          status: task?.status || 'unknown',
+          clientId: task?.clientId || null,
+          budget: task?.budget || 0,
+          funded,
+          platformRevenue: rev,
+          escrowHeld: this.ledger.getEscrow(taskId).projectHeld + this.ledger.getEscrow(taskId).auditHeld,
+        };
+      })
+      .sort((a, b) => b.platformRevenue - a.platformRevenue);
+  }
+
+  /**
+   * The complete money flow for one project: what the client paid in, what each
+   * party took out, and what the platform kept — split so an audit payout can be
+   * told apart from a dispute payout.
+   */
+  projectBreakdown(taskId: string) {
+    const task = this.tasks.findById(taskId);
+    const txs = this.transactions.findAll().filter((t: any) => t.taskId === taskId);
+    const revenue = this.ledger.getRevenue().filter((r) => r.taskId === taskId);
+    const escrow = this.ledger.getEscrow(taskId);
+
+    const sum = (rows: any[], pick: (t: any) => number) => round2(rows.reduce((a, t) => a + pick(t), 0));
+    const gross = (t: any) => t.grossAmount ?? t.amount ?? 0;
+    const net = (t: any) => t.netAmount ?? t.amount ?? 0;
+    const feeOf = (type: string) =>
+      round2(revenue.filter((r) => r.feeType === type).reduce((a, r) => a + r.amount, 0));
+
+    // An audit payout belongs to an engagement; its kind says whether the money
+    // was earned auditing the project or arbitrating a dispute on it.
+    const auditReleases = txs.filter((t: any) => t.type === 'audit-release');
+    const kindOf = (t: any) => {
+      const ar = t.auditRequestId
+        ? this.safe(() => this.auditRequests.findById(t.auditRequestId))
+        : null;
+      return ar?.kind || 'project-audit';
+    };
+    const auditRows = auditReleases.filter((t: any) => kindOf(t) === 'project-audit');
+    const disputeRows = auditReleases.filter((t: any) => kindOf(t) === 'dispute-audit');
+
+    const escrowLocks = txs.filter((t: any) => t.type === 'escrow-lock');
+    const auditLocks = txs.filter((t: any) => t.type === 'audit-escrow-lock');
+    const releases = txs.filter((t: any) => t.type === 'milestone-release');
+    const refunds = txs.filter((t: any) => t.type === 'refund');
+
+    const client = task.clientId ? this.safe(() => this.users.findById(task.clientId)) : null;
+    const worker = task.workerId ? this.safe(() => this.users.findById(task.workerId)) : null;
+    const nameOf = (id: string) => this.safe(() => this.users.findById(id))?.name || id;
+
+    const marketplace = feeOf('client-marketplace');
+    const initiation = feeOf('contract-initiation');
+    const workerFees = feeOf('worker-service');
+    const expertFees = feeOf('expert-service');
+    const platformRevenue = round2(marketplace + initiation + workerFees + expertFees);
+
+    return {
+      project: {
+        id: task.id, title: task.title, status: task.status,
+        category: task.category, budget: task.budget,
+        client: client ? { id: client.id, name: client.name } : null,
+        worker: worker ? { id: worker.id, name: worker.name } : null,
+      },
+
+      // What the client paid in
+      clientPaid: {
+        intoProjectEscrow: sum(escrowLocks, net),
+        intoAuditEscrow: sum(auditLocks, net),
+        marketplaceFee: marketplace,
+        initiationFee: initiation,
+        total: round2(sum(escrowLocks, net) + sum(auditLocks, net) + marketplace + initiation),
+      },
+
+      // What the gig worker took out
+      worker: {
+        name: worker?.name || null,
+        grossReleased: sum(releases, gross),
+        serviceFees: workerFees,
+        netReceived: sum(releases, net),
+        milestonesPaid: releases.length,
+      },
+
+      // Reviewer money, split by what earned it
+      reviewerAudit: {
+        grossFees: sum(auditRows, gross),
+        commission: round2(sum(auditRows, gross) - sum(auditRows, net)),
+        netReceived: sum(auditRows, net),
+        count: auditRows.length,
+        reviewers: [...new Set(auditRows.map((t: any) => t.toId))].map(nameOf),
+      },
+      reviewerDispute: {
+        grossFees: sum(disputeRows, gross),
+        commission: round2(sum(disputeRows, gross) - sum(disputeRows, net)),
+        netReceived: sum(disputeRows, net),
+        count: disputeRows.length,
+        reviewers: [...new Set(disputeRows.map((t: any) => t.toId))].map(nameOf),
+      },
+
+      refundedToClient: sum(refunds, gross),
+      stillHeld: { project: escrow.projectHeld, audit: escrow.auditHeld,
+                   total: round2(escrow.projectHeld + escrow.auditHeld) },
+
+      platformEarnings: {
+        marketplaceFee: marketplace,
+        initiationFee: initiation,
+        workerServiceFees: workerFees,
+        reviewerCommission: expertFees,
+        total: platformRevenue,
+      },
+
+      ledger: txs.map((t: any) => ({
+        id: t.id, type: t.type, gross: gross(t), fee: t.feeAmount ?? 0, net: net(t),
+        from: t.fromId, to: t.toId, description: t.description, createdAt: t.createdAt,
       })),
     };
   }

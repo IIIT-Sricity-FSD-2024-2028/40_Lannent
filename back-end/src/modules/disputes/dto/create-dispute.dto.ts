@@ -41,4 +41,8 @@ export class CreateDisputeDto {
   @ApiPropertyOptional({ example: 'Backend Integration' })
   @IsOptional() @IsString()
   milestone?: string;
+
+  @ApiPropertyOptional({ example: 'u3', description: 'The Expert Reviewer the client selected to arbitrate' })
+  @IsOptional() @IsString()
+  expertId?: string;
 }

@@ -1,8 +1,10 @@
-import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { CreateAuditReportDto } from './dto/create-audit-report.dto';
 import { AuditReportsRepository } from './audit-reports.repository';
 import { AuditRequestsService } from '../audit-requests/audit-requests.service';
 import { MilestonesService } from '../milestones/milestones.service';
+import { TasksService } from '../tasks/tasks.service';
+import { canViewTask, isStaff } from '../../common/guards/viewer.util';
 
 /**
  * AuditReportsService — Business Logic Layer
@@ -16,16 +18,46 @@ export class AuditReportsService {
     private readonly auditReportsRepository: AuditReportsRepository,
     @Inject(forwardRef(() => AuditRequestsService)) private auditRequestsService: AuditRequestsService,
     @Inject(forwardRef(() => MilestonesService)) private milestonesService: MilestonesService,
+    @Inject(forwardRef(() => TasksService)) private tasks: TasksService,
   ) {}
 
-  findAll(query?: { taskId?: string; auditRequestId?: string }) {
-    return this.auditReportsRepository.findAll(query);
+  findAll(query?: { taskId?: string; auditRequestId?: string },
+          viewer?: { id?: string; role?: string }) {
+    const all = this.auditReportsRepository.findAll(query);
+    if (!viewer || isStaff(viewer.role)) return all;
+    // A report belongs to the project it audits. It was readable by anyone —
+    // this route had no guard at all.
+    return all.filter((r: any) => this.canView(r, viewer));
   }
 
-  findById(id: string) {
+  findById(id: string, viewer?: { id?: string; role?: string }) {
     const report = this.auditReportsRepository.findById(id);
     if (!report) throw new NotFoundException(`Audit report with id "${id}" not found`);
+    if (viewer && !this.canView(report, viewer)) {
+      throw new ForbiddenException(
+        'You do not have access to this report. Only the people involved in the project can view it.',
+      );
+    }
     return report;
+  }
+
+  /**
+   * A report carries no owner columns, so the parties are resolved by joining
+   * to its task and its audit engagement.
+   */
+  private canView(report: any, viewer: { id?: string; role?: string }): boolean {
+    const task = this.safe(() => this.tasks.findById(report.taskId));
+    const engagement = report.auditRequestId
+      ? this.safe(() => this.auditRequestsService.findById(report.auditRequestId))
+      : null;
+    return canViewTask(
+      viewer.id, viewer.role, task,
+      report.expertId, engagement?.expertId, engagement?.clientId, engagement?.workerId,
+    );
+  }
+
+  private safe<T>(fn: () => T): T | null {
+    try { return fn(); } catch { return null; }
   }
 
   create(dto: CreateAuditReportDto) {

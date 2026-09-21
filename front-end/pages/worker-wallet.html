@@ -53,7 +53,7 @@
         const msList = Store.getMilestonesByTask(t.id);
         msList.forEach(m => {
           if (RELEASED_MS.includes(m.status)) {
-            totalEarned += (m.budget || 0);
+            // Counted from the ledger below, not from the gross milestone budget.
           } else if (PENDING_MS.includes(m.status)) {
             pending += (m.budget || 0);
           } else if (ESCROW_MS.includes(m.status)) {
@@ -96,6 +96,13 @@
 
       // Available = the authoritative server-side wallet balance, not a derived figure.
       const available = user ? (user.walletBalance || 0) : 0;
+
+      // Total earned is what actually reached this worker: the NET of every
+      // release, after the platform's service fee. Summing milestone budgets
+      // reported the gross and disagreed with the rows shown beneath it.
+      totalEarned = allTxs
+        .filter(t => t.type === 'milestone-release' && t.toId === userId)
+        .reduce((sum, t) => sum + (t.netAmount != null ? t.netAmount : (t.amount || 0)), 0);
 
       return { totalEarned, pending, inEscrow, available, transactions };
     }

@@ -24,14 +24,16 @@ export class AuditRequestsController {
     @Query('status') status?: string,
     @Query('taskId') taskId?: string,
     @Query('kind') kind?: string,
+    @Headers('user-id') userId?: string,
+    @Headers('role') role?: string,
   ) {
-    return this.auditRequestsService.findAll({ expertId, status, taskId, kind });
+    return this.auditRequestsService.findAll({ expertId, status, taskId, kind }, { id: userId, role });
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get audit request by ID' })
-  findOne(@Param('id') id: string) {
-    return this.auditRequestsService.findById(id);
+  findOne(@Param('id') id: string, @Headers('user-id') userId?: string, @Headers('role') role?: string) {
+    return this.auditRequestsService.findById(id, { id: userId, role });
   }
 
   @Get(':id/preview')
@@ -41,8 +43,8 @@ export class AuditRequestsController {
     summary: 'Preview the work before accepting',
     description: 'Project, milestones, client, worker and — for a dispute audit — the claim itself.',
   })
-  preview(@Param('id') id: string) {
-    return this.auditRequestsService.preview(id);
+  preview(@Param('id') id: string, @Headers('user-id') userId?: string, @Headers('role') role?: string) {
+    return this.auditRequestsService.preview(id, { id: userId, role });
   }
 
   @Post()

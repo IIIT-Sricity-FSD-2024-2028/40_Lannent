@@ -9,6 +9,7 @@
   <script src="../js/store.js"></script>
   <script src="../js/auth.js"></script>
   <script src="../js/validation.js"></script>
+  <script src="../js/expert-picker.js"></script>
   <script src="../js/main.js"></script>
   <script src="../js/dashboard.js"></script>
   <style>
@@ -154,6 +155,7 @@
       currency: 'USD',
       auditEnabled: false,
       auditFee: 300,
+      auditExpertId: null,
       milestones: [],
       showMilestoneForm: false,
       newMilestone: { title: '', description: '', budget: '', deadline: '' }
@@ -408,6 +410,7 @@
 
     function toggleAudit(btn) {
       formState.auditEnabled = !formState.auditEnabled;
+      if (!formState.auditEnabled) { formState.auditExpertId = null; ExpertPicker.clear(); }
       btn.classList.toggle('on');
       btn.classList.toggle('off');
       const panel = document.getElementById('auditPanel');
@@ -416,28 +419,13 @@
       updateSummary();
     }
 
-    /** Reviewers whose domains cover the chosen category, so the client can see who might take it. */
+    /** Reviewers covering this category. The client must pick exactly one. */
     function renderAuditExperts() {
-      const box = document.getElementById('auditExpertList');
-      if (!box) return;
-      const category = formState.category || '';
-      const experts = (Store.getExperts() || []);
-      const matching = experts.filter(e => !category || (e.domains || []).includes(category));
-      const shown = matching.length ? matching : experts;
-
-      if (!shown.length) {
-        box.innerHTML = '<div style="font-size:13px;color:var(--muted-foreground);">No reviewers are available right now.</div>';
-        return;
-      }
-      box.innerHTML = shown.map(e => `
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--border);">
-          <div style="width:34px;height:34px;border-radius:50%;background:${e.avatarColor};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none;">${e.avatar}</div>
-          <div style="min-width:0;">
-            <div style="font-size:13px;font-weight:600;">${e.name}</div>
-            <div style="font-size:12px;color:var(--muted-foreground);">${e.specialization} · ${e.reviewsDone} reviews</div>
-          </div>
-        </div>`).join('')
-        + (matching.length ? '' : '<div style="font-size:12px;color:var(--muted-foreground);padding-top:8px;">None specialise in this category — showing all reviewers.</div>');
+      ExpertPicker.render({
+        containerId: 'auditExpertList',
+        category: formState.category,
+        onChange: id => { formState.auditExpertId = id; updatePublishState(); updateSummary(); },
+      });
     }
 
     function updateSummary() {
@@ -452,9 +440,15 @@
       if (budgetEl) budgetEl.innerHTML = `${formState.currency} ${isNaN(totalBudget) ? 0 : totalBudget.toLocaleString()}`;
       if (milestoneEl) milestoneEl.innerHTML = `${formState.milestones.length}`;
       if (deadlineEl) deadlineEl.innerHTML = formState.deadline ? `${getDaysUntilDeadline()} day${getDaysUntilDeadline() === 1 ? '' : 's'}` : 'Not set';
-      if (auditEl) auditEl.innerHTML = formState.auditEnabled
-        ? `Offer ${formState.currency} ${(formState.auditFee || 0).toLocaleString()}`
-        : 'Disabled';
+      if (auditEl) {
+        if (!formState.auditEnabled) { auditEl.innerHTML = 'Disabled'; }
+        else {
+          const rev = formState.auditExpertId ? Store.getUserById(formState.auditExpertId) : null;
+          auditEl.innerHTML = rev
+            ? `${rev.name.split(' ')[0]} · ${formState.currency} ${(formState.auditFee || 0).toLocaleString()}`
+            : 'Select a reviewer';
+        }
+      }
 
       renderBudgetCheck(milestoneCost, totalBudget);
       renderWalletCheck(totalBudget);
@@ -469,8 +463,10 @@
       const desc = document.querySelector('.form-textarea')?.value.trim() || '';
       const budget = parseFloat(formState.budget) || 0;
       const { valid: budgetOk } = validateTotalMatch();
+      // An audited project cannot be published without a named reviewer.
+      const auditReady = !formState.auditEnabled || !!formState.auditExpertId;
       const ready = title.length >= 5 && desc.length >= 5 && budget > 0 &&
-                    formState.milestones.length > 0 && budgetOk;
+                    formState.milestones.length > 0 && budgetOk && auditReady;
       btn.disabled = !ready;
     }
 
@@ -634,7 +630,11 @@
                 <div style="font-size:12px;color:var(--muted-foreground);margin-bottom:14px;">
                   Reviewers can accept this or counter with their own price. Nothing is charged until you both agree.
                 </div>
-                <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Reviewers matching this category</div>
+                <div style="font-size:13px;font-weight:600;margin-bottom:4px;">Choose your Expert Reviewer</div>
+                <div style="font-size:12px;color:var(--muted-foreground);margin-bottom:10px;">
+                  Only reviewers who cover this category are shown. Your project stays a draft until they accept,
+                  and only they can see its audit.
+                </div>
                 <div id="auditExpertList"></div>
               </div>
             </div>
@@ -789,6 +789,7 @@
         auditEnabled: formState.auditEnabled,
         auditFee: formState.auditEnabled ? (formState.auditFee || undefined) : undefined,
         auditDomain: formState.auditEnabled ? formState.category : undefined,
+        auditExpertId: formState.auditEnabled ? formState.auditExpertId : undefined,
         clientId: clientId,
         status: 'open',
       });

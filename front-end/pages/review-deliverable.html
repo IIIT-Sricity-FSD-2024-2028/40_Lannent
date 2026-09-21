@@ -63,6 +63,20 @@
 
       const task = Store.getTaskById(milestone.taskId);
       const worker = milestone.workerId ? Store.getUserById(milestone.workerId) : null;
+
+      // The Expert Reviewer's verdict on this work. The client releases escrow
+      // from this page, and previously had no sight of the audit at all — the
+      // report existed but was two clicks away under Reports.
+      // Match this milestone specifically, or a project-wide audit not yet
+      // pointed at one. Falling back to any engagement on the task showed
+      // another milestone's verdict on this page.
+      const _engagements = (Store.getAuditRequests() || [])
+        .filter(a => a.taskId === milestone.taskId && a.kind !== 'dispute-audit');
+      const _engagement = _engagements.find(a => a.milestoneId === milestone.id)
+        || _engagements.find(a => !a.milestoneId)
+        || null;
+      const _auditReport = _engagement ? Store.getAuditReportByRequest(_engagement.id) : null;
+      const _reviewer = _engagement && _engagement.expertId ? Store.getUserById(_engagement.expertId) : null;
       const deliverable = {
         project: task ? task.title : 'Unknown Project',
         milestone: milestone.title,
@@ -121,6 +135,76 @@
              <div style="font-size:13px;">No files attached to this submission.</div>
            </div>`;
 
+      // ── Expert Reviewer's verdict ──────────────────────────────────────
+      const VERDICTS = {
+        pass:        { label: 'Passed the technical audit',  bg:'#ecfdf5', border:'#a7f3d0', text:'#047857', icon:'check-circle-2' },
+        fail:        { label: 'Failed the technical audit',  bg:'#fef2f2', border:'#fecaca', text:'#b91c1c', icon:'x-circle' },
+        conditional: { label: 'Passed with conditions',      bg:'#fffbeb', border:'#fde68a', text:'#b45309', icon:'alert-triangle' },
+      };
+
+      function scoreBar(label, value) {
+        const v = Number(value) || 0;
+        return `
+          <div style="display:flex;align-items:center;gap:10px;font-size:12.5px;margin-bottom:6px;">
+            <span style="width:104px;color:var(--muted-foreground);flex:none;">${label}</span>
+            <span style="flex:1;height:6px;background:var(--secondary);border-radius:3px;overflow:hidden;">
+              <span style="display:block;width:${(v / 5) * 100}%;height:100%;background:#6366f1;"></span>
+            </span>
+            <span style="width:26px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;">${v}/5</span>
+          </div>`;
+      }
+
+      let auditHtml = '';
+      if (_auditReport && _auditReport.verdict) {
+        const v = VERDICTS[_auditReport.verdict] || VERDICTS.conditional;
+        const scores = ['codequality','security','performance','documentation']
+          .filter(k => _auditReport[k] != null);
+        const avg = scores.length
+          ? (scores.reduce((a, k) => a + Number(_auditReport[k] || 0), 0) / scores.length).toFixed(1)
+          : null;
+
+        auditHtml = `
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;flex-wrap:wrap;">
+              <h3 style="font-size:15px;font-weight:600;">Expert Reviewer's verdict</h3>
+              <a href="expert-report-audit.html?id=${_engagement.id}" style="font-size:12.5px;color:var(--muted-foreground);text-decoration:underline;text-underline-offset:2px;">Read the full report</a>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;background:${v.bg};border:1px solid ${v.border};margin-bottom:16px;">
+              <i data-lucide="${v.icon}" style="width:22px;height:22px;color:${v.text};flex:none;"></i>
+              <div>
+                <div style="font-size:14px;font-weight:700;color:${v.text};">${v.label}</div>
+                <div style="font-size:12.5px;color:${v.text};opacity:.85;">
+                  Reviewed by ${_reviewer ? _reviewer.name : 'an Expert Reviewer'}${avg ? ' · overall ' + avg + '/5' : ''}
+                </div>
+              </div>
+            </div>
+
+            ${scores.length ? `<div style="margin-bottom:14px;">
+              ${scoreBar('Code quality', _auditReport.codequality)}
+              ${scoreBar('Security', _auditReport.security)}
+              ${scoreBar('Performance', _auditReport.performance)}
+              ${scoreBar('Documentation', _auditReport.documentation)}
+            </div>` : ''}
+
+            ${_auditReport.findings ? `
+              <div style="font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted-foreground);margin-bottom:6px;">Findings</div>
+              <div style="font-size:13px;line-height:1.65;color:var(--muted-foreground);">${_auditReport.findings}</div>` : ''}
+          </div>`;
+      } else if (_engagement && !['declined','cancelled'].includes(_engagement.status)) {
+        auditHtml = `
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px 24px;margin-bottom:20px;display:flex;align-items:center;gap:12px;">
+            <i data-lucide="clock" style="width:20px;height:20px;color:var(--muted-foreground);flex:none;"></i>
+            <div>
+              <div style="font-size:14px;font-weight:600;">Technical audit in progress</div>
+              <div style="font-size:12.5px;color:var(--muted-foreground);">
+                ${_reviewer ? _reviewer.name + ' has' : 'The Expert Reviewer has'} not filed a report yet.
+                You can still approve, but the audit will not have informed your decision.
+              </div>
+            </div>
+          </div>`;
+      }
+
       const content = `
         <div style="margin-bottom:16px;">
           <a href="${role === 'expert' ? 'expert-audit-requests.html' : 'client-my-projects.html'}" style="display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--muted-foreground);transition:color 0.15s;" onmouseenter="this.style.color='var(--foreground)'" onmouseleave="this.style.color='var(--muted-foreground)'">
@@ -147,6 +231,7 @@
 
         <div class="review-layout">
           <div>
+            ${auditHtml}
             <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
               <h3 style="font-size:15px;font-weight:600;margin-bottom:4px;">Submitted Files</h3>
               <div style="font-size:13px;color:var(--muted-foreground);margin-bottom:16px;">${deliverable.project} · ${deliverable.milestone}</div>

@@ -209,6 +209,20 @@
         return;
       }
 
+      // Real escrow for this project. The card previously hardcoded
+      // $4,500 released / $3,500 remaining / 56% for every project.
+      const _esc = Store.getEscrowForTask(task.id) || { projectHeld: 0 };
+      const _released = (Store.getTransactions() || [])
+        .filter(t => t.type === 'milestone-release' && t.taskId === task.id)
+        .reduce((sum, t) => sum + (t.grossAmount != null ? t.grossAmount : (t.amount || 0)), 0);
+      const _fundedTotal = _released + (_esc.projectHeld || 0);
+      const money = n => '$' + Number(n || 0).toLocaleString();
+      const escrowView = {
+        released: money(_released),
+        held: money(_esc.projectHeld),
+        pct: _fundedTotal > 0 ? Math.round((_released / _fundedTotal) * 100) : 0,
+      };
+
       const client = Store.getUserById(task.clientId) || { name:'Client', avatar:'CL', avatarColor:'linear-gradient(135deg,#94a3b8,#64748b)' };
       const worker = Store.getUserById(task.workerId) || { name:'Unassigned', avatar:'UN', avatarColor:'linear-gradient(135deg,#a855f7,#9333ea)' };
 
@@ -358,14 +372,13 @@
               <h3 style="font-size:14px;font-weight:600;margin-bottom:12px;color:#065f46;">Escrow Status</h3>
               <div style="margin-bottom:8px;">
                 <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px;">
-                  <span style="color:#065f46;">Released</span><span style="font-weight:700;color:#059669;">$4,500</span>
-                </div>
-                <div style="height:8px;border-radius:9999px;background:rgba(16,185,129,0.2);overflow:hidden;">
-                  <div style="width:56%;height:100%;border-radius:9999px;background:linear-gradient(90deg,#10b981,#34d399);"></div>
-                </div>
-              </div>
-              <div style="display:flex;justify-content:space-between;font-size:12px;">
-                <span style="color:#065f46;">Remaining</span><span style="font-weight:700;color:#6366f1;">$3,500</span>
+              <span style="color:#065f46;">Released</span><span style="font-weight:700;color:#059669;">${escrowView.released}</span>
+            </div>
+            <div style="height:6px;background:#d1fae5;border-radius:3px;overflow:hidden;margin:8px 0;">
+              <div style="width:${escrowView.pct}%;height:100%;background:linear-gradient(90deg,#10b981,#34d399);"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;">
+              <span style="color:#065f46;">Remaining</span><span style="font-weight:700;color:#6366f1;">${escrowView.held}</span>
               </div>
             </div>
           </div>
