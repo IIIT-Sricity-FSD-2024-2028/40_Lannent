@@ -163,7 +163,7 @@
       const session = Auth.getCurrentUser();
 
       function loadReports() {
-        const auditReports = Store.getAuditReports().filter(r => r.verdict).map(r => ({
+        const auditReports = Store.getAuditReports().filter(r => r.verdict && r.expertId === session.userId).map(r => ({
           id: r.id,
           auditRequestId: r.auditRequestId,
           type: 'Technical Audit',
@@ -178,7 +178,7 @@
           raw: r
         }));
 
-        const disputeReports = Store.getDisputes().filter(d => d.status === 'resolved' && d.expertId).map(d => ({
+        const disputeReports = Store.getDisputes().filter(d => d.status === 'resolved' && d.expertId === session.userId).map(d => ({
           id: 'dr-' + d.id,
           type: 'Dispute Resolution',
           project: d.project || 'Unknown Project',
@@ -241,8 +241,8 @@
                 <span style="font-size:12px;padding:3px 10px;border-radius:99px;font-weight:500;background:${r.type==='Technical Audit'?'#eef2ff':'#faf5ff'};color:${r.type==='Technical Audit'?'#4f46e5':'#7c3aed'};">${r.type}</span>
               </td>
               <td style="padding:14px 16px;">
-                <div style="font-size:13px;font-weight:500;">${r.project}</div>
-                <div style="font-size:12px;color:var(--muted-foreground);">${r.milestone}</div>
+                <div style="font-size:13px;font-weight:500;">${escapeHtml(r.project)}</div>
+                <div style="font-size:12px;color:var(--muted-foreground);">${escapeHtml(r.milestone)}</div>
               </td>
               <td style="padding:14px 16px;font-size:13px;color:var(--muted-foreground);">${r.worker}</td>
               <td style="padding:14px 16px;"><span class="badge ${verdictBadge(r.verdict)}">${r.verdict}</span></td>

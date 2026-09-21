@@ -151,9 +151,9 @@
       btn.textContent = 'Signing in...'; btn.disabled = true;
       setTimeout(() => {
         // ── Check expert application status FIRST ──
-        if (typeof Store !== 'undefined' && typeof Store.getExpertApplicationByEmail === 'function') {
-          const app = Store.getExpertApplicationByEmail(email);
-          if (app) {
+        if (typeof Store !== 'undefined' && typeof Store.getExpertApplicationStatus === 'function') {
+          const app = Store.getExpertApplicationStatus(email);
+          if (app.exists) {
             if (app.status === 'pending') {
               Validate.showError('expertEmail', 'Your application is under review. You will be notified once approved.');
               btn.textContent = 'Login'; btn.disabled = false;

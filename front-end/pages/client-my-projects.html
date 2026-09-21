@@ -47,6 +47,9 @@
           'open': ['badge-gray','Open'],
           'in-progress': ['badge-blue','In Progress'],
           'completed': ['badge-green','Completed'],
+          // An audited project is held as a draft until a reviewer accepts.
+          'draft': ['badge-amber','Draft — awaiting audit'],
+          'cancelled': ['badge-gray','Cancelled'],
         };
         const [cls, label] = map[status] || ['badge-gray', status];
         return `<span class="badge ${cls}">${label}</span>`;
@@ -112,7 +115,7 @@
         return `
           <div class="project-card" style="display:flex;flex-direction:column;" id="card-${p.id}">
             <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;">
-              <h3 style="font-size:16px;font-weight:600;letter-spacing:-0.01em;flex:1;margin-right:12px;">${p.name}</h3>
+              <h3 style="font-size:16px;font-weight:600;letter-spacing:-0.01em;flex:1;margin-right:12px;">${escapeHtml(p.name)}</h3>
               <div style="display:flex;align-items:center;gap:6px;">
                 ${statusBadge(p.status)}
                 <button onclick="openEditModal('${p.id}')" title="Edit" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--muted-foreground);border-radius:6px;" onmouseenter="this.style.background='var(--secondary)'" onmouseleave="this.style.background='none'">
@@ -126,7 +129,7 @@
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
               <div style="width:32px;height:32px;border-radius:50%;background:${p.workerColor};display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;">${p.workerAvatar}</div>
               <span style="font-size:13px;color:var(--foreground);">${p.worker}</span>
-              ${p.auditEnabled ? '<span style="font-size:11px;background:#f3e8ff;color:#7c3aed;padding:2px 8px;border-radius:99px;font-weight:500;margin-left:4px;">Audit On</span>' : ''}
+              ${p.auditEnabled ? `<a href="client-audit-offers.html" style="font-size:11px;background:#f3e8ff;color:#7c3aed;padding:2px 8px;border-radius:99px;font-weight:500;margin-left:4px;text-decoration:none;">${p.status === 'draft' ? 'Audit pending →' : 'Audit On'}</a>` : ''}
             </div>
             <div style="margin-bottom:16px;">
               <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
@@ -320,7 +323,7 @@
           Validate.toast('Only open tasks with no assigned worker can be deleted.', 'error');
           return;
         }
-        Validate.confirm(`Delete "${task.title}"? Any escrow funds will be refunded to your wallet.`, () => {
+        Validate.confirm(`Delete "${escapeHtml(task.title)}"? Any escrow funds will be refunded to your wallet.`, () => {
           // Refund escrow to client
           if (task.budget && task.budget > 0 && task.clientId) {
             Store.addToWallet(task.clientId, task.budget);
@@ -330,7 +333,7 @@
               fromId: 'escrow',
               toId: task.clientId,
               taskId: task.id,
-              description: `Escrow refund — task "${task.title}" deleted`,
+              description: `Escrow refund — task "${escapeHtml(task.title)}" deleted`,
             });
           }
           Store.deleteTask(id);

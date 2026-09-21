@@ -16,6 +16,11 @@ export const SEED_USERS = [
   { id: 'u6', name: 'Michael Chen', email: 'michael@gmail.com', password: 'Password@123', role: 'worker', avatar: 'MC', avatarColor: 'linear-gradient(135deg,#ec4899,#be185d)', status: 'active', joinDate: 'Feb 10, 2026', walletBalance: 9800 },
   { id: 'u7', name: 'Emily Rodriguez', email: 'emily@gmail.com', password: 'Password@123', role: 'worker', avatar: 'ER', avatarColor: 'linear-gradient(135deg,#10b981,#059669)', status: 'active', joinDate: 'Feb 15, 2026', walletBalance: 7300 },
   { id: 'u8', name: 'Bob Client', email: 'bob@gmail.com', password: 'Password@123', role: 'client', avatar: 'BC', avatarColor: 'linear-gradient(135deg,#f59e0b,#d97706)', status: 'active', joinDate: 'Mar 1, 2026', walletBalance: 15000 },
+  { id: 'u9', name: 'Priya Nair', email: 'priya@gmail.com', password: 'Password@123', role: 'expert', avatar: 'PN', avatarColor: 'linear-gradient(135deg,#0ea5e9,#0284c7)', status: 'active', joinDate: 'Feb 8, 2026', walletBalance: 3200 },
+  { id: 'u10', name: 'Tom Becker', email: 'tom@gmail.com', password: 'Password@123', role: 'expert', avatar: 'TB', avatarColor: 'linear-gradient(135deg,#f97316,#ea580c)', status: 'active', joinDate: 'Feb 22, 2026', walletBalance: 1800 },
+  { id: 'u11', name: 'Nadia Osei', email: 'admin@gmail.com', password: 'Admin@123', role: 'revenue-admin', avatar: 'NO', avatarColor: 'linear-gradient(135deg,#0d9488,#0f766e)', status: 'active', joinDate: 'Jan 1, 2026', walletBalance: 0 },
+  { id: 'u12', name: 'Idris Bello', email: 'intake@gmail.com', password: 'Intake@123', role: 'intake-admin', avatar: 'IB', avatarColor: 'linear-gradient(135deg,#7c3aed,#5b21b6)', status: 'active', joinDate: 'Jan 1, 2026', walletBalance: 0 },
+  { id: 'u13', name: 'Hana Vogel', email: 'compliance@gmail.com', password: 'Compliance@123', role: 'compliance-admin', avatar: 'HV', avatarColor: 'linear-gradient(135deg,#b45309,#92400e)', status: 'active', joinDate: 'Jan 1, 2026', walletBalance: 0 },
 ];
 
 // ── CLIENTS (1:1 with USERS where role='client') ──────────────────────────────
@@ -34,7 +39,9 @@ export const SEED_WORKERS = [
 
 // ── EXPERTS (1:1 with USERS where role='expert') ──────────────────────────────
 export const SEED_EXPERTS = [
-  { userId: 'u3', specialization: 'Full-Stack & Security', reviewsDone: 47 },
+  { userId: 'u3', specialization: 'Full-Stack & Security', reviewsDone: 47, hourlyRate: 120, domains: ['Web Development', 'Backend / API', 'Security'] },
+  { userId: 'u9', specialization: 'UI/UX & Design Systems', reviewsDone: 22, hourlyRate: 95, domains: ['UI/UX Design', 'Web Development'] },
+  { userId: 'u10', specialization: 'Mobile & Performance', reviewsDone: 15, hourlyRate: 105, domains: ['Mobile Development', 'AI / Machine Learning'] },
 ];
 
 // ============================================================================
@@ -82,9 +89,9 @@ export const SEED_PROPOSALS = [
 ];
 
 export const SEED_AUDIT_REQUESTS = [
-  { id: 'ar1', taskId: 't2', milestoneId: 'm6', workerId: 'u6', clientId: 'u1', expertId: 'u3', status: 'Completed', severity: 'High', project: 'Mobile App Development', worker: 'Michael Chen', milestone: 'Core UI Implementation', createdAt: '2026-03-25', dueDate: '2026-04-01' },
-  { id: 'ar2', taskId: 't1', milestoneId: 'm3', workerId: 'u5', clientId: 'u1', expertId: null, status: 'Pending', severity: 'Medium', project: 'E-commerce Website Redesign', worker: 'Sarah Johnson', milestone: 'Backend Integration', createdAt: '2026-03-28', dueDate: '2026-04-05' },
-  { id: 'ar3', taskId: 't4', milestoneId: 'm9', workerId: 'u7', clientId: 'u1', expertId: 'u3', status: 'Completed', severity: 'Low', project: 'Content Management System', worker: 'Emily Rodriguez', milestone: 'User Permission System', createdAt: '2026-03-20', dueDate: '2026-03-27' },
+  { id: 'ar1', kind: 'project-audit', taskId: 't2', milestoneId: 'm6', workerId: 'u6', clientId: 'u1', expertId: 'u3', disputeId: null, status: 'in-progress', feePaid: true, paidAt: '2026-03-28', agreedAmount: 350, offers: [{ id: 'of1', offeredBy: 'client', amount: 350, note: 'Standard rate for a milestone audit.', status: 'accepted', createdAt: '2026-03-25' }], severity: 'High', project: 'Mobile App Development', worker: 'Michael Chen', milestone: 'Core UI Implementation', createdAt: '2026-03-25', dueDate: '2026-04-01', auditedMilestoneIds: ['m6'] },
+  { id: 'ar2', kind: 'project-audit', taskId: 't1', milestoneId: 'm3', workerId: 'u5', clientId: 'u1', expertId: null, disputeId: null, status: 'preview-sent', agreedAmount: null, offers: [], severity: 'Medium', project: 'E-commerce Website Redesign', worker: 'Sarah Johnson', milestone: 'Backend Integration', createdAt: '2026-03-28', dueDate: '2026-04-05', auditedMilestoneIds: [] },
+  { id: 'ar3', kind: 'project-audit', taskId: 't4', milestoneId: 'm9', workerId: 'u7', clientId: 'u1', expertId: 'u3', disputeId: null, status: 'in-progress', feePaid: true, paidAt: '2026-03-26', agreedAmount: 280, offers: [{ id: 'of2', offeredBy: 'expert', amount: 280, note: 'Scoped to the permission model only.', status: 'accepted', createdAt: '2026-03-20' }], severity: 'Low', project: 'Content Management System', worker: 'Emily Rodriguez', milestone: 'User Permission System', createdAt: '2026-03-20', dueDate: '2026-03-27', auditedMilestoneIds: ['m9'] },
 ];
 
 export const SEED_AUDIT_REPORTS = [
@@ -104,6 +111,18 @@ export const SEED_TRANSACTIONS = [
   { id: 'tx4', type: 'escrow-lock', amount: 4800, fromId: 'u1', toId: 'escrow', taskId: 't2', milestoneId: null, description: 'Escrow funded for Mobile App Development', status: 'completed', createdAt: '2026-03-03' },
   { id: 'tx5', type: 'milestone-release', amount: 800, fromId: 'escrow', toId: 'u6', taskId: 't2', milestoneId: 'm5', description: 'Payment for App Architecture & Setup', status: 'completed', createdAt: '2026-03-10' },
   { id: 'tx6', type: 'deposit', amount: 10000, fromId: 'external', toId: 'u1', taskId: null, milestoneId: null, description: 'Wallet top-up via bank transfer', status: 'completed', createdAt: '2026-02-28' },
+  // t4 and t6 are in progress, so their escrow must be funded for the held
+  // balance to cover their remaining milestones.
+  { id: 'tx7', type: 'escrow-lock', amount: 3500, fromId: 'u1', toId: 'escrow', taskId: 't4', milestoneId: null, description: 'Escrow funded for Content Management System', status: 'completed', createdAt: '2026-03-08' },
+  { id: 'tx8', type: 'milestone-release', amount: 700, fromId: 'escrow', toId: 'u7', taskId: 't4', milestoneId: 'm7', description: 'Payment for Database Schema Design', status: 'completed', createdAt: '2026-03-17' },
+  { id: 'tx9', type: 'milestone-release', amount: 1200, fromId: 'escrow', toId: 'u7', taskId: 't4', milestoneId: 'm8', description: 'Payment for Content Editor Module', status: 'completed', createdAt: '2026-03-24' },
+  { id: 'tx10', type: 'milestone-release', amount: 900, fromId: 'escrow', toId: 'u7', taskId: 't4', milestoneId: 'm9', description: 'Payment for User Permission System', status: 'completed', createdAt: '2026-03-29' },
+  { id: 'tx11', type: 'escrow-lock', amount: 2200, fromId: 'u8', toId: 'escrow', taskId: 't6', milestoneId: null, description: 'Escrow funded for UI Design System', status: 'completed', createdAt: '2026-03-12' },
+  // Audit escrow for the two historical audits that were completed and paid.
+  { id: 'tx12', type: 'audit-escrow-lock', amount: 350, fromId: 'u1', toId: 'escrow', taskId: 't2', milestoneId: null, description: 'Escrow funded for technical audit', status: 'completed', createdAt: '2026-03-25' },
+  { id: 'tx13', type: 'audit-release', amount: 315, grossAmount: 350, feeAmount: 35, netAmount: 315, feeType: 'expert-service', fromId: 'escrow', toId: 'u3', taskId: 't2', milestoneId: null, auditRequestId: 'ar1', description: 'Audit fee released ($350 less 10% commission)', status: 'completed', createdAt: '2026-03-28' },
+  { id: 'tx14', type: 'audit-escrow-lock', amount: 280, fromId: 'u1', toId: 'escrow', taskId: 't4', milestoneId: null, description: 'Escrow funded for technical audit', status: 'completed', createdAt: '2026-03-20' },
+  { id: 'tx15', type: 'audit-release', amount: 252, grossAmount: 280, feeAmount: 28, netAmount: 252, feeType: 'expert-service', fromId: 'escrow', toId: 'u3', taskId: 't4', milestoneId: null, auditRequestId: 'ar3', description: 'Audit fee released ($280 less 10% commission)', status: 'completed', createdAt: '2026-03-26' },
 ];
 
 export const SEED_EXPERT_APPLICATIONS = [

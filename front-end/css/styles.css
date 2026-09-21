@@ -1890,3 +1890,153 @@ tr:hover td { background: rgba(0,0,0,0.01); }
   .stats-grid { grid-template-columns: 1fr; }
   .quick-actions { grid-template-columns: 1fr 1fr; }
 }
+
+/* ── Offline banner ───────────────────────────────────────────────────────
+   Shown by initDashboard() when Store could not reach the API, so an
+   unreachable backend reads as a diagnosable state and not a blank page. */
+.offline-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  border: 1px solid #fbbf24;
+  background: #fffbeb;
+  color: #78350f;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.offline-banner strong { font-weight: 700; }
+.offline-banner code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  background: rgba(120, 53, 15, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* Draft projects awaiting their technical audit. */
+.badge.badge-amber { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+
+/* ── Data visualisation ───────────────────────────────────────────────────
+   Slots come from the validated categorical palette (see dataviz skill),
+   stepped for a LIGHT surface. Lannent commits to a single light theme — the
+   whole stylesheet has no dark mode — so the charts do too. Adding dark chart
+   steps here would paint dark-surface-tuned hues onto a white page, which is
+   worse than not having them. If the app ever gains a dark theme, add the dark
+   steps then and re-run the palette validator against the dark surface. */
+.viz {
+  --surface-1:      var(--card);
+  --series-1:       #2a78d6;
+  --series-2:       #eb6834;
+  --series-3:       #1baf7a;
+  --series-4:       #eda100;
+  --series-5:       #e87ba4;
+  --viz-grid:       rgba(15, 23, 42, 0.07);
+  --viz-axis:       rgba(15, 23, 42, 0.18);
+}
+
+.viz-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 22px; margin-bottom: 18px; }
+.viz-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 4px; flex-wrap: wrap; }
+.viz-title { font-size: 15px; font-weight: 700; }
+.viz-sub { font-size: 12.5px; color: var(--muted-foreground); margin-bottom: 18px; }
+.viz-plot { width: 100%; overflow-x: auto; }
+.viz-plot svg { display: block; max-width: 100%; }
+
+/* Grid and axes stay recessive. */
+.viz-grid-line { stroke: var(--viz-grid); stroke-width: 1; }
+.viz-axis-line { stroke: var(--viz-axis); stroke-width: 1; }
+.viz-tick { font-size: 11px; fill: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.viz-label { font-size: 11.5px; fill: var(--foreground); }
+.viz-value { font-size: 11.5px; fill: var(--foreground); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Legend — identity is never colour alone; every swatch carries its name. */
+.viz-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 14px; }
+.viz-legend-item { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted-foreground); }
+.viz-swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+
+/* Tooltip */
+.viz-tip {
+  position: fixed; pointer-events: none; z-index: 400; opacity: 0;
+  transition: opacity 0.12s; background: var(--foreground); color: var(--background);
+  padding: 8px 11px; border-radius: 8px; font-size: 12px; line-height: 1.5;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.22); white-space: nowrap;
+}
+.viz-tip.on { opacity: 1; }
+.viz-tip b { font-variant-numeric: tabular-nums; }
+
+/* Table view — the relief for low-contrast slots, and a data escape hatch. */
+.viz-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+table.viz-table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 520px; }
+table.viz-table th {
+  text-align: left; font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--muted-foreground); font-weight: 600; padding: 10px 14px;
+  border-bottom: 1px solid var(--border); background: var(--secondary); white-space: nowrap;
+}
+table.viz-table td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+table.viz-table tr:last-child td { border-bottom: none; }
+table.viz-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.viz-toggle {
+  background: none; border: none; color: var(--muted-foreground); font-size: 12px;
+  cursor: pointer; padding: 4px 0; text-decoration: underline; text-underline-offset: 2px;
+}
+.viz-toggle:hover { color: var(--foreground); }
+
+/* ── Expert Reviewer picker (js/expert-picker.js) ────────────────────────── */
+.xp-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; margin-bottom: 8px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--card); cursor: pointer; transition: border-color .15s, background .15s;
+}
+.xp-card:hover { border-color: var(--muted-foreground); }
+.xp-card.xp-on { border-color: #6366f1; background: #eef2ff; }
+.xp-card:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
+.xp-radio {
+  width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border);
+  flex: none; display: flex; align-items: center; justify-content: center;
+}
+.xp-card.xp-on .xp-radio { border-color: #6366f1; }
+.xp-dot { width: 9px; height: 9px; border-radius: 50%; background: #6366f1; }
+.xp-avatar {
+  width: 36px; height: 36px; border-radius: 50%; flex: none; color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+}
+.xp-avatar-lg { width: 52px; height: 52px; font-size: 16px; }
+.xp-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.xp-name { font-size: 13.5px; font-weight: 600; }
+.xp-meta { font-size: 12px; color: var(--muted-foreground); }
+.xp-profile {
+  background: none; border: 1px solid var(--border); border-radius: 8px;
+  padding: 5px 10px; font-size: 12px; color: var(--muted-foreground);
+  cursor: pointer; flex: none; font-family: inherit;
+}
+.xp-profile:hover { color: var(--foreground); border-color: var(--muted-foreground); }
+
+.xp-modal {
+  display: none; position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,.4); backdrop-filter: blur(4px);
+  align-items: center; justify-content: center;
+}
+.xp-modal-card {
+  background: var(--card); border-radius: 20px; padding: 26px;
+  width: 100%; max-width: 440px; margin: 0 16px; box-shadow: 0 32px 80px rgba(0,0,0,.18);
+}
+.xp-modal-head { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.xp-modal-name { font-size: 17px; font-weight: 700; }
+.xp-close {
+  margin-left: auto; background: none; border: none; font-size: 24px; line-height: 1;
+  color: var(--muted-foreground); cursor: pointer; padding: 0 4px;
+}
+.xp-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+.xp-stats > div { background: var(--secondary); border-radius: 10px; padding: 12px; text-align: center; }
+.xp-stat-v { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.xp-stat-k { font-size: 11px; color: var(--muted-foreground); margin-top: 2px; }
+.xp-section-k {
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted-foreground); margin-bottom: 8px;
+}
+.xp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 22px; }
+.xp-chip { font-size: 12px; padding: 4px 10px; border-radius: 7px; background: var(--secondary); }
+.xp-modal-actions { display: flex; gap: 10px; justify-content: flex-end; }

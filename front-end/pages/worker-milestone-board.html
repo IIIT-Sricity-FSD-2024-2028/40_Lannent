@@ -59,7 +59,7 @@
       return `
         <div class="kanban-card">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;">
-            <div class="card-title" style="flex:1;margin-bottom:0;">${m.title}</div>
+            <div class="card-title" style="flex:1;margin-bottom:0;">${escapeHtml(m.title)}</div>
             <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:9999px;margin-left:8px;background:${pc}20;color:${pc};white-space:nowrap;">${m.priority}</span>
           </div>
           <p style="font-size:12px;color:var(--muted-foreground);line-height:1.5;margin-bottom:10px;">${m.desc}</p>

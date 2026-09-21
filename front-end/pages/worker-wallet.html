@@ -53,7 +53,7 @@
         const msList = Store.getMilestonesByTask(t.id);
         msList.forEach(m => {
           if (RELEASED_MS.includes(m.status)) {
-            totalEarned += (m.budget || 0);
+            // Counted from the ledger below, not from the gross milestone budget.
           } else if (PENDING_MS.includes(m.status)) {
             pending += (m.budget || 0);
           } else if (ESCROW_MS.includes(m.status)) {
@@ -62,8 +62,6 @@
         });
       });
 
-      const withdrawals = userTxs.filter(t => t.type === 'withdrawal').reduce((sum, t) => sum + (Math.abs(t.amount) || 0), 0);
-      totalEarned -= withdrawals;
 
       // Build combined transactions: user's own txs + milestone-releases for their tasks
       const releaseTxs = allTxs.filter(t => t.type === 'milestone-release' && workerTaskIds.has(t.taskId));
@@ -96,7 +94,17 @@
         };
       });
 
-      return { totalEarned, pending, inEscrow, transactions };
+      // Available = the authoritative server-side wallet balance, not a derived figure.
+      const available = user ? (user.walletBalance || 0) : 0;
+
+      // Total earned is what actually reached this worker: the NET of every
+      // release, after the platform's service fee. Summing milestone budgets
+      // reported the gross and disagreed with the rows shown beneath it.
+      totalEarned = allTxs
+        .filter(t => t.type === 'milestone-release' && t.toId === userId)
+        .reduce((sum, t) => sum + (t.netAmount != null ? t.netAmount : (t.amount || 0)), 0);
+
+      return { totalEarned, pending, inEscrow, available, transactions };
     }
 
     function renderTxRows(transactions, filter) {
@@ -110,8 +118,8 @@
               <i data-lucide="${s.icon}" style="width:18px;height:18px;color:${s.color};"></i>
             </div>
             <div style="flex:1;min-width:0;">
-              <div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.project}</div>
-              <div style="font-size:12px;color:var(--muted-foreground);">${e.milestone} \u00b7 ${e.date}</div>
+              <div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.project)}</div>
+              <div style="font-size:12px;color:var(--muted-foreground);">${escapeHtml(e.milestone)} \u00b7 ${e.date}</div>
             </div>
             <span class="badge ${s.cls}">${e.status}</span>
             <div style="text-align:right;flex-shrink:0;min-width:80px;">
@@ -126,8 +134,8 @@
         <div class="wallet-hero" style="grid-template-columns:1fr;">
           <div class="wallet-hero-card" style="background:linear-gradient(135deg,#6366f1,#4f46e5);">
             <div style="position:relative;z-index:1;">
-              <div style="font-size:13px;font-weight:500;opacity:0.85;margin-bottom:8px;">Total Earned</div>
-              <div id="totalEarnedDisplay" style="font-size:38px;font-weight:900;letter-spacing:-0.03em;margin-bottom:20px;">$${d.totalEarned.toLocaleString()}</div>
+              <div style="font-size:13px;font-weight:500;opacity:0.85;margin-bottom:8px;">Available Balance</div>
+              <div id="availableBalanceDisplay" style="font-size:38px;font-weight:900;letter-spacing:-0.03em;margin-bottom:20px;">$${d.available.toLocaleString()}</div>
               <button onclick="showWithdrawModal()" style="padding:9px 22px;border-radius:10px;background:rgba(255,255,255,0.2);color:white;border:1px solid rgba(255,255,255,0.3);font-size:13px;font-weight:600;cursor:pointer;" onmouseenter="this.style.background='rgba(255,255,255,0.3)'" onmouseleave="this.style.background='rgba(255,255,255,0.2)'">Withdraw Funds</button>
             </div>
           </div>
@@ -181,7 +189,7 @@
               <button onclick="document.getElementById('withdrawModal').style.display='none'" style="width:34px;height:34px;border-radius:10px;border:none;background:#e9e7ff;color:#5f46ff;cursor:pointer;font-size:22px;line-height:1;">\u00d7</button>
             </div>
             <div style="background:#f7f4ff;border:1px solid #e5dbff;border-radius:18px;padding:18px;margin-bottom:20px;">
-              <div style="font-size:14px;font-weight:700;color:#6b46ff;margin-bottom:8px;">Total Earned (Withdrawable)</div>
+              <div style="font-size:14px;font-weight:700;color:#6b46ff;margin-bottom:8px;">Available Balance</div>
               <div id="availableBalanceDisplayLarge" style="font-size:40px;font-weight:800;color:#5f46ff;">$0</div>
             </div>
             <div style="margin-bottom:16px;">
@@ -201,7 +209,7 @@
             </div>
             <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;padding:14px 16px;margin-bottom:20px;">
               <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="color:#6b7280;">Amount</span><span id="previewAmount" style="font-weight:700;">$0.00</span></div>
-              <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="color:#6b7280;">Fee (1%)</span><span id="previewFee" style="font-weight:700;color:#ef4444;">$0.00</span></div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="color:#6b7280;">Payout fee (0.25% + $0.25)</span><span id="previewFee" style="font-weight:700;color:#ef4444;">$0.00</span></div>
               <div style="height:1px;background:#eef2ff;margin:8px 0;"></div>
               <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:800;"><span>You'll Receive</span><span id="previewNet" style="color:#059669;">$0.00</span></div>
             </div>
@@ -234,7 +242,7 @@
 
       window.showWithdrawModal = function() {
         const d = computeWorkerWalletData(_workerUserId);
-        const bal = d.totalEarned;
+        const bal = d.available;
         const el = id => document.getElementById(id);
         if (el('availableBalanceDisplayLarge')) el('availableBalanceDisplayLarge').textContent = '$' + bal.toLocaleString();
         if (el('withdrawMaxAmount')) el('withdrawMaxAmount').textContent = bal;
@@ -250,8 +258,8 @@
 
       window.updateWithdrawPreview = function() {
         const amt = parseFloat(document.getElementById('withdrawAmount')?.value) || 0;
-        const fee = +(amt * 0.01).toFixed(2);
-        const net = +(amt - fee).toFixed(2);
+        const q = Store.Fees.withdrawal(amt);
+        const fee = q.fee, net = q.net;
         const fmt = n => '$' + n.toFixed(2);
         const el = id => document.getElementById(id);
         if (el('previewAmount')) el('previewAmount').textContent = fmt(amt);
@@ -262,7 +270,7 @@
       window.confirmWithdraw = function() {
         const amt = parseFloat(document.getElementById('withdrawAmount')?.value) || 0;
         const d = computeWorkerWalletData(_workerUserId);
-        const bal = d.totalEarned;
+        const bal = d.available;
         const errEl = document.getElementById('withdrawAmountErr');
         if (errEl) { errEl.style.display='none'; errEl.textContent=''; }
         document.getElementById('withdrawAmount').style.border = '2px solid #e5e7eb';
@@ -273,19 +281,26 @@
           return;
         }
         if (amt > bal) {
-          if (errEl) { errEl.textContent = 'Amount exceeds total earned.'; errEl.style.display='block'; }
+          if (errEl) { errEl.textContent = 'Amount exceeds your available balance of $' + bal.toLocaleString() + '.'; errEl.style.display='block'; }
           document.getElementById('withdrawAmount').style.border = '2px solid #ef4444';
           return;
         }
 
-        // Deduct wallet and create withdrawal transaction
-        Store.createTransaction({ type:'withdrawal', amount:amt, fromId:_workerUserId, toId:'external', description:'Withdrawal request', status:'completed', createdAt:new Date().toISOString().slice(0,10) });
+        // One call: the server debits the gross, keeps the payout fee and writes
+        // the ledger row, so a partial failure cannot leave the books unbalanced.
+        const result = Store.withdrawFromWallet(_workerUserId, amt);
+        if (!result) {
+          if (errEl) { errEl.textContent = 'Withdrawal failed. Your balance may have changed — reopen this dialog and try again.'; errEl.style.display='block'; }
+          document.getElementById('withdrawAmount').style.border = '2px solid #ef4444';
+          return;
+        }
 
         // Close modal and refresh all wallet data
         document.getElementById('withdrawModal').style.display = 'none';
         refreshWorkerWallet();
 
-        Validate.toast('Withdrawal of $' + amt.toLocaleString() + ' submitted successfully.', 'success');
+        Validate.toast('Withdrew $' + result.gross.toLocaleString() + ' — $' + result.net.toLocaleString()
+          + ' sent to your account after a $' + result.fee + ' payout fee.', 'success');
       };
     });
   </script>

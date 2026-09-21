@@ -10,9 +10,9 @@ export class CreateAuditReportDto {
   @IsString()
   taskId: string;
 
-  @ApiProperty({ example: 'm6' })
-  @IsString()
-  milestoneId: string;
+  @ApiPropertyOptional({ example: 'm6', description: 'Omitted for a whole-project or dispute audit' })
+  @IsOptional() @IsString()
+  milestoneId?: string;
 
   @ApiProperty({ example: 'u3' })
   @IsString()

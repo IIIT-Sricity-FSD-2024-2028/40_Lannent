@@ -32,111 +32,6 @@
       btn.classList.toggle('on');
     }
 
-    var paymentMethods = [
-      { id: 1, name: 'Visa Card', detail: '•••• 4242', icon: 'credit-card', color: '#2563eb', primary: true },
-      { id: 2, name: 'Bank Account', detail: 'Chase •••• 8901', icon: 'landmark', color: '#16a34a' },
-      { id: 3, name: 'PayPal', detail: 'alex.morgan@email.com', icon: 'mail', color: '#7c3aed' }
-    ];
-
-    function renderPaymentMethods() {
-      var list = document.getElementById('pmList');
-      if (!list) return;
-      list.innerHTML = paymentMethods.map(function(pm) {
-        return `
-          <div class="pm-card" data-pmid="${pm.id}">
-            <div class="pm-card-left">
-              <div class="pm-icon-wrap"><i data-lucide="${pm.icon}" style="color:${pm.color};"></i></div>
-              <div>
-                <div class="pm-name">${pm.name}${pm.primary ? ' <span class="badge-primary">Primary</span>' : ''}</div>
-                <div class="pm-detail">${pm.detail}</div>
-              </div>
-            </div>
-            <button class="btn-icon-del" onclick="removePM(this)"><i data-lucide="trash-2"></i></button>
-          </div>
-        `;
-      }).join('');
-      if (window.lucide) lucide.createIcons();
-    }
-
-    function removePM(btn) {
-      var card = btn.closest('.pm-card');
-      if (!card) return;
-      var id = parseInt(card.getAttribute('data-pmid'), 10);
-      paymentMethods = paymentMethods.filter(function(pm) { return pm.id !== id; });
-      renderPaymentMethods();
-      showToast('Payment method removed!');
-    }
-
-    function addPaymentMethod() {
-      var numberEl = document.getElementById('add-card-number');
-      var expiryEl = document.getElementById('add-card-expiry');
-      var cvcEl = document.getElementById('add-card-cvc');
-      if (!numberEl || !expiryEl || !cvcEl) return;
-
-      var number = numberEl.value.trim();
-      var expiry = expiryEl.value.trim();
-      var cvc = cvcEl.value.trim();
-
-      if (!number || !expiry || !cvc) {
-        showToast('Please fill in all payment fields.');
-        return;
-      }
-
-      var digits = number.replace(/\D/g, '');
-      if (digits.length < 4) {
-        showToast('Card number must include at least 4 digits.');
-        return;
-      }
-      var last4 = digits.slice(-4);
-
-      var newMethod = {
-        id: Date.now(),
-        name: 'Card •••• ' + last4,
-        detail: 'Expires ' + expiry,
-        icon: 'credit-card',
-        color: '#2563eb'
-      };
-
-      paymentMethods.push(newMethod);
-      renderPaymentMethods();
-
-      numberEl.value = '';
-      expiryEl.value = '';
-      cvcEl.value = '';
-
-      closeModal('addPaymentModal');
-      showToast('Payment method added!');
-    }
-
-    var loginSessions = [
-      { id: 1, device: 'MacBook Pro · Chrome', location: 'San Francisco, CA', time: '2 minutes ago', current: true, icon: 'monitor' },
-      { id: 2, device: 'iPhone 14 · Safari', location: 'San Francisco, CA', time: '3 hours ago', icon: 'smartphone' },
-      { id: 3, device: 'iPad Air · Safari', location: 'Oakland, CA', time: '2 days ago', icon: 'tablet-smartphone' }
-    ];
-
-    function renderLoginActivity() {
-      var container = document.getElementById('loginActivityList');
-      if (!container) return;
-      container.innerHTML = loginSessions.map(function(s) {
-        return `
-          <div class="activity-row">
-            <div class="act-icon"><i data-lucide="${s.icon}"></i></div>
-            <div>
-              <div class="act-device">${s.device}${s.current ? ' <span class="badge-current">Current</span>' : ''}</div>
-              <div class="act-meta">${s.location} · ${s.time}</div>
-            </div>
-          </div>
-        `;
-      }).join('');
-      if (window.lucide) lucide.createIcons();
-    }
-
-    function logoutAllDevices() {
-      loginSessions = [];
-      renderLoginActivity();
-      showToast('All devices logged out.');
-    }
-
     function openModal(id) {
       var el = document.getElementById(id);
       if (el) { el.classList.add('open'); if (window.lucide) lucide.createIcons(); }
@@ -145,15 +40,6 @@
     function closeModal(id) {
       var el = document.getElementById(id);
       if (el) el.classList.remove('open');
-    }
-
-    function enable2FA() {
-      closeModal('twoFAModal');
-      var badge = document.getElementById('twoFaBadge');
-      var btn   = document.getElementById('twoFaBtn');
-      if (badge) { badge.textContent = 'Enabled'; badge.className = 'badge-status badge-enabled'; }
-      if (btn)   btn.textContent = 'Manage 2FA';
-      showToast('Two-factor authentication enabled!');
     }
 
     function showToast(msg) {
@@ -512,7 +398,18 @@
       const session = Auth.getCurrentUser();
       const role = session?.role || 'client';
       const user = session ? Store.getUserById(session.userId) : null;
-      if (!user) return;
+      if (!user) {
+        // Bailing here used to leave a genuinely blank page.
+        renderEmptyState({
+          role: 'client',
+          activePath: 'profile-settings.html',
+          pageTitle: 'Settings',
+          message: 'Your profile could not be loaded. Check that the API is running, then reload.',
+          linkHref: 'client-dashboard.html',
+          linkLabel: 'Back to Dashboard',
+        });
+        return;
+      }
 
       const profile = {
         name: user.name || '',
@@ -570,13 +467,13 @@
               <div class="form-grid-2">
                 <div class="field-group">
                   <label>Full Name</label>
-                  <input type="text" class="field-input" value="${profile.name}" id="p-fullname">
+                  <input type="text" class="field-input" value="${escapeHtml(profile.name)}" id="p-fullname">
                 </div>
                 <div class="field-group">
                   <label>Email Address</label>
                   <div class="field-wrap">
                     <i data-lucide="mail" class="field-icon"></i>
-                    <input type="email" class="field-input with-icon" value="${profile.email}" id="p-email">
+                    <input type="email" class="field-input with-icon" value="${escapeHtml(profile.email)}" id="p-email">
                   </div>
                 </div>
                 <div class="field-group" style="grid-column: 1 / -1;">
@@ -608,7 +505,7 @@
               </div>
               <div class="field-group" style="margin-bottom:4px;">
                 <label>Bio</label>
-                <textarea class="field-input" rows="4" id="p-bio" oninput="updateCharCount()">${profile.bio}</textarea>
+                <textarea class="field-input" rows="4" id="p-bio" oninput="updateCharCount()">${escapeHtml(profile.bio)}</textarea>
               </div>
               <div class="char-count" id="bioCharCount">${profile.bio.length}/500 characters</div>
 
@@ -644,7 +541,7 @@
               <div class="form-grid-2">
                 <div class="field-group">
                   <label>Company Name</label>
-                  <input type="text" class="field-input" value="${company.name}" id="c-name">
+                  <input type="text" class="field-input" value="${escapeHtml(company.name)}" id="c-name">
                 </div>
                 <div class="field-group">
                   <label>Industry</label>

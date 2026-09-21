@@ -24,7 +24,10 @@ function initDashboard(config = {}) {
     { icon: 'plus-circle', label: 'Post Task', path: 'post-task.html' },
     { icon: 'user-plus', label: 'Hire Workers', path: 'hire-gig-workers.html' },
     { icon: 'users', label: 'Worker Applications', path: 'worker-applications.html' },
+    { icon: 'shield-check', label: 'Audit Offers', path: 'client-audit-offers.html' },
     { icon: 'wallet', label: 'Wallet', path: 'client-wallet.html' },
+    { icon: 'message-square', label: 'Messages', path: 'messages.html' },
+    { icon: 'file-text', label: 'Reports', path: 'milestone-reports.html' },
     { icon: 'settings', label: 'Settings', path: 'profile-settings.html' },
   ];
   const workerItems = [
@@ -34,6 +37,8 @@ function initDashboard(config = {}) {
     { icon: 'mail', label: 'Invitations', path: 'worker-invitations.html' },
     { icon: 'file-text', label: 'My Proposals', path: 'my-proposals.html' },
     { icon: 'wallet', label: 'Wallet', path: 'worker-wallet.html' },
+    { icon: 'message-square', label: 'Messages', path: 'messages.html' },
+    { icon: 'file-text', label: 'Reports', path: 'milestone-reports.html' },
     { icon: 'settings', label: 'Settings', path: 'worker-settings.html' },
   ];
   const expertItems = [
@@ -41,23 +46,58 @@ function initDashboard(config = {}) {
     { icon: 'clipboard-check', label: 'Audit Requests', path: 'expert-audit-requests.html' },
     { icon: 'scale', label: 'Dispute Cases', path: 'expert-dispute-cases.html' },
     { icon: 'file-text', label: 'Reports', path: 'expert-reports.html' },
+    { icon: 'message-square', label: 'Messages', path: 'messages.html' },
     { icon: 'settings', label: 'Settings', path: 'expert-settings.html' },
   ];
 
   const superItems = [
     { icon: 'layout-dashboard', label: 'Dashboard', path: 'superuser-dashboard.html' },
     { icon: 'users', label: 'Manage Users', path: 'superuser-users.html' },
-    { icon: 'shield-check', label: 'Expert Applications', path: 'superuser-expert-applications.html' },
-    { icon: 'plus-circle', label: 'Create Task', path: 'superuser-create-task.html' },
     { icon: 'folder-kanban', label: 'Manage Tasks', path: 'superuser-tasks.html' },
     { icon: 'wallet', label: 'Escrow & Finance', path: 'superuser-escrow.html' },
-    { icon: 'scale', label: 'All Disputes', path: 'superuser-disputes.html' },
   ];
 
-  const menuItems = role === 'worker' ? workerItems : role === 'expert' ? expertItems : role === 'superuser' ? superItems : clientItems;
+  // The single admin desk is now three, and each sees only its own work. A
+  // revenue admin has no route to the application queue, and an intake admin
+  // none to the fee configuration — the split is in the navigation as well as
+  // in the guards, so neither is ever one wrong click from the other's job.
+  const STAFF_ROLES = ['superuser', 'revenue-admin', 'intake-admin', 'compliance-admin'];
+
+  const revenueAdminItems = [
+    { icon: 'trending-up', label: 'Revenue', path: 'admin-revenue.html' },
+    { icon: 'percent', label: 'Fee Configuration', path: 'admin-fee-config.html' },
+  ];
+
+  const intakeAdminItems = [
+    { icon: 'shield-check', label: 'Expert Applications', path: 'admin-expert-applications.html' },
+  ];
+
+  // Everything compliance reaches is read-only, including the two pages it
+  // shares with the revenue desk.
+  const complianceAdminItems = [
+    { icon: 'clipboard-list', label: 'Audit Log', path: 'compliance-dashboard.html' },
+    { icon: 'trending-up', label: 'Revenue', path: 'admin-revenue.html' },
+    { icon: 'shield-check', label: 'Applications', path: 'admin-expert-applications.html' },
+  ];
+
+  const menuItems =
+    role === 'worker' ? workerItems :
+    role === 'expert' ? expertItems :
+    role === 'superuser' ? superItems :
+    role === 'revenue-admin' ? revenueAdminItems :
+    role === 'intake-admin' ? intakeAdminItems :
+    role === 'compliance-admin' ? complianceAdminItems :
+    clientItems;
 
   // Read real user from session if auth is available
-  let userName = role === 'worker' ? 'Alex W.' : role === 'expert' ? 'Dr. Jane S.' : role === 'superuser' ? 'Super Admin' : 'James Client';
+  let userName =
+    role === 'worker' ? 'Alex W.' :
+    role === 'expert' ? 'Dr. Jane S.' :
+    role === 'superuser' ? 'Super Admin' :
+    role === 'revenue-admin' ? 'Revenue Admin' :
+    role === 'intake-admin' ? 'Intake Admin' :
+    role === 'compliance-admin' ? 'Compliance' :
+    'James Client';
   let userInitials = role === 'worker' ? 'AW' : role === 'expert' ? 'JS' : role === 'superuser' ? 'SA' : 'JC';
   let userEmail = userName.toLowerCase().replace(/\s+/g, '') + '@lannent.com';
   let avatarColor = '';
@@ -123,6 +163,19 @@ function initDashboard(config = {}) {
         ${badge}
       </a>`;
   }).join('');
+
+  // When the API is unreachable every Store read returns an empty array, so the
+  // page renders as a blank shell with no explanation. Say so instead.
+  const offlineBanner = (typeof Store !== 'undefined' && Store.isOnline && !Store.isOnline())
+    ? `<div class="offline-banner" role="alert">
+         <i data-lucide="plug-zap" style="width:18px;height:18px;flex:none;"></i>
+         <div>
+           <strong>Backend unavailable.</strong>
+           This page has no data to show. Start the API with
+           <code>npm run start:dev</code> in <code>back-end/</code>, then reload.
+         </div>
+       </div>`
+    : '';
 
   document.body.innerHTML = `
     <div class="dashboard-layout">
@@ -190,6 +243,7 @@ function initDashboard(config = {}) {
             <h1 class="page-title">${pageTitle}</h1>
             ${pageSubtitle ? `<p class="page-sub">${pageSubtitle}</p>` : ''}
           </div>
+          ${offlineBanner}
           ${content}
         </main>
       </div>
@@ -227,6 +281,7 @@ function initDashboard(config = {}) {
 
     const settingsPage = role === 'worker' ? 'worker-settings.html'
                         : role === 'expert' ? 'expert-settings.html'
+                        : STAFF_ROLES.includes(role) ? 'staff-settings.html'
                         : 'profile-settings.html';
 
     switch (action) {
@@ -235,9 +290,6 @@ function initDashboard(config = {}) {
         break;
       case 'settings':
         window.location.href = settingsPage;
-        break;
-      case 'help':
-        window.location.href = 'help.html';
         break;
       case 'signout':
         if (typeof Auth !== 'undefined') { Auth.logout(); } else { alert('Signed out'); }
@@ -305,4 +357,37 @@ function initDashboard(config = {}) {
       if (window.lucide) lucide.createIcons();
     }
   });
+}
+
+/**
+ * Renders an empty/error state inside the normal dashboard shell.
+ *
+ * Pages used to do `document.body.innerHTML = '...'` here, which strands the
+ * user with no sidebar and no way out, or bailed with a bare `return`, which
+ * leaves a genuinely blank page. Both go through this instead.
+ *
+ * @param {Object} config - { role, activePath, pageTitle, message, linkHref, linkLabel }
+ */
+function renderEmptyState(config = {}) {
+  const {
+    role = 'client',
+    activePath = '',
+    pageTitle = 'Nothing to show',
+    message = 'There is nothing to display here yet.',
+    linkHref = '',
+    linkLabel = '',
+  } = config;
+
+  initDashboard({
+    role,
+    activePath,
+    pageTitle,
+    pageSubtitle: '',
+    content: `
+      <div style="padding:56px 24px;text-align:center;background:var(--card);border:1px solid var(--border);border-radius:16px;">
+        <div style="font-size:15px;color:var(--muted-foreground);margin-bottom:${linkHref ? '18px' : '0'};">${message}</div>
+        ${linkHref ? `<a href="${linkHref}" class="btn-primary" style="text-decoration:none;">${linkLabel || 'Go back'}</a>` : ''}
+      </div>`,
+  });
+  if (window.lucide) lucide.createIcons();
 }

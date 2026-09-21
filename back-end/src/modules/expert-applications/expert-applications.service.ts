@@ -3,6 +3,8 @@ import { CreateExpertApplicationDto } from './dto/create-expert-application.dto'
 import { UpdateExpertApplicationStatusDto } from './dto/update-expert-application.dto';
 import { ExpertApplicationsRepository } from './expert-applications.repository';
 import { UsersService } from '../users/users.service';
+import { hashPassword } from '../../common/security/password.util';
+import { AppLoggerService } from '../../common/logging/app-logger.service';
 
 /**
  * ExpertApplicationsService — Business Logic Layer
@@ -15,16 +17,37 @@ export class ExpertApplicationsService {
   constructor(
     private readonly expertApplicationsRepository: ExpertApplicationsRepository,
     @Inject(forwardRef(() => UsersService)) private usersService: UsersService,
+    private readonly log: AppLoggerService,
   ) {}
 
+  /**
+   * An applicant chooses a password on the form, so the stored record holds one.
+   * It is needed to create their account on approval and must never leave the
+   * server — every read strips it.
+   */
+  private redact(app: any) {
+    if (!app) return app;
+    const { password, ...safe } = app;
+    return safe;
+  }
+
   findAll() {
-    return this.expertApplicationsRepository.findAll();
+    return this.expertApplicationsRepository.findAll().map((a: any) => this.redact(a));
   }
 
   findById(id: string) {
     const app = this.expertApplicationsRepository.findById(id);
     if (!app) throw new NotFoundException(`Expert application with id "${id}" not found`);
-    return app;
+    return this.redact(app);
+  }
+
+  /** Public: whether an application exists for this email, and nothing else. */
+  statusFor(email: string) {
+    if (!email) return { exists: false, status: null };
+    const app = this.expertApplicationsRepository
+      .findAll()
+      .find((a: any) => String(a.email).toLowerCase() === email.toLowerCase());
+    return app ? { exists: true, status: app.status } : { exists: false, status: null };
   }
 
   create(dto: CreateExpertApplicationDto) {
@@ -35,12 +58,20 @@ export class ExpertApplicationsService {
       reviewedAt: null,
       reviewedBy: null,
       ...dto,
+      // The applicant chooses a password on the form and it sits in this record
+      // until approval creates their account. Hashed on the way in, so an
+      // application never holds a readable one.
+      password: dto.password ? hashPassword(dto.password) : undefined,
     };
-    return this.expertApplicationsRepository.insert(app);
+    return this.redact(this.expertApplicationsRepository.insert(app));
   }
 
   updateStatus(id: string, dto: UpdateExpertApplicationStatusDto) {
-    const app = this.findById(id);
+    // The RAW record, not findById's redacted copy — this mutates the stored
+    // application and needs the applicant's chosen password to create their
+    // account with the credentials they signed up with.
+    const app = this.expertApplicationsRepository.findById(id);
+    if (!app) throw new NotFoundException(`Expert application with id "${id}" not found`);
     app.status = dto.status;
     app.reviewedAt = new Date().toISOString().slice(0, 10);
     app.reviewedBy = dto.reviewedBy;
@@ -50,7 +81,7 @@ export class ExpertApplicationsService {
       try {
         const existing = this.usersService.findByEmail(app.email);
         if (!existing) {
-          this.usersService.create({
+          this.usersService.createPrivileged({
             name: app.name,
             email: app.email,
             password: app.password || 'Expert@123',
@@ -58,10 +89,18 @@ export class ExpertApplicationsService {
             specialization: app.expertise || '',
           });
         }
-      } catch {}
+      } catch (e) {
+        // The application shows approved but no account exists to log in with,
+        // so this one must never be silent.
+        this.log.error(
+          'expertApplications.approve',
+          `approved application ${app.id} but could not create the expert account for ${app.email}`,
+          e,
+        );
+      }
     }
 
-    return app;
+    return this.redact(app);
   }
 
   resetToSeed() {

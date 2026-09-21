@@ -16,10 +16,12 @@ export class AuditRequestsRepository {
     return 'ar_' + Date.now() + '_' + (this.counter++);
   }
 
-  findAll(query?: { expertId?: string; status?: string }): any[] {
+  findAll(query?: { expertId?: string; status?: string; taskId?: string; kind?: string }): any[] {
     let result = this.auditRequests;
     if (query?.expertId) result = result.filter(a => a.expertId === query.expertId);
     if (query?.status) result = result.filter(a => a.status === query.status);
+    if (query?.taskId) result = result.filter(a => a.taskId === query.taskId);
+    if (query?.kind) result = result.filter(a => a.kind === query.kind);
     return result;
   }
 

@@ -251,7 +251,7 @@
               ].map(g => `
                 <div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.04);">
                   <i data-lucide="${g.icon}" style="width:15px;height:15px;color:${g.color};flex-shrink:0;margin-top:1px;"></i>
-                  <span style="font-size:13px;color:#374151;">${g.text}</span>
+                  <span style="font-size:13px;color:#374151;">${escapeHtml(g.text)}</span>
                 </div>`).join('')}
             </div>
 
@@ -265,7 +265,7 @@
               ].map(s => `
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
                   <div style="width:22px;height:22px;border-radius:50%;background:${s.color};display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;flex-shrink:0;">${s.step}</div>
-                  <span style="font-size:13px;color:#065f46;">${s.text}</span>
+                  <span style="font-size:13px;color:#065f46;">${escapeHtml(s.text)}</span>
                 </div>`).join('')}
             </div>
           </div>
@@ -330,6 +330,16 @@
       if (uploadedFiles.length === 0) {
         dropZone?.classList.add('has-error');
         if (errSpan) errSpan.textContent = 'Please upload at least one file';
+        errEl?.classList.add('visible');
+        return false;
+      }
+
+      // A file that is still going up has no reference yet, so submitting now
+      // would record a name with nothing behind it.
+      const inFlight = uploadedFiles.filter(f => f.uploading);
+      if (inFlight.length > 0) {
+        dropZone?.classList.add('has-error');
+        if (errSpan) errSpan.textContent = `Uploading ${inFlight.length} file(s) — one moment`;
         errEl?.classList.add('visible');
         return false;
       }
@@ -517,7 +527,7 @@
       if (!container) return;
 
       const items = [
-        { label: 'Files uploaded', ok: uploadedFiles.length > 0 && !uploadedFiles.some(f => f.error) },
+        { label: 'Files uploaded', ok: uploadedFiles.length > 0 && !uploadedFiles.some(f => f.error || f.uploading) },
         { label: 'Title filled (5+ chars)', ok: (document.getElementById('deliverableTitle')?.value.trim().length || 0) >= 5 },
         { label: 'Description filled (20+ chars)', ok: (document.getElementById('deliverableNotes')?.value.trim().length || 0) >= 20 },
         { label: 'Checklist completed', ok: [...document.querySelectorAll('.checklist-item')].every(c => c.checked) },
@@ -529,7 +539,7 @@
           <div style="width:18px;height:18px;border-radius:50%;background:${i.ok ? '#ecfdf5' : '#fef2f2'};border:1.5px solid ${i.ok ? '#10b981' : '#fca5a5'};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
             <i data-lucide="${i.ok ? 'check' : 'x'}" style="width:10px;height:10px;color:${i.ok ? '#10b981' : '#ef4444'};"></i>
           </div>
-          <span style="font-size:12px;color:${i.ok ? '#059669' : '#6b7280'};">${i.label}</span>
+          <span style="font-size:12px;color:${i.ok ? '#059669' : '#6b7280'};">${escapeHtml(i.label)}</span>
         </div>
       `).join('');
       lucide.createIcons();
@@ -550,7 +560,17 @@
       e.target.value = ''; // allow re-selecting same file
     }
 
+    /**
+     * Adds files and sends them to the file store.
+     *
+     * Selecting a file used to record its name and nothing else — the bytes
+     * never left this page, so the client and the reviewer downstream had a
+     * filename and no file. Each one is uploaded here and the row keeps the
+     * server's reference; the submission carries those references.
+     */
     function addFiles(files) {
+      const pending = [];
+
       files.forEach(file => {
         const ext = '.' + file.name.split('.').pop().toLowerCase();
         let error = null;
@@ -565,19 +585,48 @@
         }
 
         const id = Date.now() + Math.random();
-        uploadedFiles.push({
+        const row = {
           id,
           name: file.name,
           size: file.size,
           sizeFormatted: formatSize(file.size),
           type: file.type || ext,
           error,
-        });
+          uploading: !error,
+          ref: null,
+        };
+        uploadedFiles.push(row);
+        if (!error) pending.push({ row, file });
       });
 
       renderFileList();
       runAllValidation();
       lucide.createIcons();
+
+      // Same id the submission will use. A file uploaded with no taskId is
+      // visible only to its uploader and staff, so the client reviewing the
+      // milestone was refused access to the very files under review.
+      const msId = resolveMilestoneId();
+      const ms = msId && typeof Store !== 'undefined' ? Store.getMilestoneById(msId) : null;
+
+      pending.forEach(({ row, file }) => {
+        Store.uploadFile(file, { taskId: ms ? ms.taskId : '', milestoneId: msId, purpose: 'deliverable' })
+          .then(ref => {
+            row.ref = ref;
+            row.uploading = false;
+          })
+          .catch(err => {
+            // The server is the authority on type and size; surface its reason
+            // rather than leaving a row that looks uploaded and is not.
+            row.uploading = false;
+            row.error = err.message || 'Upload failed';
+          })
+          .finally(() => {
+            renderFileList();
+            runAllValidation();
+            lucide.createIcons();
+          });
+      });
     }
 
     function formatSize(bytes) {
@@ -618,12 +667,14 @@
               <i data-lucide="${f.error ? 'alert-triangle' : fi.icon}" style="width:16px;height:16px;color:${f.error ? '#ef4444' : fi.color};"></i>
             </div>
             <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${f.error ? 'color:#ef4444;' : ''}">${f.name}</div>
+              <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${f.error ? 'color:#ef4444;' : ''}">${escapeHtml(f.name)}</div>
               <div style="display:flex;align-items:center;gap:8px;margin-top:2px;">
                 <span class="file-size-badge ${isOver ? 'over' : ''}">${f.sizeFormatted}</span>
                 ${f.error ? `<span style="font-size:11px;color:#ef4444;font-weight:500;">${f.error}</span>` : ''}
+                ${f.uploading ? '<span style="font-size:11px;color:#b45309;font-weight:500;">Uploading…</span>' : ''}
+                ${!f.error && !f.uploading && f.ref ? '<span style="font-size:11px;color:#047857;font-weight:500;">Stored</span>' : ''}
               </div>
-              ${!f.error ? '<div class="upload-progress"><div class="upload-progress-bar" style="width:100%;"></div></div>' : ''}
+              ${!f.error ? `<div class="upload-progress"><div class="upload-progress-bar" style="width:${f.uploading ? 45 : 100}%;"></div></div>` : ''}
             </div>
             <button onclick="removeFile(${f.id})" style="background:none;border:none;cursor:pointer;color:${f.error ? '#ef4444' : 'var(--muted-foreground)'};padding:4px;" title="Remove">
               <i data-lucide="x" style="width:14px;height:14px;"></i>
@@ -673,6 +724,42 @@
       }
     }
 
+    /**
+     * The milestone being submitted for. The query string is the contract; the
+     * key the workrooms write is honoured as a fallback so a page opened
+     * without the parameter still knows what it is looking at.
+     */
+    function resolveMilestoneId() {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get('milestoneId') || params.get('id');
+      if (fromUrl) return fromUrl;
+      try {
+        const stored = JSON.parse(localStorage.getItem('selectedMilestone') || 'null');
+        if (stored && stored.id) return stored.id;
+      } catch (e) { /* nothing usable stored */ }
+      return '';
+    }
+
+    /** Replaces the confirm dialog with the reason the submission did not go through. */
+    function showSubmitError(message) {
+      const modal = document.getElementById('confirmModal');
+      if (modal) modal.style.display = 'none';
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:300;backdrop-filter:blur(4px);';
+      overlay.innerHTML = `
+        <div style="background:white;border-radius:24px;padding:40px;text-align:center;max-width:420px;margin:0 16px;box-shadow:0 32px 80px rgba(0,0,0,0.2);">
+          <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#ef4444,#dc2626);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;box-shadow:0 12px 32px rgba(239,68,68,0.3);">
+            <span style="font-size:32px;color:white;">!</span>
+          </div>
+          <h2 style="font-size:22px;font-weight:600;margin-bottom:8px;">Not submitted</h2>
+          <p style="color:var(--muted-foreground);font-size:14px;line-height:1.6;margin-bottom:24px;"></p>
+          <button class="btn-primary" style="width:100%;padding:12px;border-radius:12px;">Back to the form</button>
+        </div>`;
+      overlay.querySelector('p').textContent = message;
+      overlay.querySelector('button').onclick = () => overlay.remove();
+      document.body.appendChild(overlay);
+    }
+
     function submitDeliverable() {
       if (!runAllValidation()) return;
 
@@ -685,56 +772,54 @@
 
       // Save to store
       const params = new URLSearchParams(window.location.search);
-      const milestoneId = params.get('milestoneId') || params.get('id');
-      if (milestoneId && typeof Store !== 'undefined') {
+      const milestoneId = resolveMilestoneId();
+
+      // Without an id there is nothing to attach the work to. This used to
+      // fall straight through to the success screen: the worker was told the
+      // deliverable was submitted while nothing had been sent at all.
+      if (!milestoneId || typeof Store === 'undefined') {
+        showSubmitError('This page could not tell which milestone you are submitting for. Open it from the milestone board and try again.');
+        return;
+      }
+
+      {
         try {
+          // Everything the form collected goes with the submission. The branch
+          // was gathered and validated here and then dropped on the floor, so
+          // the reviewer auditing the work could never see which branch it was on.
+          // Blank optional fields are left out rather than sent as "". An
+          // empty string is not a URL, so posting one made the server reject
+          // the whole submission — files included.
+          const branch = (document.getElementById('branchName')?.value || '').trim();
           const deliverable = {
             title: title,
             description: notes || 'Milestone deliverable submitted.',
-            link: repoLink || '',
-            files: uploadedFiles.filter(f => !f.error).map(f => f.name),
+            files: uploadedFiles
+              .filter(f => !f.error)
+              .map(f => f.ref || { name: f.name, size: f.size, mime: f.type }),
           };
+          if (repoLink) deliverable.link = repoLink;
+          if (branch) deliverable.branch = branch;
           Store.submitDeliverable(milestoneId, deliverable);
           const _ms = Store.getMilestoneById(milestoneId);
           const _task = _ms ? Store.getTaskById(_ms.taskId) : null;
-          const _session = (typeof Auth !== 'undefined') ? Auth.getCurrentUser() : null;
           if (_task && _task.clientId) {
             Store.addNotification({ userId: _task.clientId, type: 'milestone-submitted', text: 'New deliverable submitted', subtext: (_ms.title || 'Milestone') + ' — ' + (_task.title || 'Project') + ' · just now', read: false });
           }
 
-          // ── Notify expert reviewers if project has audit enabled ──
-          if (_task && _task.auditEnabled) {
-            const experts = Store.getUsers().filter(u => u.role === 'expert' && u.status !== 'suspended');
-            experts.forEach(expert => {
-              Store.addNotification({
-                userId: expert.id,
-                type: 'audit-needed',
-                text: '🔍 New deliverable awaiting technical audit',
-                subtext: (_ms.title || 'Milestone') + ' — ' + (_task.title || 'Project') + ' · just now',
-                read: false
-              });
-            });
-
-            // Auto-create audit request so it appears in the expert's audit requests page
-            try {
-              Store.createAuditRequest({
-                taskId: _task.id,
-                milestoneId: milestoneId,
-                clientId: _task.clientId,
-                workerId: _task.workerId || (_session ? _session.userId : ''),
-                project: _task.title,
-                milestone: _ms.title || 'Milestone',
-                worker: _session ? _session.name : 'Worker',
-                status: 'Pending',
-                priority: 'High',
-                requestedAt: new Date().toISOString().slice(0, 10),
-              });
-            } catch(auditErr) { console.warn('Auto audit request failed', auditErr); }
-          }
-        } catch(e) { console.warn('Store save failed', e); }
+          // The audit hand-off is the server's job now: it points the project's
+          // one engagement at this milestone and notifies the reviewer the
+          // client assigned — and only that reviewer. This page used to loop
+          // over every expert account and notify all of them, then create a
+          // second audit request for a milestone that already had one.
+        } catch(e) {
+          console.warn('Store save failed', e);
+          showSubmitError(e && e.message ? e.message : 'The submission could not be saved. Your draft has been kept.');
+          return;
+        }
       }
 
-      // Clear draft
+      // Clear draft — only now that the server has the submission.
       try { localStorage.removeItem('deliverableDraft'); } catch(e) {}
 
       // Resolve taskId for workroom link

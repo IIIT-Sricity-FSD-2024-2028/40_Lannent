@@ -30,7 +30,7 @@ CREATE TABLE USERS (
   name          VARCHAR(100)  NOT NULL,
   email         VARCHAR(150)  NOT NULL UNIQUE,
   password      VARCHAR(255)  NOT NULL,
-  role          ENUM('client','worker','expert','superuser') NOT NULL,
+  role          ENUM('client','worker','expert','superuser','revenue-admin','intake-admin','compliance-admin') NOT NULL,
   avatar        VARCHAR(10),
   avatarColor   VARCHAR(200),
   status        VARCHAR(20)   DEFAULT 'active',
@@ -249,7 +249,8 @@ CREATE TABLE DISPUTE_REPORTS (
 -- ──────────────────────────────────────────────────────────────────────────────
 CREATE TABLE TRANSACTIONS (
   transactionId VARCHAR(50)   PRIMARY KEY,
-  type          ENUM('escrow-lock','milestone-release','refund','dispute-release') NOT NULL,
+  type          ENUM('escrow-lock','milestone-release','refund','dispute-release',
+                      'deposit','withdrawal','audit-escrow-lock','audit-release','platform-fee') NOT NULL,
   amount        DECIMAL(10,2) NOT NULL CHECK (amount > 0),
   fromId        VARCHAR(50)   NOT NULL,
   toId          VARCHAR(50)   NOT NULL,
@@ -270,6 +271,37 @@ CREATE INDEX idx_transactions_taskId ON TRANSACTIONS(taskId);
 -- ──────────────────────────────────────────────────────────────────────────────
 -- 10. TRANSACTIONS_WALLET (Personal wallet deposit / withdraw)
 -- ──────────────────────────────────────────────────────────────────────────────
+-- Platform revenue: one row per fee charged. Kept separate from TRANSACTIONS
+-- so a fee can always be traced back to the movement and rate that produced it.
+CREATE TABLE REVENUE_ENTRIES (
+  revenueEntryId VARCHAR(50)   PRIMARY KEY,
+  feeType        ENUM('deposit-processing','client-marketplace','contract-initiation',
+                      'worker-service','expert-service','withdrawal-processing') NOT NULL,
+  amount         DECIMAL(10,2) NOT NULL CHECK (amount >= 0),
+  baseAmount     DECIMAL(10,2) NOT NULL CHECK (baseAmount >= 0),
+  rate           DECIMAL(5,2)  NOT NULL DEFAULT 0.00,
+  fromUserId     VARCHAR(50)   NOT NULL,
+  taskId         VARCHAR(50),
+  milestoneId    VARCHAR(50),
+  createdAt      DATETIME      NOT NULL DEFAULT NOW(),
+  FOREIGN KEY (fromUserId)  REFERENCES USERS(userId),
+  FOREIGN KEY (taskId)      REFERENCES TASKS(taskId),
+  FOREIGN KEY (milestoneId) REFERENCES MILESTONES(milestoneId)
+);
+CREATE INDEX idx_revenue_feeType    ON REVENUE_ENTRIES(feeType);
+CREATE INDEX idx_revenue_fromUserId ON REVENUE_ENTRIES(fromUserId);
+CREATE INDEX idx_revenue_createdAt  ON REVENUE_ENTRIES(createdAt);
+
+-- Funds actually held per task. Project funds pay milestones; audit funds pay
+-- the Expert Reviewer. Neither may go negative.
+CREATE TABLE ESCROW_BALANCES (
+  taskId      VARCHAR(50)   PRIMARY KEY,
+  projectHeld DECIMAL(10,2) NOT NULL DEFAULT 0.00 CHECK (projectHeld >= 0),
+  auditHeld   DECIMAL(10,2) NOT NULL DEFAULT 0.00 CHECK (auditHeld >= 0),
+  updatedAt   DATETIME      NOT NULL DEFAULT NOW(),
+  FOREIGN KEY (taskId) REFERENCES TASKS(taskId)
+);
+
 CREATE TABLE TRANSACTIONS_WALLET (
   transactionwalletId VARCHAR(50)   PRIMARY KEY,
   type                ENUM('deposit','withdraw') NOT NULL,

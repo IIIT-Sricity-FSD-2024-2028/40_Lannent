@@ -40,7 +40,19 @@
 
       // Load milestone from Store
       let milestone = milestoneId ? Store.getMilestoneById(milestoneId) : null;
-      // Fallback: find first submitted milestone for client's tasks
+
+      // The workroom records the milestone the client actually selected before
+      // sending them here. Honour it before guessing — the scan below picks the
+      // first submitted milestone across every project, which is rarely the one
+      // they clicked.
+      if (!milestone) {
+        try {
+          const stored = JSON.parse(localStorage.getItem('selectedMilestone') || 'null');
+          if (stored && stored.id) milestone = Store.getMilestoneById(stored.id);
+        } catch (e) { /* nothing usable stored */ }
+      }
+
+      // Last resort: the first submitted milestone for the client's tasks.
       if (!milestone) {
         const tasks = Store.getTasksByClient(session.userId);
         for (const t of tasks) {
@@ -50,12 +62,33 @@
       }
 
       if (!milestone) {
-        document.body.innerHTML = '<div style="padding:80px;text-align:center;color:#6b7280;font-size:16px;">No deliverable pending review. <a href="client-my-projects.html" style="color:#6366f1;">Go to Projects</a></div>';
+        renderEmptyState({
+          role: 'client',
+          activePath: 'client-my-projects.html',
+          pageTitle: 'Review Deliverable',
+          message: 'No deliverable pending review.',
+          linkHref: 'client-my-projects.html',
+          linkLabel: 'Go to Projects',
+        });
         return;
       }
 
       const task = Store.getTaskById(milestone.taskId);
       const worker = milestone.workerId ? Store.getUserById(milestone.workerId) : null;
+
+      // The Expert Reviewer's verdict on this work. The client releases escrow
+      // from this page, and previously had no sight of the audit at all — the
+      // report existed but was two clicks away under Reports.
+      // Match this milestone specifically, or a project-wide audit not yet
+      // pointed at one. Falling back to any engagement on the task showed
+      // another milestone's verdict on this page.
+      const _engagements = (Store.getAuditRequests() || [])
+        .filter(a => a.taskId === milestone.taskId && a.kind !== 'dispute-audit');
+      const _engagement = _engagements.find(a => a.milestoneId === milestone.id)
+        || _engagements.find(a => !a.milestoneId)
+        || null;
+      const _auditReport = _engagement ? Store.getAuditReportByRequest(_engagement.id) : null;
+      const _reviewer = _engagement && _engagement.expertId ? Store.getUserById(_engagement.expertId) : null;
       const deliverable = {
         project: task ? task.title : 'Unknown Project',
         milestone: milestone.title,
@@ -75,7 +108,7 @@
             <div class="check-box${item.checked ? ' checked' : ''}" id="chkBox${item.id}">
               ${item.checked ? '<i data-lucide="check" style="width:12px;height:12px;color:white;"></i>' : ''}
             </div>
-            <span style="font-size:14px;${item.checked ? 'text-decoration:line-through;color:var(--muted-foreground);' : ''}">${item.label}</span>
+            <span style="font-size:14px;${item.checked ? 'text-decoration:line-through;color:var(--muted-foreground);' : ''}">${escapeHtml(item.label)}</span>
           </div>`).join('');
       }
 
@@ -89,30 +122,113 @@
       }
 
       const notesHtml = deliverable.deliverable && deliverable.deliverable.description
-        ? `<div style="background:var(--input-bg);border-radius:12px;padding:16px;font-size:14px;color:#374151;line-height:1.7;">${deliverable.deliverable.description}</div>`
+        ? `<div style="background:var(--input-bg);border-radius:12px;padding:16px;font-size:14px;color:#374151;line-height:1.7;">${esc(deliverable.deliverable.description)}</div>`
         : `<div style="background:var(--input-bg);border-radius:12px;padding:16px;font-size:14px;color:#374151;line-height:1.7;">
             <p style="margin-bottom:12px;"><strong>Deliverable submitted</strong> for review.</p>
             <p>Worker has submitted work for this milestone. Review the files and checklist before approving.</p>
           </div>`;
 
       const filesHtml = deliverable.deliverable && deliverable.deliverable.files && deliverable.deliverable.files.length
-        ? deliverable.deliverable.files.map(f => `
+        ? deliverable.deliverable.files.map(f => {
+            // Submissions made before the file store exists carry a bare name
+            // and nothing to fetch, so the control says so instead of being a
+            // button that does nothing.
+            const name = typeof f === 'string' ? f : (f && f.name) || 'File';
+            const href = typeof f === 'object' ? Store.fileUrl(f) : '';
+            const size = typeof f === 'object' && f.size ? (Number(f.size) / 1024).toFixed(0) + ' KB' : 'Submitted file';
+            return `
             <div class="file-row">
               <div class="file-icon-wrap" style="background:#eef2ff;">
                 <i data-lucide="file" style="width:18px;height:18px;color:#6366f1;"></i>
               </div>
               <div style="flex:1;min-width:0;">
-                <div style="font-weight:500;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f}</div>
-                <div style="font-size:12px;color:var(--muted-foreground);">Submitted file</div>
+                <div style="font-weight:500;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(name)}</div>
+                <div style="font-size:12px;color:var(--muted-foreground);">${esc(size)}</div>
               </div>
               <div style="display:flex;gap:8px;">
-                <button class="btn-sm" title="Download"><i data-lucide="download" style="width:14px;height:14px;"></i></button>
+                ${href
+                  ? `<a class="btn-sm" href="${esc(href)}" download="${esc(name)}" title="Download"><i data-lucide="download" style="width:14px;height:14px;"></i></a>`
+                  : `<span style="font-size:11px;color:var(--muted-foreground);" title="Uploaded before the file store existed, so only the name was kept.">Not stored</span>`}
               </div>
-            </div>`).join('')
+            </div>`; }).join('')
         : `<div style="padding:24px;text-align:center;color:var(--muted-foreground);">
              <i data-lucide="file-x" style="width:32px;height:32px;opacity:0.4;margin:0 auto 8px;display:block;"></i>
              <div style="font-size:13px;">No files attached to this submission.</div>
            </div>`;
+
+      // ── Expert Reviewer's verdict ──────────────────────────────────────
+      const VERDICTS = {
+        pass:        { label: 'Passed the technical audit',  bg:'#ecfdf5', border:'#a7f3d0', text:'#047857', icon:'check-circle-2' },
+        fail:        { label: 'Failed the technical audit',  bg:'#fef2f2', border:'#fecaca', text:'#b91c1c', icon:'x-circle' },
+        conditional: { label: 'Passed with conditions',      bg:'#fffbeb', border:'#fde68a', text:'#b45309', icon:'alert-triangle' },
+      };
+
+      /** Hoisted deliberately: a `const` arrow here threw whenever a new esc()
+       *  call was added above its declaration. */
+      function esc(v) { return window.escapeHtml(v); }
+
+      function scoreBar(label, value) {
+        const v = Number(value) || 0;
+        return `
+          <div style="display:flex;align-items:center;gap:10px;font-size:12.5px;margin-bottom:6px;">
+            <span style="width:104px;color:var(--muted-foreground);flex:none;">${label}</span>
+            <span style="flex:1;height:6px;background:var(--secondary);border-radius:3px;overflow:hidden;">
+              <span style="display:block;width:${(v / 5) * 100}%;height:100%;background:#6366f1;"></span>
+            </span>
+            <span style="width:26px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;">${v}/5</span>
+          </div>`;
+      }
+
+      let auditHtml = '';
+      if (_auditReport && _auditReport.verdict) {
+        const v = VERDICTS[_auditReport.verdict] || VERDICTS.conditional;
+        const scores = ['codequality','security','performance','documentation']
+          .filter(k => _auditReport[k] != null);
+        const avg = scores.length
+          ? (scores.reduce((a, k) => a + Number(_auditReport[k] || 0), 0) / scores.length).toFixed(1)
+          : null;
+
+        auditHtml = `
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;flex-wrap:wrap;">
+              <h3 style="font-size:15px;font-weight:600;">Expert Reviewer's verdict</h3>
+              <a href="expert-report-audit.html?id=${_engagement.id}" style="font-size:12.5px;color:var(--muted-foreground);text-decoration:underline;text-underline-offset:2px;">Read the full report</a>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;background:${v.bg};border:1px solid ${v.border};margin-bottom:16px;">
+              <i data-lucide="${v.icon}" style="width:22px;height:22px;color:${escapeHtml(v.text)};flex:none;"></i>
+              <div>
+                <div style="font-size:14px;font-weight:700;color:${escapeHtml(v.text)};">${escapeHtml(v.label)}</div>
+                <div style="font-size:12.5px;color:${escapeHtml(v.text)};opacity:.85;">
+                  Reviewed by ${_reviewer ? _reviewer.name : 'an Expert Reviewer'}${avg ? ' · overall ' + avg + '/5' : ''}
+                </div>
+              </div>
+            </div>
+
+            ${scores.length ? `<div style="margin-bottom:14px;">
+              ${scoreBar('Code quality', _auditReport.codequality)}
+              ${scoreBar('Security', _auditReport.security)}
+              ${scoreBar('Performance', _auditReport.performance)}
+              ${scoreBar('Documentation', _auditReport.documentation)}
+            </div>` : ''}
+
+            ${_auditReport.findings ? `
+              <div style="font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted-foreground);margin-bottom:6px;">Findings</div>
+              <div style="font-size:13px;line-height:1.65;color:var(--muted-foreground);">${escapeHtml(_auditReport.findings)}</div>` : ''}
+          </div>`;
+      } else if (_engagement && !['declined','cancelled'].includes(_engagement.status)) {
+        auditHtml = `
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px 24px;margin-bottom:20px;display:flex;align-items:center;gap:12px;">
+            <i data-lucide="clock" style="width:20px;height:20px;color:var(--muted-foreground);flex:none;"></i>
+            <div>
+              <div style="font-size:14px;font-weight:600;">Technical audit in progress</div>
+              <div style="font-size:12.5px;color:var(--muted-foreground);">
+                ${_reviewer ? _reviewer.name + ' has' : 'The Expert Reviewer has'} not filed a report yet.
+                You can still approve, but the audit will not have informed your decision.
+              </div>
+            </div>
+          </div>`;
+      }
 
       const content = `
         <div style="margin-bottom:16px;">
@@ -140,9 +256,10 @@
 
         <div class="review-layout">
           <div>
+            ${auditHtml}
             <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
               <h3 style="font-size:15px;font-weight:600;margin-bottom:4px;">Submitted Files</h3>
-              <div style="font-size:13px;color:var(--muted-foreground);margin-bottom:16px;">${deliverable.project} · ${deliverable.milestone}</div>
+              <div style="font-size:13px;color:var(--muted-foreground);margin-bottom:16px;">${escapeHtml(deliverable.project)} · ${escapeHtml(deliverable.milestone)}</div>
               ${filesHtml}
             </div>
 

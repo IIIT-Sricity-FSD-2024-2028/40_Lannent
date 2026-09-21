@@ -162,60 +162,131 @@ document.addEventListener('DOMContentLoaded', function () {
       if (typeof Auth !== 'undefined' && !Auth.requireRole('worker')) return;
 
   /* ═══════════════════════════════════════════════════════
-     DATA
+     DATA — derived from Store, not hardcoded
   ═══════════════════════════════════════════════════════ */
+  var session = Auth.getCurrentUser();
+  var workerId = session ? session.userId : 'u2';
+  var me = Store.getUserById(workerId) || {};
+
+  var myTasks = Store.getTasksByWorker(workerId);
+  var myMilestones = [];
+  myTasks.forEach(function (t) {
+    myMilestones = myMilestones.concat(
+      Store.getMilestonesByTask(t.id).filter(function (m) {
+        return !m.workerId || m.workerId === workerId;
+      })
+    );
+  });
+
+  var DONE_MS = ['completed', 'approved', 'audit-passed', 'done'];
+  var isDone = function (m) { return DONE_MS.indexOf(m.status) !== -1; };
+
+  var myReleases = Store.getTransactions().filter(function (t) {
+    return t.type === 'milestone-release' && t.toId === workerId;
+  });
+
+  function monthLabel(d) {
+    var dt = new Date(d);
+    return isNaN(dt) ? null : dt.toLocaleString('en-US', { month: 'short' });
+  }
+
+  // Trailing twelve months, oldest first.
+  var months12 = [];
+  (function () {
+    var now = new Date();
+    for (var k = 11; k >= 0; k--) {
+      months12.push(new Date(now.getFullYear(), now.getMonth() - k, 1)
+        .toLocaleString('en-US', { month: 'short' }));
+    }
+  })();
+
+  var totalEarnings = myReleases.reduce(function (a, t) { return a + (t.amount || 0); }, 0);
+  var doneMsCount = myMilestones.filter(isDone).length;
+
   var overviewStats = {
-    totalEarnings: 45000,
-    projectsCompleted: 24,
-    activeProjects: 5,
-    successRate: 92,
+    totalEarnings: totalEarnings,
+    projectsCompleted: myTasks.filter(function (t) { return t.status === 'completed'; }).length,
+    activeProjects: myTasks.filter(function (t) { return t.status === 'in-progress'; }).length,
+    successRate: myMilestones.length ? Math.round((doneMsCount / myMilestones.length) * 100) : 0,
   };
 
-  var earningsData = [
-    { month:'Jan', earnings:3200 },
-    { month:'Feb', earnings:4100 },
-    { month:'Mar', earnings:3800 },
-    { month:'Apr', earnings:5200 },
-    { month:'May', earnings:4600 },
-    { month:'Jun', earnings:5800 },
-    { month:'Jul', earnings:6200 },
-    { month:'Aug', earnings:5500 },
-    { month:'Sep', earnings:6800 },
-    { month:'Oct', earnings:7100 },
-    { month:'Nov', earnings:6900 },
-    { month:'Dec', earnings:7200 },
-  ];
+  var earningsData = months12.map(function (m) {
+    return {
+      month: m,
+      earnings: myReleases
+        .filter(function (t) { return monthLabel(t.createdAt) === m; })
+        .reduce(function (a, t) { return a + (t.amount || 0); }, 0),
+    };
+  });
 
-  var projectPerformance = [
-    { project:'E-Commerce Mobile App',      client:'Sarah Johnson',   initials:'SJ', milestonesCompleted:8,  totalMilestones:8,  payment:12500, rating:5.0 },
-    { project:'SaaS Dashboard Redesign',    client:'Michael Brown',   initials:'MB', milestonesCompleted:6,  totalMilestones:6,  payment:8500,  rating:4.8 },
-    { project:'API Integration Project',    client:'Emma Davis',      initials:'ED', milestonesCompleted:5,  totalMilestones:7,  payment:6000,  rating:4.9 },
-    { project:'Mobile App Development',     client:'David Lee',       initials:'DL', milestonesCompleted:10, totalMilestones:10, payment:15000, rating:5.0 },
-    { project:'Website Redesign',           client:'Lisa Wang',       initials:'LW', milestonesCompleted:4,  totalMilestones:5,  payment:4200,  rating:4.7 },
-  ];
+  var projectPerformance = myTasks.map(function (t) {
+    var ms = Store.getMilestonesByTask(t.id);
+    var client = t.clientId ? Store.getUserById(t.clientId) : null;
+    var paid = myReleases
+      .filter(function (tx) { return tx.taskId === t.id; })
+      .reduce(function (a, tx) { return a + (tx.amount || 0); }, 0);
+    return {
+      project: t.title,
+      client: client ? client.name : 'Unknown client',
+      initials: client ? client.avatar : '??',
+      milestonesCompleted: ms.filter(isDone).length,
+      totalMilestones: ms.length,
+      payment: paid,
+      rating: me.rating || 0,
+    };
+  });
 
-  var milestoneVelocityData = [
-    { month:'Aug', avgDays:5.2 },
-    { month:'Sep', avgDays:4.8 },
-    { month:'Oct', avgDays:4.5 },
-    { month:'Nov', avgDays:5.0 },
-    { month:'Dec', avgDays:4.3 },
-    { month:'Jan', avgDays:4.6 },
-  ];
+  // Velocity = days between a milestone being submitted and approved.
+  var turnarounds = myMilestones
+    .filter(function (m) { return m.submittedAt && m.approvedAt; })
+    .map(function (m) {
+      return {
+        month: monthLabel(m.approvedAt),
+        days: Math.max((new Date(m.approvedAt) - new Date(m.submittedAt)) / 86400000, 0),
+      };
+    })
+    .filter(function (x) { return !isNaN(x.days); });
+
+  var months6 = months12.slice(-6);
+  var milestoneVelocityData = months6.map(function (m) {
+    var inMonth = turnarounds.filter(function (x) { return x.month === m; });
+    var avg = inMonth.length
+      ? inMonth.reduce(function (a, x) { return a + x.days; }, 0) / inMonth.length
+      : 0;
+    return { month: m, avgDays: +avg.toFixed(1) };
+  });
+
+  var avgDaysAll = turnarounds.length
+    ? turnarounds.reduce(function (a, x) { return a + x.days; }, 0) / turnarounds.length
+    : 0;
+
+  var lateDeliveries = myMilestones.filter(function (m) {
+    return m.dueDate && m.submittedAt && new Date(m.submittedAt) > new Date(m.dueDate);
+  }).length;
 
   var velocityStats = {
-    avgCompletionTime: '4.7 days',
-    onTimeDeliveryRate: 88,
-    lateDeliveries: 3,
+    avgCompletionTime: turnarounds.length ? avgDaysAll.toFixed(1) + ' days' : 'No data yet',
+    onTimeDeliveryRate: myMilestones.length
+      ? Math.round(((myMilestones.length - lateDeliveries) / myMilestones.length) * 100)
+      : 0,
+    lateDeliveries: lateDeliveries,
   };
 
-  var clientFeedback = [
-    { client:'Sarah Johnson',  initials:'SJ', project:'E-Commerce Mobile App',   rating:5.0, comment:'Exceptional work! Delivered ahead of schedule with outstanding quality. Highly recommended.', date:'Mar 6, 2026' },
-    { client:'Michael Brown',  initials:'MB', project:'SaaS Dashboard Redesign', rating:4.8, comment:'Great attention to detail and excellent communication throughout the project.',                date:'Mar 4, 2026' },
-    { client:'Emma Davis',     initials:'ED', project:'API Integration Project',  rating:4.9, comment:'Professional and skilled developer. Would definitely work with again.',                       date:'Mar 2, 2026' },
-  ];
+  // The platform has no reviews model yet, so there is nothing honest to show here.
+  var clientFeedback = [];
 
-  var proposalStats = { sent:60, accepted:46, successRate:77 };
+  var myProposals = Store.getProposalsByWorker(workerId);
+  var acceptedProposals = myProposals.filter(function (p) { return p.status === 'hired'; }).length;
+  var proposalStats = {
+    sent: myProposals.length,
+    accepted: acceptedProposals,
+    successRate: myProposals.length ? Math.round((acceptedProposals / myProposals.length) * 100) : 0,
+  };
+
+  var allProposals = Store.getProposals();
+  var platformHired = allProposals.filter(function (p) { return p.status === 'hired'; }).length;
+  var platformRate = allProposals.length ? Math.round((platformHired / allProposals.length) * 100) : 0;
+  var rateDelta = proposalStats.successRate - platformRate;
 
   /* ═══════════════════════════════════════════════════════
      HELPERS
@@ -387,7 +458,9 @@ document.addEventListener('DOMContentLoaded', function () {
       + '<div class="pa-feedback-comment">' + f.comment + '</div>'
       + '<div class="pa-feedback-date">' + f.date + '</div>'
       + '</div>';
-  }).join('');
+  }).join('') || '<div style="padding:22px 4px;text-align:center;color:var(--muted-foreground);font-size:13px;">'
+      + 'No client reviews yet. Ratings appear here once clients review your completed milestones.'
+      + '</div>';
 
   var feedbackCard = ''
     + '<div class="pa-card">'
@@ -438,8 +511,10 @@ document.addEventListener('DOMContentLoaded', function () {
     + '<div class="pa-insight-inner">'
     + '<i data-lucide="trending-up" style="width:16px;height:16px;color:#16a34a;flex-shrink:0;margin-top:2px;"></i>'
     + '<div>'
-    + '<div class="pa-insight-title">Above Average</div>'
-    + '<div class="pa-insight-body">Your proposal success rate is 15% higher than the platform average.</div>'
+    + '<div class="pa-insight-title">' + (myProposals.length === 0 ? 'No proposals yet' : rateDelta > 0 ? 'Above average' : rateDelta < 0 ? 'Below average' : 'On par') + '</div>'
+    + '<div class="pa-insight-body">' + (myProposals.length === 0
+        ? 'Submit proposals to see how your acceptance rate compares with the platform.'
+        : 'Your acceptance rate is ' + proposalStats.successRate + '% against a platform average of ' + platformRate + '%.') + '</div>'
     + '</div></div></div>'
     + '</div>';
 

@@ -421,7 +421,9 @@ function wsRenderPortfolio() {
     wrap.innerHTML = '<div class="ws-portfolio-grid">'
       + wsState.portfolioProjects.map(function(p) {
           return '<div class="ws-portfolio-card">'
-            + '<div class="ws-portfolio-thumb"><img src="' + p.thumbnail + '" alt="' + p.title + '" loading="lazy" /></div>'
+            + (p.thumbnail
+                ? '<div class="ws-portfolio-thumb"><img src="' + escapeHtml(p.thumbnail) + '" alt="' + escapeHtml(p.title) + '" loading="lazy" /></div>'
+                : '<div class="ws-portfolio-thumb" style="display:flex;align-items:center;justify-content:center;background:var(--secondary);color:var(--muted-foreground);font-size:12px;">No image</div>')
             + '<div class="ws-portfolio-body">'
             + '<div class="ws-portfolio-title-row">'
             + '<div class="ws-portfolio-title">' + p.title + '</div>'
@@ -437,74 +439,9 @@ function wsRenderPortfolio() {
   if (window.lucide) lucide.createIcons();
 }
 
-function wsRenderPayoutMethods() {
-  var wrap = document.getElementById('wsPayoutList');
-  if (!wrap) return;
-  if (wsState.payoutMethods.length === 0) {
-    wrap.innerHTML = '<div class="ws-empty-state">'
-      + '<i data-lucide="wallet" style="width:40px;height:40px;display:block;margin:0 auto;"></i>'
-      + '<div class="ws-empty-text">No payout methods added yet.</div>'
-      + '</div>';
-  } else {
-    wrap.innerHTML = wsState.payoutMethods.map(function(m) {
-      var icon = wsPayoutIconData(m.type);
-      return '<div class="ws-payout-card">'
-        + '<div class="ws-payout-left">'
-        + '<div class="ws-payout-icon"><i data-lucide="' + icon.icon + '" style="width:20px;height:20px;color:' + icon.color + ';"></i></div>'
-        + '<div><div class="ws-payout-name">' + m.name
-        + (m.isPrimary ? ' <span class="ws-badge-primary">Primary</span>' : '')
-        + '</div><div class="ws-payout-detail">' + m.details + '</div></div>'
-        + '</div>'
-        + '<button class="ws-btn-trash" onclick="wsRemovePayoutMethod(\'' + m.id + '\')" title="Remove">'
-        + '<i data-lucide="trash-2" style="width:16px;height:16px;"></i></button>'
-        + '</div>';
-    }).join('');
-  }
-  if (window.lucide) lucide.createIcons();
-}
 
-function wsRenderNotifications() {
-  var wrap = document.getElementById('wsNotifList');
-  if (!wrap) return;
-  wrap.innerHTML = wsState.notificationSettings.map(function(n) {
-    return '<div class="ws-notif-row">'
-      + '<div><div class="ws-notif-label">' + n.label + '</div>'
-      + '<div class="ws-notif-desc">' + n.description + '</div></div>'
-      + '<button class="ws-toggle' + (n.enabled ? ' on' : '') + '" onclick="wsToggleNotif(\'' + n.id + '\', this)">'
-      + '<div class="ws-toggle-knob"></div></button>'
-      + '</div>';
-  }).join('');
-}
 
-function wsRenderLoginActivity() {
-  var wrap = document.getElementById('wsActivityList');
-  if (!wrap) return;
-  wrap.innerHTML = wsState.loginActivities.map(function(a) {
-    var icon = wsIsMobile(a.device) ? 'smartphone' : 'monitor';
-    return '<div class="ws-activity-row">'
-      + '<div class="ws-activity-icon"><i data-lucide="' + icon + '" style="width:18px;height:18px;"></i></div>'
-      + '<div><div class="ws-activity-device">' + a.device
-      + (a.isCurrent ? ' <span class="ws-current-badge">Current</span>' : '')
-      + '</div><div class="ws-activity-meta">' + a.location + ' • ' + a.timestamp + '</div></div>'
-      + '</div>';
-  }).join('');
-  if (window.lucide) lucide.createIcons();
-}
 
-function wsRender2FABadge() {
-  var badge = document.getElementById('ws2FaBadge');
-  var btn   = document.getElementById('ws2FaBtn');
-  if (!badge || !btn) return;
-  if (wsState.twoFactorEnabled) {
-    badge.className = 'ws-2fa-badge enabled';
-    badge.textContent = 'Enabled';
-    btn.textContent = 'Manage 2FA';
-  } else {
-    badge.className = 'ws-2fa-badge disabled';
-    badge.textContent = 'Disabled';
-    btn.textContent = 'Enable 2FA';
-  }
-}
 
 /* ════════════════════════════════════════════════════════
    ACTIONS — all global so onclick attrs work
@@ -605,21 +542,15 @@ function wsAddPortfolioProject() {
     return;
   }
 
-  // Pick a random Unsplash thumbnail so new cards look real
-  var thumbs = [
-    'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=400&h=300&fit=crop',
-    'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=400&h=300&fit=crop',
-    'https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?w=400&h=300&fit=crop',
-    'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=300&fit=crop',
-  ];
-  var thumb = thumbs[Math.floor(Math.random() * thumbs.length)];
-
+  // A stock photo picked at random used to stand in here "so new cards look
+  // real" — it made every portfolio entry claim an image of work nobody did.
+  // Entries carry no thumbnail until there is a real one to carry.
   wsState.portfolioProjects.push({
     id: Date.now().toString(),
     title: title,
     description: desc || 'No description provided.',
     url: url || '#',
-    thumbnail: thumb,
+    thumbnail: null,
   });
 
   const session = Auth.getCurrentUser();
@@ -634,49 +565,9 @@ function wsAddPortfolioProject() {
   if (urlEl)   urlEl.value = '';
 }
 
-function wsRemovePayoutMethod(id) {
-  wsState.payoutMethods = wsState.payoutMethods.filter(function(m){ return m.id!==id; });
-  wsRenderPayoutMethods();
-}
 
-function wsAddPayoutMethod() {
-  var typeEl   = document.getElementById('wsPayoutType');
-  var detailEl = document.getElementById('wsPayoutDetail');
-  var detail   = detailEl ? detailEl.value.trim() : '';
 
-  if (!detail) {
-    detailEl && (detailEl.style.borderColor = '#ef4444');
-    return;
-  }
 
-  var type  = typeEl ? typeEl.value : 'bank';
-  var names = { bank:'Bank Account', paypal:'PayPal', wise:'Wise' };
-
-  wsState.payoutMethods.push({
-    id: Date.now().toString(),
-    type: type,
-    name: names[type] || type,
-    details: detail,
-    isPrimary: false,
-  });
-
-  wsRenderPayoutMethods();
-  wsCloseModal('wsPayoutModal');
-
-  if (detailEl) { detailEl.value = ''; detailEl.style.borderColor = ''; }
-}
-
-function wsToggleNotif(id, btn) {
-  wsState.notificationSettings = wsState.notificationSettings.map(function(n) {
-    return n.id === id ? Object.assign({}, n, { enabled: !n.enabled }) : n;
-  });
-  btn.classList.toggle('on');
-}
-
-function wsToggle2FA() {
-  wsState.twoFactorEnabled = !wsState.twoFactorEnabled;
-  wsRender2FABadge();
-}
 
 function wsUpdateBioCount() {
   var ta  = document.getElementById('wsBio');

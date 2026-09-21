@@ -311,7 +311,14 @@
         raw = all.find(d => d.status === 'open') || all[0] || null;
       }
       if (!raw) {
-        document.body.innerHTML = '<div style="padding:80px;text-align:center;color:#6b7280;font-size:16px;">No dispute found. <a href="expert-dispute-cases.html" style="color:#6366f1;">Go to Disputes</a></div>';
+        renderEmptyState({
+          role: 'expert',
+          activePath: 'expert-dispute-cases.html',
+          pageTitle: 'Resolve Dispute',
+          message: 'No dispute found.',
+          linkHref: 'expert-dispute-cases.html',
+          linkLabel: 'Go to Disputes',
+        });
         return;
       }
 
@@ -320,11 +327,22 @@
       const respondent = Store.getUserById(raw.againstId);
       const escrowAmt = raw.amount || '$0';
 
+      // The work under dispute. A reviewer was being asked to decide the case
+      // without ever seeing what the worker actually delivered — the files,
+      // the repository, the notes — none of it reached this page.
+      const disputedMilestone = raw.milestoneId ? Store.getMilestoneById(raw.milestoneId) : null;
+      const disputedWork = disputedMilestone ? disputedMilestone.deliverable : null;
+
+      const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g,
+        c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+      const safeUrl = u => /^https?:\/\//i.test(String(u || '')) ? String(u) : '';
+
       // Build the `d` object that the rest of the template uses
       const d = {
         project:           raw.project || (task ? task.title : 'Unknown Project'),
-        milestone:         raw.milestone || 'Milestone',
-        milestoneId:       raw.id,
+        milestone:         raw.milestone || (disputedMilestone ? disputedMilestone.title : 'Milestone'),
+        milestoneId:       raw.milestoneId || null,
+        caseId:            raw.id,
         issue:             raw.reason ? raw.reason.substring(0,60)+'...' : 'Dispute',
         description:       raw.reason || 'No description provided.',
         status:            raw.status === 'open' ? 'Open' : raw.status === 'resolved' ? 'Resolved' : 'Under Investigation',
@@ -345,6 +363,7 @@
           { dot:'orange',time: raw.createdAt ? new Date(raw.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'N/A', text:'Dispute raised', sub:'Escrow frozen. Case assigned to Expert Reviewer.' },
         ],
         files: [],
+        deliverable: disputedWork,
       };
 
       let selectedVerdict = '';
@@ -363,7 +382,7 @@
         <div class="tl-item">
           <div class="tl-dot ${t.dot}"></div>
           <div class="tl-time">${t.time}</div>
-          <div class="tl-text">${t.text}</div>
+          <div class="tl-text">${escapeHtml(t.text)}</div>
           <div class="tl-sub">${t.sub}</div>
         </div>`).join('');
 
@@ -374,10 +393,10 @@
             <i data-lucide="${f.icon}" style="width:18px;height:18px;color:${f.iconColor};"></i>
           </div>
           <div>
-            <div class="file-name">${f.name}</div>
+            <div class="file-name">${escapeHtml(f.name)}</div>
             <div class="file-size">${f.size}</div>
           </div>
-          <button class="file-dl" onclick="toast('Downloading ${f.name}…','success')">
+          <button class="file-dl" onclick="toast('Downloading ${escapeHtml(f.name)}…','success')">
             <i data-lucide="download" style="width:12px;height:12px;display:inline;vertical-align:middle;margin-right:4px;"></i>View
           </button>
         </div>`).join('');
@@ -429,15 +448,15 @@
                 <div class="info-grid" style="margin-bottom:16px;">
                   <div class="info-cell">
                     <span class="info-label">Project</span>
-                    <span class="info-value">${d.project}</span>
+                    <span class="info-value">${escapeHtml(d.project)}</span>
                   </div>
                   <div class="info-cell">
                     <span class="info-label">Milestone</span>
-                    <span class="info-value">${d.milestone}</span>
+                    <span class="info-value">${escapeHtml(d.milestone)}</span>
                   </div>
                   <div class="info-cell">
                     <span class="info-label">Dispute ID</span>
-                    <span class="info-value mono">#DIS-${d.milestoneId}</span>
+                    <span class="info-value mono">#DIS-${d.caseId}</span>
                   </div>
                   <div class="info-cell">
                     <span class="info-label">Date Raised</span>
@@ -453,7 +472,59 @@
                   </div>
                 </div>
                 <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted-foreground);margin-bottom:8px;">Dispute Description</div>
-                <p style="font-size:14px;line-height:1.65;color:var(--foreground);">${d.description}</p>
+                <p style="font-size:14px;line-height:1.65;color:var(--foreground);">${escapeHtml(d.description)}</p>
+              </div>
+            </div>
+
+            <!-- The work under dispute -->
+            <div class="rc">
+              <div class="rc-head">
+                <div class="rc-head-icon" style="background:#eef2ff;">
+                  <i data-lucide="package" style="width:16px;height:16px;color:#6366f1;"></i>
+                </div>
+                <span class="rc-head-title">Submitted Deliverable</span>
+                ${disputedMilestone ? `<span class="spill" style="margin-left:auto;background:#eef2ff;border-color:#c7d2fe;color:#3730a3;">${esc(disputedMilestone.title)}</span>` : ''}
+              </div>
+              <div class="rc-body">
+                ${!disputedMilestone ? `
+                  <p style="font-size:13.5px;color:var(--muted-foreground);">This dispute is not tied to a specific milestone, so there is no single submission to review.</p>
+                ` : !disputedWork ? `
+                  <p style="font-size:13.5px;color:var(--muted-foreground);">The worker has not submitted a deliverable for <strong>${esc(disputedMilestone.title)}</strong> yet.</p>
+                ` : `
+                  ${disputedWork.title ? `
+                    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted-foreground);margin-bottom:6px;">Title</div>
+                    <p style="font-size:14px;font-weight:600;margin-bottom:14px;">${esc(disputedWork.title)}</p>` : ''}
+
+                  ${disputedWork.description ? `
+                    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted-foreground);margin-bottom:6px;">Notes from the worker</div>
+                    <p style="font-size:14px;line-height:1.65;margin-bottom:14px;">${esc(disputedWork.description)}</p>` : ''}
+
+                  ${safeUrl(disputedWork.link) ? `
+                    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted-foreground);margin-bottom:6px;">Repository / link</div>
+                    <a href="${esc(safeUrl(disputedWork.link))}" target="_blank" rel="noopener noreferrer"
+                       style="display:inline-flex;align-items:center;gap:6px;font-size:13.5px;color:#4f46e5;word-break:break-all;margin-bottom:14px;">
+                      <i data-lucide="git-branch" style="width:14px;height:14px;flex:none;"></i>${esc(disputedWork.link)}
+                    </a>` : ''}
+
+                  <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted-foreground);margin-bottom:6px;">Files</div>
+                  ${(disputedWork.files && disputedWork.files.length) ? `
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                      ${disputedWork.files.map(f => {
+                        const name = typeof f === 'string' ? f : (f && f.name) || 'File';
+                        const href = typeof f === 'object' ? Store.fileUrl(f) : '';
+                        return `
+                        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;">
+                          <i data-lucide="file" style="width:16px;height:16px;color:#6366f1;flex:none;"></i>
+                          <span style="flex:1;min-width:0;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(name)}</span>
+                          ${href
+                            ? `<a href="${esc(href)}" download="${esc(name)}" style="font-size:12px;color:#4f46e5;text-decoration:none;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;"><i data-lucide="download" style="width:13px;height:13px;"></i>Download</a>`
+                            : `<span style="font-size:11px;color:var(--muted-foreground);white-space:nowrap;">Not stored</span>`}
+                        </div>`; }).join('')}
+                    </div>` : `<p style="font-size:13.5px;color:var(--muted-foreground);">No files were attached to this submission.</p>`}
+
+                  ${disputedMilestone.submittedAt ? `
+                    <div style="margin-top:14px;font-size:12.5px;color:var(--muted-foreground);">Submitted ${esc(disputedMilestone.submittedAt)} · milestone value $${esc(disputedMilestone.budget)}</div>` : ''}
+                `}
               </div>
             </div>
 
@@ -469,7 +540,7 @@
                 <div class="party-row">
                   <div class="party-avatar" style="background:${d.raisedByColor};">${d.raisedByInitials}</div>
                   <div>
-                    <div class="party-name">${d.raisedByName}</div>
+                    <div class="party-name">${escapeHtml(d.raisedByName)}</div>
                     <div class="party-role">${d.raisedBy}</div>
                   </div>
                   <span class="party-tag tag-raiser">Raised Dispute</span>
@@ -562,6 +633,14 @@
                   </div>
                 </div>
 
+                <div class="verdict-option" id="v3" onclick="selectVerdict('partial',this)">
+                  <div class="verdict-radio"><div class="verdict-radio-dot"></div></div>
+                  <div>
+                    <div class="verdict-title">Split the milestone</div>
+                    <div class="verdict-desc">Partial delivery. Half of ${d.escrow} is released to the worker and half returned to the client.</div>
+                  </div>
+                </div>
+
 
                 <div style="margin-top:16px;">
                   <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">Resolution Notes <span style="color:var(--muted-foreground);font-weight:400;">(required)</span></label>
@@ -590,7 +669,7 @@
         role:        'expert',
         activePath:  'expert-dispute-cases.html',
         pageTitle:   'Resolve Dispute',
-        pageSubtitle: `Case #DIS-${d.milestoneId} · ${d.project} — ${d.milestone}`,
+        pageSubtitle: `Case #DIS-${d.caseId} · ${escapeHtml(d.project)} — ${escapeHtml(d.milestone)}`,
         content,
       });
 
@@ -629,7 +708,7 @@
         if (!valid) return;
 
         // Map verdict to store format
-        const verdictMap = { favour_worker: 'worker-favour', favour_client: 'client-favour', partial: 'split', escalate: 'client-favour' };
+        const verdictMap = { favour_worker: 'worker-favour', favour_client: 'client-favour', partial: 'split' };
         const storeVerdict = verdictMap[selectedVerdict] || selectedVerdict;
 
         // Save to store
@@ -648,8 +727,8 @@
               Store.addNotification({
                 userId: raw.raisedBy,
                 type: 'dispute-resolved',
-                text: `Dispute resolved: ${d.project}`,
-                subtext: `Expert verdict ${verdictLabel} — ${d.milestone}`,
+                text: `Dispute resolved: ${escapeHtml(d.project)}`,
+                subtext: `Expert verdict ${verdictLabel} — ${escapeHtml(d.milestone)}`,
               });
             }
 
@@ -658,8 +737,8 @@
               Store.addNotification({
                 userId: raw.againstId,
                 type: 'dispute-resolved',
-                text: `Dispute resolved: ${d.project}`,
-                subtext: `Expert verdict ${verdictLabel} — ${d.milestone}`,
+                text: `Dispute resolved: ${escapeHtml(d.project)}`,
+                subtext: `Expert verdict ${verdictLabel} — ${escapeHtml(d.milestone)}`,
               });
             }
           }
@@ -669,7 +748,6 @@
           favour_worker: `✓ Verdict submitted. Escrow of ${d.escrow} released to ${d.respondentName}.`,
           favour_client: `✓ Verdict submitted. Escrow returned to client. Worker notified to revise.`,
           partial:       `✓ Partial resolution submitted. Escrow split and worker notified.`,
-          escalate:      `✓ Case escalated to senior reviewer.`,
         };
         Validate.toast(msgs[selectedVerdict], 'success');
         setTimeout(() => { window.location.href = 'expert-dispute-cases.html'; }, 2800);

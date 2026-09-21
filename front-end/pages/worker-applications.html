@@ -123,7 +123,7 @@
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
               <div style="width:36px;height:36px;border-radius:50%;background:${p.avatarColor};display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;flex-shrink:0;">${p.avatar}</div>
               <div style="flex:1;min-width:0;">
-                <div style="font-weight:600;font-size:14px;">${p.workerName}</div>
+                <div style="font-weight:600;font-size:14px;">${escapeHtml(p.workerName)}</div>
                 <div style="font-size:12px;color:var(--muted-foreground);">${'★'.repeat(Math.round(p.rating))} ${p.rating} (${p.reviewCount})</div>
               </div>
               <div style="text-align:right;flex-shrink:0;">
@@ -131,7 +131,7 @@
                 <div style="font-size:11px;color:var(--muted-foreground);">${p.timeline}</div>
               </div>
             </div>
-            <p style="font-size:12px;color:var(--muted-foreground);line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${p.coverLetter}</p>
+            <p style="font-size:12px;color:var(--muted-foreground);line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${escapeHtml(p.coverLetter)}</p>
           </div>`).join('');
       }
 
@@ -143,7 +143,7 @@
               <div style="display:flex;align-items:center;gap:14px;">
                 <div style="width:56px;height:56px;border-radius:50%;background:${p.avatarColor};display:flex;align-items:center;justify-content:center;color:white;font-size:16px;font-weight:700;">${p.avatar}</div>
                 <div>
-                  <h2 style="font-size:18px;font-weight:600;margin-bottom:4px;">${p.workerName}</h2>
+                  <h2 style="font-size:18px;font-weight:600;margin-bottom:4px;">${escapeHtml(p.workerName)}</h2>
                   <div style="font-size:13px;color:var(--muted-foreground);display:flex;align-items:center;gap:12px;">
                     <span><i data-lucide="map-pin" style="width:12px;height:12px;display:inline;vertical-align:middle;"></i> ${p.location}</span>
                     <span><i data-lucide="clock" style="width:12px;height:12px;display:inline;vertical-align:middle;"></i> ${p.responseTime}</span>
@@ -185,7 +185,7 @@
 
           <div class="detail-section">
             <h3 style="font-size:14px;font-weight:600;margin-bottom:12px;">Cover Letter</h3>
-            <p style="font-size:14px;color:#374151;line-height:1.7;">${p.coverLetter}</p>
+            <p style="font-size:14px;color:#374151;line-height:1.7;">${escapeHtml(p.coverLetter)}</p>
           </div>
 
           <div class="detail-section">
@@ -219,7 +219,7 @@
                 <div onclick="switchProject('${proj.id}', null)" style="padding:12px 16px;cursor:pointer;border-bottom:1px solid #f3f4f6;transition:background 0.15s;display:flex;align-items:center;gap:12px;" onmouseover="this.style.background='#f8fafc'" onmouseleave="this.style.background='transparent'">
                   <i data-lucide="briefcase" style="width:16px;height:16px;color:#4f46e5;flex-shrink:0;"></i>
                   <div style="flex:1;">
-                    <div style="font-size:13px;font-weight:600;color:var(--foreground);">${proj.title}</div>
+                    <div style="font-size:13px;font-weight:600;color:var(--foreground);">${escapeHtml(proj.title)}</div>
                     <div style="font-size:11px;color:#6b7280;">${proj.proposalCount} proposals</div>
                   </div>
                 </div>
@@ -257,14 +257,18 @@
             <p style="font-size:14px;color:var(--muted-foreground);margin-bottom:20px;">You're about to hire <strong id="hireWorkerName"></strong> for this project. This will lock the escrow funds.</p>
             <div style="padding:16px;border-radius:12px;background:#f0fdf4;border:1px solid #bbf7d0;margin-bottom:20px;">
               <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px;">
-                <span style="color:#374151;">Bid Amount</span><span style="font-weight:700;" id="hireBidAmount"></span>
+                <span style="color:#374151;">Project budget (held in escrow)</span><span style="font-weight:700;" id="hireBidAmount"></span>
               </div>
               <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px;">
-                <span style="color:#374151;">Platform Fee (5%)</span><span style="font-weight:600;color:#dc2626;" id="hireFee"></span>
+                <span style="color:#374151;">Marketplace fee (5%)</span><span style="font-weight:600;color:#dc2626;" id="hireFee"></span>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px;">
+                <span style="color:#374151;">Contract initiation fee</span><span style="font-weight:600;color:#dc2626;" id="hireInitiation"></span>
               </div>
               <div style="display:flex;justify-content:space-between;font-size:13px;border-top:1px solid #bbf7d0;padding-top:8px;margin-top:4px;">
-                <span style="font-weight:600;">Total Escrow</span><span style="font-weight:700;color:#10b981;" id="hireTotal"></span>
+                <span style="font-weight:600;">Total charged to you</span><span style="font-weight:700;color:#10b981;" id="hireTotal"></span>
               </div>
+              <div style="font-size:11px;color:#6b7280;margin-top:8px;" id="hireBidNote"></div>
             </div>
             <div style="display:flex;gap:12px;">
               <button onclick="document.getElementById('hireModal').style.display='none'" class="btn-outline" style="flex:1;padding:12px;border-radius:12px;">Cancel</button>
@@ -301,8 +305,8 @@
         if (detailsDiv && project) {
           detailsDiv.innerHTML = `
             <div style="margin-bottom:20px;">
-              <h3 style="font-size:18px;font-weight:700;margin-bottom:6px;font-family:system-ui,-apple-system,sans-serif;color:var(--foreground);">${project.title}</h3>
-              <p style="font-size:13px;color:#6b7280;line-height:1.6;font-family:system-ui,-apple-system,sans-serif;">${project.description}</p>
+              <h3 style="font-size:18px;font-weight:700;margin-bottom:6px;font-family:system-ui,-apple-system,sans-serif;color:var(--foreground);">${escapeHtml(project.title)}</h3>
+              <p style="font-size:13px;color:#6b7280;line-height:1.6;font-family:system-ui,-apple-system,sans-serif;">${escapeHtml(project.description)}</p>
             </div>
             <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
               <div style="padding:14px;border-radius:12px;background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1px solid #a7f3d0;">
@@ -354,7 +358,7 @@
               <div onclick="switchProject('${proj.id}', null)" style="padding:12px 16px;cursor:pointer;border-bottom:1px solid #f3f4f6;transition:background 0.15s;display:flex;align-items:center;gap:12px;" onmouseover="this.style.background='#f8fafc'" onmouseleave="this.style.background='transparent'">
                 <i data-lucide="briefcase" style="width:16px;height:16px;color:#4f46e5;flex-shrink:0;"></i>
                 <div style="flex:1;">
-                  <div style="font-size:13px;font-weight:600;color:var(--foreground);">${proj.title}</div>
+                  <div style="font-size:13px;font-weight:600;color:var(--foreground);">${escapeHtml(proj.title)}</div>
                   <div style="font-size:11px;color:#6b7280;">${pCount} proposals</div>
                 </div>
               </div>
@@ -379,12 +383,24 @@
         const p = allProposals.find(p => p.id === proposalId);
         if (!p) return;
         const modal = document.getElementById('hireModal');
-        const bid = parseInt(p.bidPrice.replace(/[$,]/g, ''));
-        const fee = Math.round(bid * 0.05);
+
+        // Escrow is funded from the task budget, not the worker's bid, and the
+        // client also pays a contract initiation fee. Quote what the server will
+        // actually charge, using the same fee table it uses.
+        const task = Store.getTaskById(p.taskId);
+        const budget = task ? task.budget : parseFloat(String(p.bidPrice).replace(/[$,]/g, '')) || 0;
+        const q = Store.Fees.projectFunding(budget);
+        const money = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
         document.getElementById('hireWorkerName').textContent = p.workerName;
-        document.getElementById('hireBidAmount').textContent = p.bidPrice;
-        document.getElementById('hireFee').textContent = `$${fee}`;
-        document.getElementById('hireTotal').textContent = `$${bid + fee}`;
+        document.getElementById('hireBidAmount').textContent = money(q.budget);
+        document.getElementById('hireFee').textContent = money(q.marketplace);
+        document.getElementById('hireInitiation').textContent = money(q.initiation);
+        document.getElementById('hireTotal').textContent = money(q.total);
+        const note = document.getElementById('hireBidNote');
+        if (note) {
+          note.textContent = `${escapeHtml(p.workerName)} bid ${p.bidPrice}. Escrow is funded from the project budget of ${money(q.budget)}.`;
+        }
         modal.style.display = 'flex';
         lucide.createIcons();
       };

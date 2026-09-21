@@ -50,10 +50,17 @@ const Validate = (() => {
     return null;
   }
 
+  // Letters from any script, plus the marks, hyphens, apostrophes and periods
+  // that real names contain. The old rule was /^[A-Za-z\s]+$/, which rejected
+  // "José García", "Anne-Marie O'Brien" and "Marta Kovač" outright, and its
+  // 3-character minimum rejected two-character CJK names.
+  const NAME_PATTERN = /^[\p{L}\p{M}][\p{L}\p{M}\s'’.\-]*$/u;
+
   function fullName(value) {
-    if (!value || String(value).trim() === '') return 'Full name is required.';
-    if (!/^[A-Za-z\s]+$/.test(String(value).trim())) return 'Full name must contain only letters and spaces.';
-    if (String(value).trim().length < 3) return 'Full name must be at least 3 characters.';
+    const v = String(value ?? '').trim();
+    if (v === '') return 'Full name is required.';
+    if (!NAME_PATTERN.test(v)) return 'Name can contain letters, spaces, hyphens and apostrophes.';
+    if (v.length < 2) return 'Full name must be at least 2 characters.';
     return null;
   }
 

@@ -21,8 +21,6 @@
       const transactions = Store.getTransactions();
       const auditReqs = Store.getAuditRequests();
 
-      const expertApps = typeof Store.getExpertApplications === 'function' ? Store.getExpertApplications() : [];
-      const pendingApps = expertApps.filter(a => a.status === 'pending').length;
 
       const totalUsers    = users.length;
       const activeTasks   = tasks.filter(t => t.status === 'in-progress').length;
@@ -48,7 +46,7 @@
       };
 
       const content = `
-        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
+        <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
           <div class="stat-card">
             <div><div class="stat-val">${totalUsers}</div><div class="stat-label">Total Users</div><div class="stat-change">${clients}C · ${workers}W · ${experts}E</div></div>
             <div class="stat-icon-wrap" style="background:#eff6ff;"><i data-lucide="users" style="width:20px;height:20px;color:#3b82f6;"></i></div>
@@ -61,10 +59,6 @@
             <div><div class="stat-val">$${escrowBalance.toLocaleString()}</div><div class="stat-label">Escrow Balance</div><div class="stat-change">$${released.toLocaleString()} released</div></div>
             <div class="stat-icon-wrap" style="background:#faf5ff;"><i data-lucide="wallet" style="width:20px;height:20px;color:#a855f7;"></i></div>
           </div>
-          <div class="stat-card">
-            <div><div class="stat-val" style="color:#f97316;">${pendingApps}</div><div class="stat-label">Pending Expert Apps</div><div class="stat-change">${openDisputes} open disputes</div></div>
-            <div class="stat-icon-wrap" style="background:#fff7ed;"><i data-lucide="shield-check" style="width:20px;height:20px;color:#f97316;"></i></div>
-          </div>
         </div>
 
         <!-- Quick Actions -->
@@ -75,17 +69,13 @@
               <div class="qa-v2-icon" style="color:#2563eb;"><i data-lucide="users" style="width:20px;height:20px;"></i></div>
               <div class="qa-v2-content"><div class="qa-v2-title">Manage Users</div><div class="qa-v2-desc">Add, edit, suspend or delete users</div></div>
             </a>
-            <a href="superuser-expert-applications.html" class="qa-v2-card" style="background:#fdf5ff;border-color:#f8e4ff;">
-              <div class="qa-v2-icon" style="color:#9333ea;"><i data-lucide="shield-check" style="width:20px;height:20px;"></i></div>
-              <div class="qa-v2-content"><div class="qa-v2-title">Expert Applications</div><div class="qa-v2-desc">${pendingApps} pending application${pendingApps !== 1 ? 's' : ''} to review</div></div>
+            <a href="superuser-escrow.html" class="qa-v2-card" style="background:#fdf5ff;border-color:#f8e4ff;">
+              <div class="qa-v2-icon" style="color:#9333ea;"><i data-lucide="wallet" style="width:20px;height:20px;"></i></div>
+              <div class="qa-v2-content"><div class="qa-v2-title">Escrow &amp; Finance</div><div class="qa-v2-desc">Inspect held funds and the transaction ledger</div></div>
             </a>
             <a href="superuser-tasks.html" class="qa-v2-card" style="background:#f0fdf4;border-color:#dcfce7;">
               <div class="qa-v2-icon" style="color:#16a34a;"><i data-lucide="folder-kanban" style="width:20px;height:20px;"></i></div>
-              <div class="qa-v2-content"><div class="qa-v2-title">Manage Tasks</div><div class="qa-v2-desc">View, edit or remove any task</div></div>
-            </a>
-            <a href="superuser-disputes.html" class="qa-v2-card" style="background:#fff7ed;border-color:#ffeed5;">
-              <div class="qa-v2-icon" style="color:#ea580c;"><i data-lucide="scale" style="width:20px;height:20px;"></i></div>
-              <div class="qa-v2-content"><div class="qa-v2-title">Disputes</div><div class="qa-v2-desc">Override verdicts, close cases</div></div>
+              <div class="qa-v2-content"><div class="qa-v2-title">Manage Tasks</div><div class="qa-v2-desc">View or delete any task</div></div>
             </a>
           </div>
         </div>
@@ -103,7 +93,7 @@
                 <tbody>
                   ${recentUsers.map(u => `
                   <tr>
-                    <td><div class="worker-cell"><div class="worker-avatar" style="${u.avatarColor?'background:'+u.avatarColor:''}">${u.avatar}</div><div><div style="font-weight:600;font-size:13px;">${u.name}</div><div style="font-size:12px;color:var(--muted-foreground);">${u.email}</div></div></div></td>
+                    <td><div class="worker-cell"><div class="worker-avatar" style="${u.avatarColor?'background:'+u.avatarColor:''}">${u.avatar}</div><div><div style="font-weight:600;font-size:13px;">${escapeHtml(u.name)}</div><div style="font-size:12px;color:var(--muted-foreground);">${escapeHtml(u.email)}</div></div></div></td>
                     <td><span class="badge ${u.role==='client'?'badge-blue':u.role==='expert'?'badge-purple':u.role==='superuser'?'badge-red':'badge-green'}">${u.role}</span></td>
                     <td><span class="badge ${u.status==='active'?'badge-green':'badge-red'}">${u.status}</span></td>
                     <td><a href="superuser-users.html" class="btn-sm">Edit</a></td>
@@ -125,7 +115,7 @@
                 <tbody>
                   ${recentTasks.map(t => `
                   <tr>
-                    <td style="font-weight:600;font-size:13px;">${t.title}</td>
+                    <td style="font-weight:600;font-size:13px;">${escapeHtml(t.title)}</td>
                     <td>$${t.budget.toLocaleString()}</td>
                     <td>${statusBadge(t.status)}</td>
                     <td><a href="superuser-tasks.html" class="btn-sm">View</a></td>

@@ -767,8 +767,9 @@
     function validateName() {
       const v = el.name.value.trim();
       if (!v) return 'Full name is required.';
-      if (v.length < 3) return 'Full name must be at least 3 characters.';
-      if (!/^[a-zA-Z\s.]{3,}$/.test(v)) return 'Only letters, spaces, and "." allowed.';
+      if (v.length < 2) return 'Full name must be at least 2 characters.';
+      // Any script's letters, plus hyphens and apostrophes — see Validate.fullName.
+      if (!/^[\p{L}\p{M}][\p{L}\p{M}\s'’.\-]*$/u.test(v)) return 'Name can contain letters, spaces, hyphens and apostrophes.';
       return null;
     }
 
@@ -1112,7 +1113,7 @@
       // Check duplicate email in users AND applications
       if (typeof Store !== 'undefined') {
         const existingUser = Store.getUserByEmail(el.email.value.trim());
-        const existingApp  = Store.getExpertApplicationByEmail(el.email.value.trim());
+        const existingApp  = Store.getExpertApplicationStatus(el.email.value.trim()).exists;
         if (existingUser) {
           showFieldError('expEmail', 'An account with this email already exists.');
           $('grp-expEmail')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1137,21 +1138,49 @@
 
       // Save application to Store
       const phoneCountry = $('expPhoneCountry') ? $('expPhoneCountry').value : '+91';
+      const selectedLabel = sel => {
+        const o = sel?.options?.[sel.selectedIndex];
+        return o ? o.textContent.trim() : (sel?.value || '');
+      };
+
       const appData = {
         name: el.name.value.trim(),
         email: el.email.value.trim(),
         password: el.password.value,
         phone: el.phone.value.trim(),
         phoneCountry: phoneCountry,
-        country: el.country.value,
-        expertise: el.expertise.value,
-        experience: el.years.value,
+        // Send the option LABELS. The raw values are codes ("in", "frontend"),
+        // and the admin queue displays these fields verbatim — a reviewer was
+        // seeing "in / frontend" instead of "India / Frontend Development".
+        country: selectedLabel(el.country),
+        expertise: selectedLabel(el.expertise),
+        experience: selectedLabel(el.years),
         linkedin: el.linkedin.value.trim(),
         github: el.github.value.trim(),
         motivation: el.motivation.value.trim(),
+        // Names are kept alongside the references so an older application, or
+        // one whose upload failed, still shows the reviewer what was offered.
+        resumeName: el.resume?.files?.[0]?.name || null,
+        certificateName: el.cert?.files?.[0]?.name || null,
+        resumeFile: null,
+        certificateFile: null,
       };
 
-      setTimeout(() => {
+      // The applicant has no account yet, so these go through the public
+      // application upload; the stored files are readable by staff only.
+      const uploads = [];
+      if (el.resume?.files?.[0]) {
+        uploads.push(Store.uploadFile(el.resume.files[0], { purpose: 'expert-application' })
+          .then(ref => { appData.resumeFile = ref; })
+          .catch(e => { console.warn('Resume upload failed:', e.message); }));
+      }
+      if (el.cert?.files?.[0]) {
+        uploads.push(Store.uploadFile(el.cert.files[0], { purpose: 'expert-application' })
+          .then(ref => { appData.certificateFile = ref; })
+          .catch(e => { console.warn('Certificate upload failed:', e.message); }));
+      }
+
+      Promise.all(uploads).then(() => {
         if (typeof Store !== 'undefined') {
           const result = Store.saveExpertApplication(appData);
           if (!result.success) {
@@ -1166,7 +1195,7 @@
         el.submitText.textContent = 'Submit Application';
         $('successModal').style.display = 'flex';
         lucide.createIcons();
-      }, 1800);
+      });
     });
 
     // Initial submit state

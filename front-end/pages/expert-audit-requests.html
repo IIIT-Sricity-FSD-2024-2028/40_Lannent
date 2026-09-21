@@ -230,16 +230,63 @@
   </style>
 
   <script>
+    // The API stores 'Pending' / 'In-Progress' / 'Completed'; this screen was
+    // written against 'Awaiting Review' / 'In Review' / 'Completed', so no row
+    // ever matched and the Accept button never rendered. Normalise at the boundary.
+    const UI_STATUS = {
+      'preview-sent':     'Awaiting Review',
+      'negotiating':      'Negotiating',
+      'agreed':           'Agreed',
+      'escrow-funded':    'Ready to start',
+      'in-progress':      'In Review',
+      'report-submitted': 'In Review',
+      'paid':             'Completed',
+      'declined':         'Declined',
+      'cancelled':        'Cancelled',
+    };
+    const toUiStatus = s => UI_STATUS[s] || 'Awaiting Review';
+
+    /**
+     * A project audit is not finished when the reviewer files their first
+     * report — it is finished when every milestone on the project has one.
+     * The engagement is priced and paid once, so its lifecycle status turns
+     * 'paid' early; reading that as "Completed" hid the milestones still
+     * waiting. The server sends the real coverage in `auditProgress`.
+     */
+    function auditUiStatus(a) {
+      const lifecycle = toUiStatus(a.status);
+      const p = a.auditProgress;
+      if (!p || a.kind === 'dispute-audit') return lifecycle;
+      // Terminal states are terminal regardless of coverage.
+      if (['Declined', 'Cancelled'].includes(lifecycle)) return lifecycle;
+      // Before the reviewer has taken the engagement on, nothing has changed.
+      if (!['In Review', 'Completed'].includes(lifecycle)) return lifecycle;
+
+      if (p.complete) return 'Completed';
+      return p.awaitingReview > 0 ? 'In Review' : 'Awaiting Review';
+    }
+
     // Build audit requests from store
     function getAuditRequests() {
-      return Store.getAuditRequests().map(a => ({
+      const session = Auth.getCurrentUser();
+      return Store.getAuditRequests()
+        // Project audits only — a dispute engagement belongs on Dispute Cases,
+        // and used to appear on both pages because kind was never filtered.
+        .filter(a => a.kind !== 'dispute-audit')
+        // And only what this reviewer is assigned to, or is still open to them.
+        .filter(a => !a.expertId || a.expertId === session.userId)
+        .map(a => ({
         id: a.id,
         milestoneId: a.milestoneId,
         project: a.project,
         worker: a.worker,
         milestone: a.milestone,
         submitted: a.createdAt,
-        status: a.status,
+        status: auditUiStatus(a),
+        rawStatus: a.status,
+        auditProgress: a.auditProgress || null,
+        kind: a.kind,
+        agreedAmount: a.agreedAmount,
         priority: a.severity === 'High' ? 'high' : a.severity === 'Low' ? 'low' : 'normal',
         severity: a.severity === 'High' ? 'major' : 'minor',
         severityLabel: a.severity + ' Priority',
@@ -249,11 +296,8 @@
 
     let auditRequests = [];
 
-    function acceptAudit(id) {
-      Store.updateAuditRequest(id, { status: 'In Review' });
-      Validate.toast('Audit request accepted. Now In Review.', 'success');
-      auditRequests = getAuditRequests();
-      render();
+    function openAudit(id) {
+      window.location.href = `expert-audit-preview.html?id=${id}`;
     }
 
     const severityIcon = {
@@ -265,8 +309,13 @@
 
     const statusClass = {
       'Awaiting Review': 'status-awaiting',
+      'Negotiating':     'status-awaiting',
+      'Agreed':          'status-in-review',
+      'Ready to start':  'status-in-review',
       'In Review':       'status-in-review',
       'Completed':       'status-completed',
+      'Declined':        'status-completed',
+      'Cancelled':       'status-completed',
     };
 
     function buildCards(list) {
@@ -282,7 +331,7 @@
           <div class="audit-card-top">
             <div class="audit-card-left">
               <div class="audit-card-title-row">
-                <span class="audit-card-title">${a.project}</span>
+                <span class="audit-card-title">${escapeHtml(a.project)}</span>
                 <span class="prio-badge prio-${a.priority}">${a.priority.toUpperCase()}</span>
               </div>
               <div class="audit-card-meta">
@@ -294,6 +343,11 @@
                   <i data-lucide="calendar" style="width:13px;height:13px;"></i>
                   ${a.submitted}
                 </span>
+                ${a.auditProgress && a.auditProgress.total ? `
+                <span title="Milestones on this project that have an audit report">
+                  <i data-lucide="check-circle-2" style="width:13px;height:13px;"></i>
+                  ${a.auditProgress.audited} of ${a.auditProgress.total} milestones audited
+                </span>` : ''}
               </div>
             </div>
             <span class="status-badge ${statusClass[a.status]}">${a.status}</span>
@@ -301,7 +355,7 @@
 
           <!-- divider + milestone + severity -->
           <div class="audit-card-divider">
-            <div class="audit-milestone">Milestone: <strong>${a.milestone}</strong></div>
+            <div class="audit-milestone">Milestone: <strong>${escapeHtml(a.milestone)}</strong></div>
             <div class="severity-chip severity-${a.severity}">
               <i data-lucide="${severityIcon[a.severity]}" style="width:13px;height:13px;flex-shrink:0;"></i>
               <span>${a.severity.charAt(0).toUpperCase() + a.severity.slice(1)} — ${a.severityLabel}</span>
@@ -310,9 +364,13 @@
 
           <!-- CTA -->
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            ${a.status !== 'Completed' ? `<a href="review-deliverable.html?id=${a.milestoneId}&role=expert&auditId=${a.id}" class="btn-review"><i data-lucide="eye" style="width:15px;height:15px;"></i>Review Deliverable</a>` : ''}
-            ${a.status === 'Awaiting Review' && a.fromStore ? `<button onclick="acceptAudit('${a.id}')" class="btn-review" style="background:#ecfdf5;color:#166534;border:1px solid #bbf7d0;"><i data-lucide="check" style="width:15px;height:15px;"></i>Accept</button>` : ''}
-            ${a.status === 'Completed' ? `<a href="expert-report-audit.html?id=${a.id}" class="btn-review" style="background:#f8f9fb;color:var(--foreground);border:1px solid var(--border);"><i data-lucide="file-text" style="width:15px;height:15px;"></i>View Report</a>` : ''}
+            <!-- "Review Deliverable" used to sit here, linking to the client's
+                 approve/request-changes screen. It was the wrong screen for a
+                 reviewer, it stayed visible after the report was filed, and its
+                 form reopened for a milestone that was already audited. Open →
+                 the engagement's milestone list is the way in now. -->
+            ${!['paid','declined','cancelled'].includes(a.rawStatus) ? `<button onclick="openAudit('${a.id}')" class="btn-review" style="background:#ecfdf5;color:#166534;border:1px solid #bbf7d0;"><i data-lucide="eye" style="width:15px;height:15px;"></i>${a.rawStatus === 'in-progress' ? 'Open' : 'Review &amp; quote'}</button>` : ''}
+            ${a.rawStatus === 'paid' ? `<a href="expert-report-audit.html?id=${a.id}" class="btn-review" style="background:#f8f9fb;color:var(--foreground);border:1px solid var(--border);"><i data-lucide="file-text" style="width:15px;height:15px;"></i>View Report</a>` : ''}
           </div>
         </div>
       `).join('');
@@ -340,10 +398,11 @@
           lucide.createIcons();
         }
       }
+      window.refreshAuditGrid = render;
 
       const totalRequests = auditRequests.length;
-      const pendingCount  = auditRequests.filter(a => a.status !== 'Completed').length;
-      const inReviewCount = auditRequests.filter(a => a.status === 'In Review').length;
+      const pendingCount  = auditRequests.filter(a => !['Completed','Declined','Cancelled'].includes(a.status)).length;
+      const inReviewCount = auditRequests.filter(a => a.status === 'In Review' || a.status === 'Ready to start').length;
       const doneCount     = auditRequests.filter(a => a.status === 'Completed').length;
 
       const content = `
@@ -400,7 +459,7 @@
             />
           </div>
           <button class="filter-btn active" id="filterAll"       onclick="setFilter('all',this)">All</button>
-          <button class="filter-btn"        id="filterAwaiting"  onclick="setFilter('Awaiting Review',this)">Pending</button>
+          <button class="filter-btn"        id="filterAwaiting"  onclick="setFilter('Awaiting Review',this)">Awaiting</button>
           <button class="filter-btn"        id="filterInReview"  onclick="setFilter('In Review',this)">In Review</button>
           <button class="filter-btn"        id="filterCompleted" onclick="setFilter('Completed',this)">Completed</button>
         </div>

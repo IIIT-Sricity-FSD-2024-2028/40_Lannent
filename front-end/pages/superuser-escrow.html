@@ -68,6 +68,11 @@
         'milestone-release':{ bg:'#ecfdf5', color:'#10b981', icon:'check-circle', label:'Released' },
         'deposit':          { bg:'#faf5ff', color:'#a855f7', icon:'arrow-down-circle', label:'Deposit' },
         'refund':           { bg:'#fff7ed', color:'#f97316', icon:'rotate-ccw', label:'Refund' },
+        'withdrawal':       { bg:'#fef2f2', color:'#ef4444', icon:'arrow-up-circle', label:'Withdrawal' },
+        'dispute-release':  { bg:'#f5f3ff', color:'#8b5cf6', icon:'scale', label:'Dispute Release' },
+        'audit-escrow-lock':{ bg:'#eef2ff', color:'#6366f1', icon:'lock', label:'Audit Escrow' },
+        'audit-release':    { bg:'#ecfeff', color:'#0891b2', icon:'clipboard-check', label:'Audit Payout' },
+        'platform-fee':     { bg:'#f0fdfa', color:'#0d9488', icon:'percent', label:'Platform Fee' },
       };
 
       tbody.innerHTML = filtered.map(tx => {
@@ -85,14 +90,14 @@
                 <i data-lucide="${tc.icon}" style="width:16px;height:16px;color:${tc.color};"></i>
               </div>
               <div>
-                <div style="font-weight:500;font-size:13px;">${tx.description}</div>
+                <div style="font-weight:500;font-size:13px;">${escapeHtml(tx.description)}</div>
                 <div style="font-size:12px;color:var(--muted-foreground);">${tx.createdAt}</div>
               </div>
             </div>
           </td>
           <td style="font-size:13px;">${from?.name || tx.fromId}</td>
           <td style="font-size:13px;">${to?.name || tx.toId}</td>
-          <td style="font-size:13px;color:var(--muted-foreground);">${task?.title || '—'}</td>
+          <td style="font-size:13px;color:var(--muted-foreground);">${escapeHtml(task?.title || '—')}</td>
           <td class="${isCredit ? 'amount-credit' : 'amount-debit'}">
             ${isCredit ? '+' : '-'}$${tx.amount.toLocaleString()}
           </td>
@@ -105,24 +110,26 @@
       if (window.lucide) lucide.createIcons();
     }
 
-    function forceReleaseEscrow() {
-      Validate.confirm(
-        'Force-release all pending escrow funds? This will release funds for all pending milestones immediately.',
-        () => { Validate.toast('Force release executed. All pending escrow funds released.', 'warning'); }
-      );
-    }
-
     document.addEventListener('DOMContentLoaded', () => {
       if (typeof Auth !== 'undefined' && !Auth.requireRole('superuser')) return;
 
       allTx = Store.getTransactions();
       const tasks = Store.getTasks();
 
-      const escrowLocked = allTx.filter(t => t.type === 'escrow-lock').reduce((s,t) => s+t.amount, 0);
-      const totalReleased = allTx.filter(t => t.type === 'milestone-release').reduce((s,t) => s+t.amount, 0);
-      const totalDeposits = allTx.filter(t => t.type === 'deposit').reduce((s,t) => s+t.amount, 0);
-      const escrowBalance = escrowLocked - totalReleased;
-      const totalVolume = allTx.reduce((s,t) => s+t.amount, 0);
+      // Escrow and revenue come from the ledger, which is authoritative. Deriving
+      // escrow from transaction rows under-counts: a milestone-release row records
+      // the NET paid to the worker, while the full gross left escrow.
+      const ledger = Store.getLedgerSummary();
+      const escrowBalance = ledger.totalHeld;
+      const platformRevenue = ledger.totalRevenue;
+
+      const gross = t => (t.grossAmount != null ? t.grossAmount : t.amount);
+      const totalReleased = allTx.filter(t => t.type === 'milestone-release')
+        .reduce((s,t) => s + gross(t), 0);
+      const totalDeposits = allTx.filter(t => t.type === 'deposit').reduce((s,t) => s + gross(t), 0);
+      const totalWithdrawn = allTx.filter(t => t.type === 'withdrawal').reduce((s,t) => s + gross(t), 0);
+      // platform-fee rows restate fees already counted inside other rows.
+      const totalVolume = allTx.filter(t => t.type !== 'platform-fee').reduce((s,t) => s + gross(t), 0);
 
       const content = `
         <div class="finance-grid">
@@ -142,6 +149,16 @@
             <div class="finance-card-sub">Client top-ups</div>
           </div>
           <div class="finance-card">
+            <div class="finance-card-label">Total Withdrawn</div>
+            <div class="finance-card-val" style="color:#ef4444;">$${totalWithdrawn.toLocaleString()}</div>
+            <div class="finance-card-sub">Paid out to users</div>
+          </div>
+          <div class="finance-card">
+            <div class="finance-card-label">Platform Revenue</div>
+            <div class="finance-card-val" style="color:#0d9488;">$${platformRevenue.toLocaleString()}</div>
+            <div class="finance-card-sub">Fees earned all-time</div>
+          </div>
+          <div class="finance-card">
             <div class="finance-card-label">Total Volume</div>
             <div class="finance-card-val">$${totalVolume.toLocaleString()}</div>
             <div class="finance-card-sub">All-time transaction value</div>
@@ -156,9 +173,6 @@
             <option value="milestone-release">Milestone Release</option>
             <option value="deposit">Deposit</option>
           </select>
-          <button class="btn-add" onclick="forceReleaseEscrow()" style="background:linear-gradient(to bottom,#f97316,#ea580c);">
-            <i data-lucide="zap" style="width:16px;height:16px;"></i> Force Release
-          </button>
         </div>
 
         <div style="margin-bottom:12px;font-size:13px;color:var(--muted-foreground);">Showing <strong id="txCount"></strong></div>

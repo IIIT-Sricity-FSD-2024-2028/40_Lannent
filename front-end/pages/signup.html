@@ -78,7 +78,7 @@
           <!-- Role Selection -->
           <div class="form-group">
             <label class="form-label">I want to</label>
-            <div class="role-grid">
+            <div class="role-grid" id="roleGroup">
               <button type="button" class="role-card" id="roleClient" onclick="selectRole('client')">
                 <div class="role-card-icon"><i data-lucide="clipboard-list" style="width:20px;height:20px;"></i></div>
                 <p class="role-card-title">Client</p>
@@ -179,7 +179,7 @@
         const item = document.createElement('div');
         item.className = 'pw-req';
         item.id = r.id;
-        item.innerHTML = `<span class="pw-req-icon">✓</span><span>${r.text}</span>`;
+        item.innerHTML = `<span class="pw-req-icon">✓</span><span>${escapeHtml(r.text)}</span>`;
         reqWrap.appendChild(item);
       });
       pwParent.appendChild(reqWrap);

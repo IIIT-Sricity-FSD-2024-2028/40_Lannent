@@ -9,6 +9,7 @@
   <script src="../js/store.js"></script>
   <script src="../js/auth.js"></script>
   <script src="../js/validation.js"></script>
+  <script src="../js/expert-picker.js"></script>
   <script src="../js/main.js"></script>
   <script src="../js/dashboard.js"></script>
   <style>
@@ -153,6 +154,8 @@
       budget: 0,
       currency: 'USD',
       auditEnabled: false,
+      auditFee: 300,
+      auditExpertId: null,
       milestones: [],
       showMilestoneForm: false,
       newMilestone: { title: '', description: '', budget: '', deadline: '' }
@@ -380,9 +383,9 @@
             <div class="milestone-content">
               <div class="milestone-title">
                 <div class="milestone-index">${idx + 1}</div>
-                <h3>${m.title}</h3>
+                <h3>${escapeHtml(m.title)}</h3>
               </div>
-              <div class="milestone-desc">${m.description}</div>
+              <div class="milestone-desc">${escapeHtml(m.description)}</div>
               <div style="display:flex;align-items:center;gap:16px;margin-left:32px;">
                 <div class="milestone-budget">
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -405,6 +408,26 @@
       }
     }
 
+    function toggleAudit(btn) {
+      formState.auditEnabled = !formState.auditEnabled;
+      if (!formState.auditEnabled) { formState.auditExpertId = null; ExpertPicker.clear(); }
+      btn.classList.toggle('on');
+      btn.classList.toggle('off');
+      const panel = document.getElementById('auditPanel');
+      if (panel) panel.style.display = formState.auditEnabled ? 'block' : 'none';
+      renderAuditExperts();
+      updateSummary();
+    }
+
+    /** Reviewers covering this category. The client must pick exactly one. */
+    function renderAuditExperts() {
+      ExpertPicker.render({
+        containerId: 'auditExpertList',
+        category: formState.category,
+        onChange: id => { formState.auditExpertId = id; updatePublishState(); updateSummary(); },
+      });
+    }
+
     function updateSummary() {
       const milestoneCost = calculateMilestoneTotal();
       const totalBudget = parseFloat(formState.budget || 0);
@@ -417,7 +440,15 @@
       if (budgetEl) budgetEl.innerHTML = `${formState.currency} ${isNaN(totalBudget) ? 0 : totalBudget.toLocaleString()}`;
       if (milestoneEl) milestoneEl.innerHTML = `${formState.milestones.length}`;
       if (deadlineEl) deadlineEl.innerHTML = formState.deadline ? `${getDaysUntilDeadline()} day${getDaysUntilDeadline() === 1 ? '' : 's'}` : 'Not set';
-      if (auditEl) auditEl.innerHTML = formState.auditEnabled ? 'Enabled' : 'Disabled';
+      if (auditEl) {
+        if (!formState.auditEnabled) { auditEl.innerHTML = 'Disabled'; }
+        else {
+          const rev = formState.auditExpertId ? Store.getUserById(formState.auditExpertId) : null;
+          auditEl.innerHTML = rev
+            ? `${rev.name.split(' ')[0]} · ${formState.currency} ${(formState.auditFee || 0).toLocaleString()}`
+            : 'Select a reviewer';
+        }
+      }
 
       renderBudgetCheck(milestoneCost, totalBudget);
       renderWalletCheck(totalBudget);
@@ -432,8 +463,10 @@
       const desc = document.querySelector('.form-textarea')?.value.trim() || '';
       const budget = parseFloat(formState.budget) || 0;
       const { valid: budgetOk } = validateTotalMatch();
+      // An audited project cannot be published without a named reviewer.
+      const auditReady = !formState.auditEnabled || !!formState.auditExpertId;
       const ready = title.length >= 5 && desc.length >= 5 && budget > 0 &&
-                    formState.milestones.length > 0 && budgetOk;
+                    formState.milestones.length > 0 && budgetOk && auditReady;
       btn.disabled = !ready;
     }
 
@@ -522,7 +555,7 @@
               </div>
               <div class="form-group">
                 <label class="form-label">Category</label>
-                <select class="form-select" onchange="formState.category = this.value">
+                <select class="form-select" onchange="formState.category = this.value; renderAuditExperts();">
                   <option>Web Development</option>
                   <option>Mobile Development</option>
                   <option>Backend / API</option>
@@ -578,12 +611,31 @@
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m7 0a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     Technical Audit
                   </div>
-                  <div class="audit-desc">Enable technical review for advanced quality assurance</div>
+                  <div class="audit-desc">Hire an Expert Reviewer to audit this project. Your project stays a draft until a reviewer accepts.</div>
                 </div>
-                <button class="toggle-switch ${formState.auditEnabled ? 'on' : 'off'}" type="button" 
-                  onclick="formState.auditEnabled = !formState.auditEnabled; updateSummary(); this.classList.toggle('on'); this.classList.toggle('off');">
+                <button class="toggle-switch ${formState.auditEnabled ? 'on' : 'off'}" type="button"
+                  onclick="toggleAudit(this)">
                   <div class="toggle-switch-thumb"></div>
                 </button>
+              </div>
+              <div id="auditPanel" style="display:${formState.auditEnabled ? 'block' : 'none'};margin-top:16px;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--secondary);">
+                <label class="form-label" for="auditFeeInput" style="display:block;margin-bottom:6px;">Your opening offer for the audit</label>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                  <span style="font-weight:700;color:var(--muted-foreground);">$</span>
+                  <input id="auditFeeInput" class="form-input" type="number" min="1" step="1"
+                    style="max-width:180px;" placeholder="300"
+                    value="${formState.auditFee || ''}"
+                    oninput="formState.auditFee = parseFloat(this.value) || 0; updateSummary();" />
+                </div>
+                <div style="font-size:12px;color:var(--muted-foreground);margin-bottom:14px;">
+                  Reviewers can accept this or counter with their own price. Nothing is charged until you both agree.
+                </div>
+                <div style="font-size:13px;font-weight:600;margin-bottom:4px;">Choose your Expert Reviewer</div>
+                <div style="font-size:12px;color:var(--muted-foreground);margin-bottom:10px;">
+                  Only reviewers who cover this category are shown. Your project stays a draft until they accept,
+                  and only they can see its audit.
+                </div>
+                <div id="auditExpertList"></div>
               </div>
             </div>
 
@@ -640,6 +692,7 @@
                 <div class="summary-value audit ${formState.auditEnabled ? 'enabled' : ''}" id="summaryAudit">Disabled</div>
               </div>
 
+              <div id="budgetCheckContainer"></div>
               <div id="walletCheckSummary"></div>
             </div>
           </div>
@@ -658,6 +711,7 @@
         lucide.createIcons();
         renderSkills();
         renderMilestones();
+        renderAuditExperts();
         updateSummary();
 
         // Wire input change events for validation auto-clear + real-time publish state
@@ -733,36 +787,31 @@
         budget: budget,
         currency: formState.currency,
         auditEnabled: formState.auditEnabled,
+        auditFee: formState.auditEnabled ? (formState.auditFee || undefined) : undefined,
+        auditDomain: formState.auditEnabled ? formState.category : undefined,
+        auditExpertId: formState.auditEnabled ? formState.auditExpertId : undefined,
         clientId: clientId,
         status: 'open',
       });
 
       // Create milestones
       formState.milestones.forEach(m => {
-        Store.createMilestone({ taskId: task.id, title: m.title, description: m.description, budget: parseFloat(m.budget), workerId: clientId });
+        // workerId stays null: nobody is hired yet. Setting it to the client
+        // made the milestone payable to the client, so approving a deliverable
+        // released escrow back to them instead of to the hired worker. The
+        // worker is backfilled onto these milestones when they are hired.
+        Store.createMilestone({ taskId: task.id, title: m.title, description: m.description, budget: parseFloat(m.budget), deadline: m.deadline, workerId: null });
       });
 
-      // Deduct budget from wallet
-      const updated = Store.deductFromWallet(clientId, budget);
-      if (!updated) {
-        Validate.toast('Failed to deduct from wallet. Task creation failed.', 'error');
-        return;
+      // No money moves here. Project escrow is funded when a worker is hired,
+      // and the audit fee is funded once you and the reviewer agree a price.
+      if (formState.auditEnabled) {
+        Validate.toast('Project saved as a draft. It goes live once a reviewer accepts your audit.', 'success');
+        setTimeout(() => { window.location.href = 'client-audit-offers.html'; }, 1400);
+      } else {
+        Validate.toast('Task published successfully.', 'success');
+        setTimeout(() => { window.location.href = 'client-my-projects.html'; }, 1200);
       }
-
-      // Create escrow transaction
-      Store.createTransaction({
-        type: 'escrow-lock',
-        amount: budget,
-        fromId: clientId,
-        toId: 'escrow',
-        taskId: task.id,
-        milestoneId: null,
-        description: `Escrow funded for ${formState.taskTitle}`,
-        status: 'completed'
-      });
-
-      Validate.toast('Task published successfully! Budget transferred to escrow.', 'success');
-      setTimeout(() => { window.location.href = 'client-my-projects.html'; }, 1200);
     }
 
     function saveDraft() {

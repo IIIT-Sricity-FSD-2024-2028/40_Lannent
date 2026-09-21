@@ -117,7 +117,7 @@
         return `
           <div id="milestoneRow-${m.id}" class="milestone-row${m.id === selectedMilestoneId ? ' selected' : ''}" style="cursor:pointer;padding:10px;border-radius:10px;margin-bottom:8px;" onclick="markMilestoneSelected('${m.id}')">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-              <span style="font-size:14px;font-weight:600;max-width:70%;">${m.title}</span>
+              <span style="font-size:14px;font-weight:600;max-width:70%;">${escapeHtml(m.title)}</span>
               <span style="font-size:11px;font-weight:700;color:${statusColors[m.status]};background:${statusBgs[m.status]};padding:4px 10px;border-radius:9999px;min-width:fit-content;">${statusLabel}</span>
             </div>
             <div style="font-size:12px;color:var(--muted-foreground);margin-top:6px;">${m.amount}</div>
@@ -138,7 +138,11 @@
       } catch (e) {
         console.warn('Could not set selectedMilestone in localStorage', e);
       }
-      window.location.href = 'submit-deliverable.html';
+      // The id has to travel in the URL. Without it the submit page had
+      // nothing to attach the work to, and uploaded the files with no project
+      // on them — so the client could neither see them nor open them.
+      window.location.href = 'submit-deliverable.html?milestoneId=' +
+        encodeURIComponent(m.id);
     }
 
     function raiseDisputeFromWorkroom() {
@@ -192,9 +196,36 @@
       const taskId = params.get('id');
       task = taskId ? Store.getTaskById(taskId) : null;
       if (!task) {
-        document.body.innerHTML = '<div style="padding:80px;text-align:center;color:#6b7280;font-size:16px;">No project selected for this workroom. Please choose a project from your <a href="worker-my-projects.html">My Projects</a> page.</div>';
+        // Keep the dashboard shell — replacing document.body strands the user with no nav.
+        initDashboard({
+          role: 'worker',
+          activePath: 'worker-my-projects.html',
+          pageTitle: 'Workroom',
+          pageSubtitle: 'No project selected',
+          content: `
+            <div style="padding:56px 24px;text-align:center;background:var(--card);border:1px solid var(--border);border-radius:16px;">
+              <div style="font-size:16px;font-weight:600;margin-bottom:6px;">No project selected</div>
+              <div style="color:var(--muted-foreground);font-size:14px;margin-bottom:18px;">Open a workroom from one of your projects.</div>
+              <a href="worker-my-projects.html" class="btn-primary" style="text-decoration:none;">Go to My Projects</a>
+            </div>`
+        });
+        if (window.lucide) lucide.createIcons();
         return;
       }
+
+      // Real escrow for this project. The card previously hardcoded
+      // $4,500 released / $3,500 remaining / 56% for every project.
+      const _esc = Store.getEscrowForTask(task.id) || { projectHeld: 0 };
+      const _released = (Store.getTransactions() || [])
+        .filter(t => t.type === 'milestone-release' && t.taskId === task.id)
+        .reduce((sum, t) => sum + (t.grossAmount != null ? t.grossAmount : (t.amount || 0)), 0);
+      const _fundedTotal = _released + (_esc.projectHeld || 0);
+      const money = n => '$' + Number(n || 0).toLocaleString();
+      const escrowView = {
+        released: money(_released),
+        held: money(_esc.projectHeld),
+        pct: _fundedTotal > 0 ? Math.round((_released / _fundedTotal) * 100) : 0,
+      };
 
       const client = Store.getUserById(task.clientId) || { name:'Client', avatar:'CL', avatarColor:'linear-gradient(135deg,#94a3b8,#64748b)' };
       const worker = Store.getUserById(task.workerId) || { name:'You', avatar:'ME', avatarColor:'linear-gradient(135deg,#10b981,#059669)' };
@@ -265,7 +296,7 @@
             <i data-lucide="arrow-left" style="width:16px;height:16px;"></i> Back
           </a>
           <span style="color:var(--border);">›</span>
-          <span style="font-size:14px;font-weight:500;">${project.name}</span>
+          <span style="font-size:14px;font-weight:500;">${escapeHtml(project.name)}</span>
           <span class="badge badge-blue" style="margin-left:auto;">${project.status}</span>
         </div>
 
@@ -339,14 +370,13 @@
               <h3 style="font-size:14px;font-weight:600;margin-bottom:12px;color:#065f46;">Escrow Status</h3>
               <div style="margin-bottom:8px;">
                 <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px;">
-                  <span style="color:#065f46;">Released</span><span style="font-weight:700;color:#059669;">$4,500</span>
-                </div>
-                <div style="height:8px;border-radius:9999px;background:rgba(16,185,129,0.2);overflow:hidden;">
-                  <div style="width:56%;height:100%;border-radius:9999px;background:linear-gradient(90deg,#10b981,#34d399);"></div>
-                </div>
-              </div>
-              <div style="display:flex;justify-content:space-between;font-size:12px;">
-                <span style="color:#065f46;">Remaining</span><span style="font-weight:700;color:#6366f1;">$3,500</span>
+              <span style="color:#065f46;">Released</span><span style="font-weight:700;color:#059669;">${escrowView.released}</span>
+            </div>
+            <div style="height:6px;background:#d1fae5;border-radius:3px;overflow:hidden;margin:8px 0;">
+              <div style="width:${escrowView.pct}%;height:100%;background:linear-gradient(90deg,#10b981,#34d399);"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;">
+              <span style="color:#065f46;">Remaining</span><span style="font-weight:700;color:#6366f1;">${escrowView.held}</span>
               </div>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { IsEmail, IsString, IsOptional, IsNumber, IsArray, IsIn } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ALL_ROLES } from '../../../common/constants/roles';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'John Doe' })
@@ -15,7 +16,7 @@ export class CreateUserDto {
   password: string;
 
   @ApiProperty({ example: 'client', enum: ['client', 'worker', 'expert', 'superuser'] })
-  @IsIn(['client', 'worker', 'expert', 'superuser'])
+  @IsIn(ALL_ROLES)
   role: string;
 
   @ApiPropertyOptional({ example: 'JD' })

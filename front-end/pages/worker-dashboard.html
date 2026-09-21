@@ -140,7 +140,7 @@
                 <div style="padding:12px 20px;border-bottom:1px solid rgba(0,0,0,0.04);transition:background 0.15s;cursor:pointer;"
                      onmouseenter="this.style.background='#f8f9fb'" onmouseleave="this.style.background='transparent'" onclick="window.location.href='worker-workroom.html?id=${t.id}'">
                   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-                    <span style="font-size:14px;font-weight:600;">${t.title}</span>
+                    <span style="font-size:14px;font-weight:600;">${escapeHtml(t.title)}</span>
                     <span class="badge ${badgeClass}" style="text-transform:capitalize;">${(t.status || 'unknown').replace(/-/g, ' ')}</span>
                   </div>
                   <div style="font-size:12px;color:var(--muted-foreground);margin-bottom:8px;">Client: ${clientName} · Due ${dueText}</div>
@@ -163,17 +163,19 @@
             </div>
             <div style="padding:8px 0;">
               ${Store.getTasks().filter(t => t.status === 'open' && t.workerId !== userId && t.clientId !== userId).slice(0, 3).map(t => {
-                const match = Math.floor(Math.random() * 20) + 80; // random match 80-99%
-                const tags = t.skills || ['JavaScript', 'HTML'];
+                // The "% match" badge that sat here was Math.random() dressed as a
+                // recommendation score. There is no matching model behind it, so it
+                // is gone rather than reworded — a number a worker might act on
+                // should not be invented.
+                const tags = t.skills || [];
                 return `
                 <div style="padding:16px 20px;border-bottom:1px solid rgba(0,0,0,0.04);cursor:pointer;transition:background 0.15s;" onmouseenter="this.style.background='#f8f9fb'" onmouseleave="this.style.background='transparent'" onclick="window.location.href='task-details.html?id=${t.id}'">
                   <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
-                    <span style="font-size:14px;font-weight:600;">${t.title}</span>
-                    <span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;background:#eef2ff;color:#4f46e5;">${match}% match</span>
+                    <span style="font-size:14px;font-weight:600;">${escapeHtml(t.title)}</span>
                   </div>
                   <div style="font-size:13px;font-weight:600;color:#10b981;margin-bottom:8px;">$${t.budget.toLocaleString()}</div>
                   <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                    ${tags.map(tag => `<span class="skill-tag">${tag}</span>`).join('')}
+                    ${tags.map(tag => `<span class="skill-tag">${escapeHtml(tag)}</span>`).join('')}
                   </div>
                 </div>`;
               }).join('') || '<div style="padding:20px;text-align:center;color:var(--muted-foreground);font-size:13px;">No recommended tasks right now.</div>'}

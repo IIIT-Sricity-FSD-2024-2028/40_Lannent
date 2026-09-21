@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Revenue — Lannent</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="../js/store.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/validation.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <style>
+    .rev-tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin-bottom:22px; }
+    .rev-tile { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px; }
+    .rev-tile-k { font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted-foreground); margin-bottom:8px; }
+    .rev-tile-v { font-size:25px; font-weight:800; letter-spacing:-0.02em; font-variant-numeric:tabular-nums; line-height:1.1; }
+    .rev-tile-s { font-size:12px; color:var(--muted-foreground); margin-top:5px; }
+    .rev-two { display:grid; gap:18px; }
+    @media (min-width:1040px) { .rev-two { grid-template-columns:1fr 1fr; } }
+    .rev-period { display:flex; gap:6px; }
+    .rev-period button { font-size:12px; padding:5px 11px; border-radius:7px; border:1px solid var(--border); background:transparent; color:var(--muted-foreground); cursor:pointer; }
+    .rev-period button.on { background:var(--foreground); color:var(--background); border-color:var(--foreground); }
+    .rev-avatar { width:26px; height:26px; border-radius:50%; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; flex:none; }
+    .rev-role { font-size:10px; letter-spacing:0.05em; text-transform:uppercase; padding:2px 7px; border-radius:5px; background:var(--secondary); color:var(--muted-foreground); }
+  </style>
+  <script>
+    const money = n => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const compact = n => {
+      const v = Number(n || 0);
+      if (Math.abs(v) >= 1000) return '$' + (v / 1000).toFixed(v % 1000 === 0 ? 0 : 1) + 'k';
+      return '$' + v.toFixed(0);
+    };
+    const prettyFee = t => ({
+      'deposit-processing': 'Deposit processing',
+      'client-marketplace': 'Client marketplace',
+      'contract-initiation': 'Contract initiation',
+      'worker-service': 'Worker service',
+      'expert-service': 'Reviewer commission',
+      'withdrawal-processing': 'Withdrawal payout',
+    }[t] || t);
+    const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+    let period = 'month';
+    let data = {};
+
+    // ── Tooltip ────────────────────────────────────────────────────────────
+    function tip() {
+      let el = document.getElementById('vizTip');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'vizTip'; el.className = 'viz-tip';
+        document.body.appendChild(el);
+      }
+      return el;
+    }
+    function showTip(evt, html) {
+      const el = tip();
+      el.innerHTML = html;
+      el.classList.add('on');
+      const pad = 14;
+      let x = evt.clientX + pad, y = evt.clientY - pad;
+      const r = el.getBoundingClientRect();
+      if (x + r.width > window.innerWidth - 8) x = evt.clientX - r.width - pad;
+      if (y < 8) y = evt.clientY + pad;
+      el.style.left = x + 'px'; el.style.top = y + 'px';
+    }
+    function hideTip() { tip().classList.remove('on'); }
+
+    // ── Chart 1: revenue over time (single series, no legend) ──────────────
+    function renderTimeseries() {
+      const rows = data.timeseries || [];
+      const box = document.getElementById('tsPlot');
+      if (!rows.length) {
+        box.innerHTML = '<div style="padding:34px 0;text-align:center;color:var(--muted-foreground);font-size:13px;">No revenue recorded yet.</div>';
+        return;
+      }
+
+      const W = 720, H = 250, L = 58, R = 22, T = 26, B = 34;
+      const iw = W - L - R, ih = H - T - B;
+      const max = Math.max(...rows.map(r => r.revenue), 1);
+      const niceMax = Math.ceil(max / 4) * 4 || 4;
+      const x = i => rows.length === 1 ? L + iw / 2 : L + (i / (rows.length - 1)) * iw;
+      const y = v => T + ih - (v / niceMax) * ih;
+
+      const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => niceMax * f);
+      const grid = ticks.map(t => `
+        <line class="viz-grid-line" x1="${L}" x2="${W - R}" y1="${y(t).toFixed(1)}" y2="${y(t).toFixed(1)}" />
+        <text class="viz-tick" x="${L - 9}" y="${(y(t) + 4).toFixed(1)}" text-anchor="end">${compact(t)}</text>`).join('');
+
+      const line = rows.map((r, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(r.revenue).toFixed(1)}`).join(' ');
+      const area = rows.length > 1
+        ? `${line} L${x(rows.length - 1).toFixed(1)},${(T + ih).toFixed(1)} L${x(0).toFixed(1)},${(T + ih).toFixed(1)} Z`
+        : '';
+
+      // Label the ends only — never a number on every point.
+      // Anchor the first and last labels inward so they cannot overrun the viewBox.
+      const anchorFor = i => (i === 0 ? 'start' : i === rows.length - 1 ? 'end' : 'middle');
+      const labelIdx = new Set([0, rows.length - 1]);
+      const marks = rows.map((r, i) => `
+        <circle cx="${x(i).toFixed(1)}" cy="${y(r.revenue).toFixed(1)}" r="4.5"
+          fill="var(--series-1)" stroke="var(--surface-1)" stroke-width="2" />
+        ${labelIdx.has(i) ? `<text class="viz-value" x="${x(i).toFixed(1)}"
+          y="${Math.max(y(r.revenue) - 12, 12).toFixed(1)}"
+          text-anchor="${anchorFor(i)}">${compact(r.revenue)}</text>` : ''}`).join('');
+
+      // With many buckets, thin the labels rather than letting them collide.
+      const step = Math.ceil(rows.length / 8);
+      const xlabels = rows.map((r, i) => {
+        const keep = i === 0 || i === rows.length - 1 || i % step === 0;
+        return keep
+          ? `<text class="viz-tick" x="${x(i).toFixed(1)}" y="${H - 12}" text-anchor="${anchorFor(i)}">${esc(r.period)}</text>`
+          : '';
+      }).join('');
+
+      // Hit targets wider than the marks.
+      const hits = rows.map((r, i) => {
+        const w = rows.length === 1 ? iw : iw / (rows.length - 1);
+        return `<rect x="${(x(i) - w / 2).toFixed(1)}" y="${T}" width="${w.toFixed(1)}" height="${ih}"
+          fill="transparent" data-i="${i}" class="ts-hit" style="cursor:crosshair;" />`;
+      }).join('');
+
+      box.innerHTML = `
+        <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img"
+             aria-label="Platform revenue by ${period}">
+          ${grid}
+          ${area ? `<path d="${area}" fill="var(--series-1)" opacity="0.10" />` : ''}
+          <path d="${line}" fill="none" stroke="var(--series-1)" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" />
+          ${marks}
+          <line class="viz-axis-line" x1="${L}" x2="${W - R}" y1="${T + ih}" y2="${T + ih}" />
+          ${xlabels}
+          <line id="tsCross" x1="0" x2="0" y1="${T}" y2="${T + ih}" stroke="var(--viz-axis)"
+                stroke-width="1" stroke-dasharray="3 3" opacity="0" />
+          ${hits}
+        </svg>`;
+
+      const cross = document.getElementById('tsCross');
+      box.querySelectorAll('.ts-hit').forEach(el => {
+        el.addEventListener('mousemove', e => {
+          const r = rows[+el.dataset.i];
+          cross.setAttribute('x1', x(+el.dataset.i).toFixed(1));
+          cross.setAttribute('x2', x(+el.dataset.i).toFixed(1));
+          cross.setAttribute('opacity', '1');
+          showTip(e, `${esc(r.period)}<br><b>${money(r.revenue)}</b> from ${r.events} fee${r.events === 1 ? '' : 's'}`);
+        });
+        el.addEventListener('mouseleave', () => { cross.setAttribute('opacity', '0'); hideTip(); });
+      });
+    }
+
+    // ── Chart 2: revenue by fee type (ranked magnitude, one hue) ───────────
+    function renderByFeeType() {
+      const rows = data.byFeeType || [];
+      const box = document.getElementById('feePlot');
+      if (!rows.length) {
+        box.innerHTML = '<div style="padding:34px 0;text-align:center;color:var(--muted-foreground);font-size:13px;">No fees charged yet.</div>';
+        return;
+      }
+      const rowH = 34, gap = 8, L = 150, R = 74;
+      const W = 620, H = rows.length * (rowH + gap) + 8;
+      const iw = W - L - R;
+      const max = Math.max(...rows.map(r => r.total), 1);
+
+      const bars = rows.map((r, i) => {
+        const y = i * (rowH + gap) + 4;
+        const w = Math.max((r.total / max) * iw, 2);
+        return `
+          <text class="viz-label" x="${L - 12}" y="${y + rowH / 2 + 4}" text-anchor="end">${esc(prettyFee(r.feeType))}</text>
+          <rect x="${L}" y="${y}" width="${w.toFixed(1)}" height="${rowH}" rx="4"
+                fill="var(--series-1)" class="fee-bar" data-i="${i}" style="cursor:pointer;" />
+          <text class="viz-value" x="${(L + w + 10).toFixed(1)}" y="${y + rowH / 2 + 4}">${money(r.total)}</text>`;
+      }).join('');
+
+      box.innerHTML = `
+        <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Revenue by fee type">
+          ${bars}
+          <line class="viz-axis-line" x1="${L}" x2="${L}" y1="0" y2="${H}" />
+        </svg>`;
+
+      box.querySelectorAll('.fee-bar').forEach(el => {
+        el.addEventListener('mousemove', e => {
+          const r = rows[+el.dataset.i];
+          showTip(e, `${esc(prettyFee(r.feeType))}<br><b>${money(r.total)}</b> · ${r.share}% of revenue<br>${r.count} charge${r.count === 1 ? '' : 's'} on ${money(r.baseTotal)}`);
+        });
+        el.addEventListener('mouseleave', hideTip);
+      });
+    }
+
+    // ── Chart 3: where each escrowed dollar goes (part-to-whole) ───────────
+    function renderDistribution() {
+      const d = data.distribution;
+      const box = document.getElementById('distPlot');
+      if (!d || !d.totalFunded) {
+        box.innerHTML = '<div style="padding:34px 0;text-align:center;color:var(--muted-foreground);font-size:13px;">Nothing has been funded into escrow yet.</div>';
+        document.getElementById('distLegend').innerHTML = '';
+        return;
+      }
+      const segs = d.segments.filter(s => s.amount > 0);
+      const W = 660, H = 62, gapPx = 2;
+      let cx = 0;
+
+      // 2px surface gap between adjacent fills.
+      const bars = segs.map((s, i) => {
+        const w = Math.max((s.amount / d.totalFunded) * W - (i < segs.length - 1 ? gapPx : 0), 1);
+        const x = cx;
+        cx += w + gapPx;
+        const first = i === 0, last = i === segs.length - 1;
+        const r = 4;
+        // Round only the outer ends of the whole bar.
+        const path = `M${(x + (first ? r : 0)).toFixed(1)},0
+          H${(x + w - (last ? r : 0)).toFixed(1)}
+          ${last ? `a${r},${r} 0 0 1 ${r},${r}` : ''}
+          V${(H - (last ? r : 0)).toFixed(1)}
+          ${last ? `a${r},${r} 0 0 1 -${r},${r}` : ''}
+          H${(x + (first ? r : 0)).toFixed(1)}
+          ${first ? `a${r},${r} 0 0 1 -${r},-${r}` : ''}
+          V${first ? r : 0}
+          ${first ? `a${r},${r} 0 0 1 ${r},-${r}` : ''} Z`;
+        return `<path d="${path}" fill="var(--series-${(i % 5) + 1})" class="dist-seg" data-i="${i}" style="cursor:pointer;" />`;
+      }).join('');
+
+      // Direct labels on any segment wide enough — the relief for low-contrast slots.
+      cx = 0;
+      const labels = segs.map((s, i) => {
+        const w = Math.max((s.amount / d.totalFunded) * W - (i < segs.length - 1 ? gapPx : 0), 1);
+        const x = cx; cx += w + gapPx;
+        if (w < 62) return '';
+        return `<text x="${(x + w / 2).toFixed(1)}" y="${H / 2 + 4}" text-anchor="middle"
+          style="font-size:12px;font-weight:700;fill:#fff;">${s.share}%</text>`;
+      }).join('');
+
+      box.innerHTML = `
+        <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img"
+             aria-label="How escrowed funds are distributed">
+          ${bars}${labels}
+        </svg>`;
+
+      document.getElementById('distLegend').innerHTML = segs.map((s, i) => `
+        <span class="viz-legend-item">
+          <span class="viz-swatch" style="background:var(--series-${(i % 5) + 1});"></span>
+          ${esc(s.label)} · <b style="color:var(--foreground);font-variant-numeric:tabular-nums;">${money(s.amount)}</b>
+        </span>`).join('');
+
+      box.querySelectorAll('.dist-seg').forEach(el => {
+        el.addEventListener('mousemove', e => {
+          const s = segs[+el.dataset.i];
+          showTip(e, `${esc(s.label)}<br><b>${money(s.amount)}</b> · ${s.share}% of ${money(d.totalFunded)}`);
+        });
+        el.addEventListener('mouseleave', hideTip);
+      });
+    }
+
+    // ── Projects, and one project's full money flow ────────────────────────
+    function renderProjects() {
+      const rows = data.byProject || [];
+      const box = document.getElementById('projectTable');
+      if (!rows.length) {
+        box.innerHTML = '<div style="padding:26px;text-align:center;color:var(--muted-foreground);font-size:13px;">No project activity yet.</div>';
+        return;
+      }
+      box.innerHTML = `
+        <table class="viz-table">
+          <thead><tr>
+            <th>Project</th><th>Status</th>
+            <th class="num">Funded</th><th class="num">Held</th>
+            <th class="num">Platform revenue</th><th></th>
+          </tr></thead>
+          <tbody>${rows.map(p => `
+            <tr>
+              <td>${esc(p.title)}</td>
+              <td><span class="rev-role">${esc(p.status)}</span></td>
+              <td class="num">${money(p.funded)}</td>
+              <td class="num">${money(p.escrowHeld)}</td>
+              <td class="num" style="font-weight:600;">${money(p.platformRevenue)}</td>
+              <td class="num"><button class="viz-toggle" onclick="showProject('${p.taskId}')">Breakdown</button></td>
+            </tr>`).join('')}</tbody>
+        </table>`;
+    }
+
+    function line(label, value, opts = {}) {
+      const color = opts.fee ? '#b45309' : opts.good ? '#0d9488' : 'inherit';
+      const weight = opts.total ? '700' : '400';
+      const border = opts.total ? 'border-top:1px solid var(--border);margin-top:4px;padding-top:9px;' : '';
+      return `<div style="display:flex;justify-content:space-between;gap:14px;padding:6px 0;font-size:13px;${border}">
+        <span style="color:var(--muted-foreground);font-weight:${weight};">${label}</span>
+        <span style="font-variant-numeric:tabular-nums;font-weight:${opts.total ? '700' : '600'};color:${color};">${value}</span></div>`;
+    }
+
+    function showProject(taskId) {
+      const b = Store.getProjectBreakdown(taskId);
+      const box = document.getElementById('projectDetail');
+      if (!b) { box.innerHTML = '<div style="padding:18px;color:var(--muted-foreground);">Could not load that project.</div>'; return; }
+
+      const card = (title, body) => `
+        <div style="background:var(--secondary);border-radius:12px;padding:16px;">
+          <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-foreground);margin-bottom:8px;">${title}</div>
+          ${body}
+        </div>`;
+
+      box.innerHTML = `
+        <div style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border);">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:14px;">
+            <div>
+              <div style="font-size:15px;font-weight:700;">${esc(b.project.title)}</div>
+              <div style="font-size:12.5px;color:var(--muted-foreground);">
+                ${esc(b.project.category)} · budget ${money(b.project.budget)}
+                ${b.project.client ? ' · client ' + esc(b.project.client.name) : ''}
+                ${b.project.worker ? ' · worker ' + esc(b.project.worker.name) : ''}
+              </div>
+            </div>
+            <button class="viz-toggle" onclick="document.getElementById('projectDetail').innerHTML=''">Close</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;">
+            ${card('Client paid in',
+              line('Into project escrow', money(b.clientPaid.intoProjectEscrow)) +
+              line('Into audit escrow', money(b.clientPaid.intoAuditEscrow)) +
+              line('Marketplace fee', money(b.clientPaid.marketplaceFee), { fee: true }) +
+              line('Contract initiation', money(b.clientPaid.initiationFee), { fee: true }) +
+              line('Total charged', money(b.clientPaid.total), { total: true }))}
+
+            ${card('Gig worker' + (b.worker.name ? ' — ' + esc(b.worker.name) : ''),
+              line('Gross released', money(b.worker.grossReleased)) +
+              line('Service fees', '−' + money(b.worker.serviceFees), { fee: true }) +
+              line('Net received', money(b.worker.netReceived), { total: true, good: true }) +
+              line('Milestones paid', String(b.worker.milestonesPaid)))}
+
+            ${card('Reviewer — audit',
+              line('Agreed fees', money(b.reviewerAudit.grossFees)) +
+              line('Platform commission', '−' + money(b.reviewerAudit.commission), { fee: true }) +
+              line('Net received', money(b.reviewerAudit.netReceived), { total: true, good: true }) +
+              line('Audits', String(b.reviewerAudit.count) + (b.reviewerAudit.reviewers.length ? ' · ' + b.reviewerAudit.reviewers.map(esc).join(', ') : '')))}
+
+            ${card('Reviewer — disputes',
+              line('Agreed fees', money(b.reviewerDispute.grossFees)) +
+              line('Platform commission', '−' + money(b.reviewerDispute.commission), { fee: true }) +
+              line('Net received', money(b.reviewerDispute.netReceived), { total: true, good: true }) +
+              line('Disputes', String(b.reviewerDispute.count) + (b.reviewerDispute.reviewers.length ? ' · ' + b.reviewerDispute.reviewers.map(esc).join(', ') : '')))}
+
+            ${card('Still held &amp; refunded',
+              line('Project escrow', money(b.stillHeld.project)) +
+              line('Audit escrow', money(b.stillHeld.audit)) +
+              line('Refunded to client', money(b.refundedToClient)) +
+              line('Total held', money(b.stillHeld.total), { total: true }))}
+
+            ${card('Platform earnings',
+              line('Marketplace fee', money(b.platformEarnings.marketplaceFee)) +
+              line('Contract initiation', money(b.platformEarnings.initiationFee)) +
+              line('Worker service fees', money(b.platformEarnings.workerServiceFees)) +
+              line('Reviewer commission', money(b.platformEarnings.reviewerCommission)) +
+              line('Total earned', money(b.platformEarnings.total), { total: true, good: true }))}
+          </div>
+
+          <div style="margin-top:16px;">
+            <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-foreground);margin-bottom:8px;">Every movement on this project</div>
+            <div class="viz-table-wrap">
+              <table class="viz-table">
+                <thead><tr><th>Movement</th><th>From</th><th>To</th><th class="num">Gross</th><th class="num">Fee</th><th class="num">Net</th><th>Date</th></tr></thead>
+                <tbody>${b.ledger.map(t => `<tr>
+                  <td>${esc(t.type)}</td><td>${esc(t.from)}</td><td>${esc(t.to)}</td>
+                  <td class="num">${money(t.gross)}</td>
+                  <td class="num" style="color:${t.fee ? '#b45309' : 'inherit'};">${t.fee ? money(t.fee) : '—'}</td>
+                  <td class="num">${money(t.net)}</td><td>${esc(t.createdAt)}</td></tr>`).join('')}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>`;
+      box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function toggleTable(id, btn) {
+      const el = document.getElementById(id);
+      const open = el.hasAttribute('hidden');
+      if (open) el.removeAttribute('hidden'); else el.setAttribute('hidden', '');
+      btn.textContent = open ? 'Hide data table' : 'Show data table';
+    }
+
+    function setPeriod(p, btn) {
+      period = p;
+      document.querySelectorAll('.rev-period button').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      data.timeseries = Store.getRevenueTimeseries(period);
+      renderTimeseries();
+    }
+
+    function load() {
+      data = {
+        summary: Store.getRevenueSummary(),
+        byFeeType: Store.getRevenueByFeeType(),
+        timeseries: Store.getRevenueTimeseries(period),
+        distribution: Store.getRevenueDistribution(),
+        byProject: Store.getRevenueByProject(),
+      };
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('revenue-admin', 'compliance-admin')) return;
+      load();
+
+      const s = data.summary || {};
+      const d = data.distribution || { segments: [], totalFunded: 0 };
+      const fees = data.byFeeType || [];
+
+      const content = `
+        <div class="viz">
+          <div class="rev-tiles">
+            <div class="rev-tile">
+              <div class="rev-tile-k">Total revenue</div>
+              <div class="rev-tile-v" style="color:var(--series-1);">${money(s.totalRevenue)}</div>
+              <div class="rev-tile-s">across ${s.feeEvents || 0} fee events</div>
+            </div>
+            <div class="rev-tile">
+              <div class="rev-tile-k">Gross volume</div>
+              <div class="rev-tile-v">${money(s.grossVolume)}</div>
+              <div class="rev-tile-s">paid to workers and reviewers</div>
+            </div>
+            <div class="rev-tile">
+              <div class="rev-tile-k">Take rate</div>
+              <div class="rev-tile-v">${s.takeRate ?? 0}%</div>
+              <div class="rev-tile-s">of value delivered</div>
+            </div>
+            <div class="rev-tile">
+              <div class="rev-tile-k">Held in escrow</div>
+              <div class="rev-tile-v">${money(s.escrowHeld)}</div>
+              <div class="rev-tile-s">${s.activeContracts || 0} active · ${s.draftProjects || 0} draft</div>
+            </div>
+          </div>
+
+          <div class="viz-card">
+            <div class="viz-head">
+              <div>
+                <div class="viz-title">Platform revenue over time</div>
+                <div class="viz-sub">Every fee the platform charged, bucketed by ${period}.</div>
+              </div>
+              <div class="rev-period">
+                <button onclick="setPeriod('day',this)">Day</button>
+                <button onclick="setPeriod('week',this)">Week</button>
+                <button class="on" onclick="setPeriod('month',this)">Month</button>
+              </div>
+            </div>
+            <div class="viz-plot" id="tsPlot"></div>
+          </div>
+
+          <div class="rev-two">
+            <div class="viz-card">
+              <div class="viz-title">Revenue by fee type</div>
+              <div class="viz-sub">Which charges the revenue actually comes from.</div>
+              <div class="viz-plot" id="feePlot"></div>
+              <button class="viz-toggle" onclick="toggleTable('feeTable',this)">Show data table</button>
+              <div id="feeTable" hidden style="margin-top:12px;">
+                <div class="viz-table-wrap">
+                  <table class="viz-table">
+                    <thead><tr><th>Fee type</th><th class="num">Revenue</th><th class="num">Share</th><th class="num">Charges</th><th class="num">Charged on</th></tr></thead>
+                    <tbody>${fees.map(r => `<tr>
+                      <td>${esc(prettyFee(r.feeType))}</td>
+                      <td class="num">${money(r.total)}</td>
+                      <td class="num">${r.share}%</td>
+                      <td class="num">${r.count}</td>
+                      <td class="num">${money(r.baseTotal)}</td></tr>`).join('')}</tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="viz-card">
+              <div class="viz-title">Where each escrowed dollar goes</div>
+              <div class="viz-sub">${money(d.totalFunded)} funded into escrow all-time.</div>
+              <div class="viz-plot" id="distPlot"></div>
+              <div class="viz-legend" id="distLegend"></div>
+              <button class="viz-toggle" style="margin-top:10px;" onclick="toggleTable('distTable',this)">Show data table</button>
+              <div id="distTable" hidden style="margin-top:12px;">
+                <div class="viz-table-wrap">
+                  <table class="viz-table">
+                    <thead><tr><th>Destination</th><th class="num">Amount</th><th class="num">Share</th></tr></thead>
+                    <tbody>${d.segments.map(x => `<tr><td>${esc(x.label)}</td><td class="num">${money(x.amount)}</td><td class="num">${x.share}%</td></tr>`).join('')}
+                      <tr><td style="font-weight:700;">Total funded</td><td class="num" style="font-weight:700;">${money(d.totalFunded)}</td><td class="num">100%</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="viz-card">
+            <div class="viz-title">Revenue by project</div>
+            <div class="viz-sub">Select a project to see exactly where its money came from and went.</div>
+            <div class="viz-table-wrap" id="projectTable"></div>
+            <div id="projectDetail"></div>
+          </div>
+
+        </div>`;
+
+      initDashboard({
+        role: (Auth.getCurrentUser() || {}).role,
+        activePath: 'admin-revenue.html',
+        pageTitle: 'Revenue',
+        pageSubtitle: 'How the platform earns, and what every user receives',
+        content,
+      });
+
+      renderTimeseries();
+      renderByFeeType();
+      renderDistribution();
+      renderProjects();
+      if (window.lucide) lucide.createIcons();
+    });
+  </script>
+</head>
+<body></body>
+</html>

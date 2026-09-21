@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -678,11 +676,11 @@
       <div style="max-width:1200px;margin:0 auto;padding:0 24px;text-align:center;">
         <div style="font-size:13px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:16px;">Quick Demo Access</div>
         <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
-          <a href="pages/login.html" onclick="localStorage.setItem('lannent_demo_role','client')" style="padding:10px 22px;border-radius:12px;background:linear-gradient(135deg,#6366f1,#4f46e5);color:white;text-decoration:none;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:8px;">
+          <a href="pages/login.html?demo=client" style="padding:10px 22px;border-radius:12px;background:linear-gradient(135deg,#6366f1,#4f46e5);color:white;text-decoration:none;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:8px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
             Client Demo
           </a>
-          <a href="pages/login.html" onclick="localStorage.setItem('lannent_demo_role','worker')" style="padding:10px 22px;border-radius:12px;background:linear-gradient(135deg,#10b981,#059669);color:white;text-decoration:none;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:8px;">
+          <a href="pages/login.html?demo=worker" style="padding:10px 22px;border-radius:12px;background:linear-gradient(135deg,#10b981,#059669);color:white;text-decoration:none;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:8px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
             Worker Demo
           </a>
@@ -690,13 +688,13 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             Expert Demo
           </a>
-          <a href="pages/login.html" onclick="setTimeout(()=>{const e=document.getElementById('loginEmail');const p=document.getElementById('loginPassword');if(e)e.value='super@lannent.com';if(p)p.value='superadmin123';},300)" style="padding:10px 22px;border-radius:12px;background:linear-gradient(135deg,#ef4444,#dc2626);color:white;text-decoration:none;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:8px;">
+          <a href="pages/login.html?demo=superuser" style="padding:10px 22px;border-radius:12px;background:linear-gradient(135deg,#ef4444,#dc2626);color:white;text-decoration:none;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:8px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
             Super User Demo
           </a>
         </div>
         <div style="margin-top:12px;font-size:12px;color:#94a3b8;">
-          Or use <strong>login.html</strong> with credentials: client@lannent.com / worker@lannent.com / expert@lannent.com / super@lannent.com — all use <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">password123</code> (super uses <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">superadmin123</code>)
+          Or sign in at <strong>login.html</strong> with <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">client@gmail.com</code>, <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">worker@gmail.com</code> or <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">expert@gmail.com</code> — all use <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">Password@123</code>. Super user is <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">super@gmail.com</code> / <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">Superadmin@123</code>.
         </div>
       </div>
     </div>

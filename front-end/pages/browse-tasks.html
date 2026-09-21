@@ -45,7 +45,7 @@
         return `<div class="task-grid">${list.map(t => `
           <div class="task-card" onclick="window.location.href='task-details.html?id=${t.id}'">
             <div class="task-card-header">
-              <span style="font-weight:600;font-size:15px;color:var(--foreground);">${t.title}</span>
+              <span style="font-weight:600;font-size:15px;color:var(--foreground);">${escapeHtml(t.title)}</span>
               ${t.badge ? `<span class="badge ${t.badgeClass}">${t.badge}</span>` : ''}
             </div>
             <p class="task-desc">${t.desc}</p>

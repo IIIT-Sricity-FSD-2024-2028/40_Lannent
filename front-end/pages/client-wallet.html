@@ -106,7 +106,7 @@
                   <i data-lucide="${t.icon}" style="width:18px;height:18px;color:${t.color};"></i>
                 </div>
                 <div style="flex:1;">
-                  <div style="font-weight:600;font-size:14px;">${t.label}</div>
+                  <div style="font-weight:600;font-size:14px;">${escapeHtml(t.label)}</div>
                   <div style="font-size:12px;color:var(--muted-foreground);">${t.sub}</div>
                 </div>
                 <span class="${t.positive ? 'tx-amount-pos' : 'tx-amount-neg'}">${t.amount}</span>
@@ -116,7 +116,7 @@
         ? d.escrowProjects.map(p => `
               <div class="escrow-project">
                 <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-                  <span style="font-weight:600;font-size:14px;">${p.name}</span>
+                  <span style="font-weight:600;font-size:14px;">${escapeHtml(p.name)}</span>
                   <span style="font-size:13px;font-weight:700;color:#6366f1;">${p.total}</span>
                 </div>
                 <div style="font-size:12px;color:var(--muted-foreground);margin-bottom:10px;">Worker: ${p.worker}</div>
@@ -164,7 +164,7 @@
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
           ${stats.map(s => `
             <div class="stat-card">
-              <div><div class="stat-val" style="color:${s.color};">${s.val}</div><div class="stat-label">${s.label}</div></div>
+              <div><div class="stat-val" style="color:${s.color};">${s.val}</div><div class="stat-label">${escapeHtml(s.label)}</div></div>
               <div class="stat-icon-wrap" style="background:${s.color}20;">
                 <i data-lucide="${s.icon}" style="width:20px;height:20px;color:${s.color};"></i>
               </div>
@@ -270,7 +270,7 @@
                         <i data-lucide="${method.icon}" style="width:22px;height:22px;color:${method.color};"></i>
                       </div>
                       <div style="flex:1;">
-                        <div style="font-size:15px;font-weight:600;color:#111827;">${method.name}</div>
+                        <div style="font-size:15px;font-weight:600;color:#111827;">${escapeHtml(method.name)}</div>
                         <div style="font-size:13px;color:#6b7280;margin-top:2px;">${method.desc}</div>
                       </div>
                       <div style="width:20px;height:20px;border:2px solid #d1d5db;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;" class="method-radio">
@@ -285,11 +285,11 @@
             <!-- Amount Preview -->
             <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:16px;padding:20px;margin:0 32px;margin-bottom:24px;">
               <div style="display:flex;justify-content:space-between;margin-bottom:12px;">
-                <span style="font-size:14px;color:#6b7280;">Amount to Add</span>
+                <span style="font-size:14px;color:#6b7280;">You pay</span>
                 <span style="font-weight:700;color:#111827;font-size:15px;" id="previewAddAmount">$0.00</span>
               </div>
               <div style="display:flex;justify-content:space-between;margin-bottom:12px;">
-                <span style="font-size:14px;color:#6b7280;">Processing Fee</span>
+                <span style="font-size:14px;color:#6b7280;">Processing fee (2.9% + $0.30)</span>
                 <span style="font-weight:600;color:#ef4444;font-size:14px;" id="previewFee">$0.00</span>
               </div>
               <div style="height:1px;background:#e5e7eb;margin:12px 0;"></div>
@@ -385,8 +385,8 @@
                 <span style="font-weight:600;color:#111827;font-size:13px;" id="previewAmount">$0.00</span>
               </div>
               <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
-                <span style="font-size:13px;color:#6b7280;">Processing Fee (1%)</span>
-                <span style="font-weight:600;color:#ef4444;font-size:13px;" id="previewFee">$0.00</span>
+                <span style="font-size:13px;color:#6b7280;">Payout fee (0.25% + $0.25)</span>
+                <span style="font-weight:600;color:#ef4444;font-size:13px;" id="withdrawPreviewFee">$0.00</span>
               </div>
               <div style="height:1px;background:#e5e7eb;margin:10px 0;"></div>
               <div style="display:flex;justify-content:space-between;">
@@ -557,31 +557,13 @@
         }
       }
 
-      const selectedMethod = document.querySelector('#addFundsModal .method-selected');
-      let fee = 0;
+      // Matches the server: one processing fee, and the wallet is credited the net.
+      const q = Store.Fees.deposit(amount);
+      const money = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-      if (selectedMethod) {
-        const methodId = selectedMethod.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
-        if (methodId) {
-          switch(methodId) {
-            case 'card':
-              fee = amount * 0.029;
-              break;
-            case 'wire':
-              fee = 25;
-              break;
-            case 'bank':
-              fee = 0;
-              break;
-          }
-        }
-      }
-
-      const total = amount + fee;
-
-      document.getElementById('previewAddAmount').textContent = '$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      document.getElementById('previewFee').textContent = fee === 0 ? 'Free' : '$' + fee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      document.getElementById('previewTotal').textContent = '$' + total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById('previewAddAmount').textContent = money(q.gross);
+      document.getElementById('previewFee').textContent = amount > 0 ? money(q.fee) : '$0.00';
+      document.getElementById('previewTotal').textContent = amount > 0 ? money(q.net) : '$0.00';
     }
 
     function processAddFunds() {
@@ -608,60 +590,20 @@
         return;
       }
 
-      // Save deposit to store
-      try {
-        Store.createTransaction({ type: 'deposit', amount, fromId: 'external', toId: _walletUserId, taskId: null, milestoneId: null, description: 'Wallet top-up via payment', status: 'completed' });
-        Store.updateUser(_walletUserId, { walletBalance: (Store.getUserById(_walletUserId)?.walletBalance || 0) + amount });
-      } catch(e) { console.warn('Store deposit failed', e); }
+      // One call: the server charges card processing, credits the net and writes
+      // the ledger row together.
+      const deposit = Store.addToWallet(_walletUserId, amount);
+      if (!deposit) {
+        Validate.toast('Deposit failed. Please check your connection and try again.', 'error');
+        return;
+      }
 
       // Close modal and refresh all wallet data
       document.getElementById('addFundsModal').style.display = 'none';
       refreshWallet();
 
-      Validate.toast('✓ $' + amount.toFixed(2) + ' added to your wallet successfully!', 'success');
-    }
-
-    function showNotification(message, type) {
-      // Remove existing notification
-      const existing = document.querySelector('.notification-toast');
-      if (existing) existing.remove();
-
-      // Create notification
-      const notification = document.createElement('div');
-      notification.className = 'notification-toast';
-      notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: ${type === 'success' ? '#10b981' : '#ef4444'};
-        color: white;
-        padding: 16px 20px;
-        border-radius: 12px;
-        font-size: 14px;
-        font-weight: 600;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-        z-index: 1000;
-        transform: translateX(400px);
-        opacity: 0;
-        transition: all 0.3s ease;
-        max-width: 400px;
-      `;
-
-      notification.textContent = message;
-      document.body.appendChild(notification);
-
-      // Animate in
-      setTimeout(() => {
-        notification.style.transform = 'translateX(0)';
-        notification.style.opacity = '1';
-      }, 100);
-
-      // Auto remove
-      setTimeout(() => {
-        notification.style.transform = 'translateX(400px)';
-        notification.style.opacity = '0';
-        setTimeout(() => notification.remove(), 300);
-      }, 4000);
+      Validate.toast('✓ $' + deposit.net.toFixed(2) + ' credited to your wallet ($'
+        + deposit.fee.toFixed(2) + ' processing fee).', 'success');
     }
 
     function showAllTransactions() {
@@ -677,7 +619,7 @@
                   <i data-lucide="${t.icon}" style="width:18px;height:18px;color:${t.color};"></i>
                 </div>
                 <div style="flex:1;">
-                  <div style="font-weight:600;font-size:14px;color:#111827;">${t.label}</div>
+                  <div style="font-weight:600;font-size:14px;color:#111827;">${escapeHtml(t.label)}</div>
                   <div style="font-size:12px;color:#6b7280;margin-top:4px;">${t.sub}</div>
                 </div>
                 <span class="${t.positive ? 'tx-amount-pos' : 'tx-amount-neg'}" style="font-size:16px;font-weight:700;">${t.amount}</span>
@@ -707,12 +649,12 @@
 
     function updateWithdrawPreview() {
       const amount = parseFloat(document.getElementById('withdrawAmount').value) || 0;
-      const fee = amount * 0.01;
-      const receive = amount - fee;
-      
-      document.getElementById('previewAmount').textContent = '$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      document.getElementById('previewFee').textContent = '$' + fee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      document.getElementById('previewReceive').textContent = '$' + receive.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const q = Store.Fees.withdrawal(amount);
+      const money = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      document.getElementById('previewAmount').textContent = money(amount);
+      document.getElementById('withdrawPreviewFee').textContent = amount > 0 ? money(q.fee) : '$0.00';
+      document.getElementById('previewReceive').textContent = amount > 0 ? money(q.net) : '$0.00';
     }
 
     function processWithdraw() {
@@ -733,11 +675,13 @@
         return;
       }
       
-      // Create withdrawal transaction and deduct from wallet
-      try {
-        Store.createTransaction({ type: 'withdrawal', amount, fromId: _walletUserId, toId: 'external', taskId: null, milestoneId: null, description: 'Withdrawal to bank account', status: 'completed' });
-        Store.updateUser(_walletUserId, { walletBalance: (Store.getUserById(_walletUserId)?.walletBalance || 0) - amount });
-      } catch(e) { console.warn('Store withdrawal failed', e); }
+      // One call: the server debits the gross, keeps the payout fee and writes
+      // the ledger row together.
+      const result = Store.withdrawFromWallet(_walletUserId, amount);
+      if (!result) {
+        showNotification('Withdrawal failed. Your balance may have changed — reopen and try again.', 'error');
+        return;
+      }
       
       // Close modal and refresh all wallet data
       document.getElementById('withdrawModal').style.display = 'none';

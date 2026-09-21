@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, UseGuards , Headers } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiHeader } from '@nestjs/swagger';
 import { DisputesService } from './disputes.service';
 import { CreateDisputeDto } from './dto/create-dispute.dto';
@@ -14,14 +14,14 @@ export class DisputesController {
 
   @Get()
   @ApiOperation({ summary: 'Get all disputes' })
-  findAll() {
-    return this.disputesService.findAll();
+  findAll(@Headers('user-id') userId?: string, @Headers('role') role?: string) {
+    return this.disputesService.findAll({ id: userId, role });
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get dispute by ID' })
-  findOne(@Param('id') id: string) {
-    return this.disputesService.findById(id);
+  findOne(@Param('id') id: string, @Headers('user-id') userId?: string, @Headers('role') role?: string) {
+    return this.disputesService.findById(id, { id: userId, role });
   }
 
   @Post()
@@ -34,7 +34,7 @@ export class DisputesController {
 
   @Post(':id/resolve')
   @ApiHeader({ name: 'role', required: true, description: 'User role required' })
-  @Roles('expert', 'superuser')
+  @Roles('expert')
   @ApiOperation({ summary: 'Resolve a dispute (updates milestone status based on verdict)' })
   resolve(@Param('id') id: string, @Body() dto: ResolveDisputeDto) {
     return this.disputesService.resolve(id, dto);

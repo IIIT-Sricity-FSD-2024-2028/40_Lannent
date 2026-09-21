@@ -1,3 +1,36 @@
+// ═══════════════════════════════════════════
+// ESCAPING
+// ═══════════════════════════════════════════
+
+/**
+ * Escapes a value for interpolation into markup.
+ *
+ * Most text on this platform is written by one user and rendered to another:
+ * a worker's deliverable notes reach the client and the reviewer, an
+ * applicant's motivation reaches an admin, a filename reaches everyone on the
+ * project. Interpolated raw, that is stored XSS — a deliverable description of
+ * `<img src=x onerror=...>` was confirmed executing on the client's review
+ * page.
+ *
+ * Several pages had grown their own local copy of this. One shared definition,
+ * loaded everywhere, so there is a single thing to reach for.
+ */
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+/** Allows only http(s) URLs through; anything else (javascript:, data:) becomes empty. */
+function safeHref(url) {
+  return /^https?:\/\//i.test(String(url || '')) ? String(url) : '';
+}
+
+if (typeof window !== 'undefined') {
+  window.escapeHtml = escapeHtml;
+  window.safeHref = safeHref;
+}
+
 /**
  * LANNENT — Main JavaScript
  * Scroll reveal, utilities, and shared behaviors
