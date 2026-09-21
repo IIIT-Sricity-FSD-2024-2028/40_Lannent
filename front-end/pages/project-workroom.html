@@ -138,7 +138,13 @@
       } catch (e) {
         console.warn('Could not set selectedMilestone in localStorage', e);
       }
-      window.location.href = 'review-deliverable.html';
+      // The id has to travel in the URL. The review page reads its milestone
+      // from the query string, so leaving it off sent the client to whichever
+      // milestone the fallback scan happened to reach first — a different
+      // submission than the one they picked, with someone else's files or
+      // none at all.
+      window.location.href = 'review-deliverable.html?milestoneId=' +
+        encodeURIComponent(m.id) + '&role=client';
     }
 
     function raiseDisputeFromWorkroom() {

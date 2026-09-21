@@ -31,7 +31,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     if (typeof Auth !== 'undefined' && !Auth.requireRole('compliance-admin')) return;
 
-    const API = 'http://localhost:3000/api';
+    const API = window.LANNENT_API || 'http://localhost:3000/api';
     const KIND_LABEL = {
       'money': 'money', 'fee.change': 'fee change',
       'admin.change': 'admin change', 'admin.read': 'admin read',

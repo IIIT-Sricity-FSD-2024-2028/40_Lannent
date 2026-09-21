@@ -76,14 +76,14 @@ export class AppModule implements NestModule {
         AuthMiddleware,
         LoggerMiddleware,
       )
-      // Swagger sits outside the /api prefix and re-fetches its bundle, spec
-      // and favicon on every page load — three or four access lines per visit,
-      // none of them about the application.
-      .exclude(
-        { path: 'api-docs', method: RequestMethod.ALL },
-        { path: 'api-docs/(.*)', method: RequestMethod.ALL },
-        { path: 'api-docs-json', method: RequestMethod.ALL },
-      )
-      .forRoutes('*');
+      // Express 5 requires a named wildcard; a bare '*' is auto-converted with a
+      // warning on every registration.
+      //
+      // No exclusion for Swagger is needed. The global prefix makes this
+      // '/api/*', and SwaggerModule mounts at '/api-docs' outside that prefix,
+      // so the chain never reaches it. The three `.exclude()` entries that used
+      // to sit here targeted '/api/api-docs*' — a path that does not exist —
+      // and did nothing.
+      .forRoutes({ path: '*path', method: RequestMethod.ALL });
   }
 }

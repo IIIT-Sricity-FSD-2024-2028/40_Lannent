@@ -60,13 +60,23 @@ export class DeliverableDto {
   @IsOptional() @IsString() @MaxLength(5000)
   description?: string;
 
+  /**
+   * `@IsOptional()` only skips `null` and `undefined`, so a form that posts its
+   * blank optional fields as `""` was failing `@IsUrl` and taking the whole
+   * submission down with it — deliverable and all. An empty field means "not
+   * provided", so normalise it to that before the URL check runs.
+   */
   @ApiPropertyOptional({ example: 'https://github.com/example/mobile-app' })
-  @IsOptional() @IsUrl({ require_tld: false }, { message: 'link must be a valid URL' })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' && value.trim() === '' ? undefined : value))
+  @IsUrl({ require_tld: false }, { message: 'link must be a valid URL' })
   @MaxLength(2000)
   link?: string;
 
   @ApiPropertyOptional({ example: 'feat/design-tokens' })
-  @IsOptional() @IsString() @MaxLength(255)
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' && value.trim() === '' ? undefined : value))
+  @IsString() @MaxLength(255)
   branch?: string;
 
   /**

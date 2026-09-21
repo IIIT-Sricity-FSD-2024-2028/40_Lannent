@@ -5,8 +5,51 @@
  * Drop-in replacement: all existing pages work without changes.
  */
 
-const LANNENT_API = (typeof window !== 'undefined' && window.LANNENT_API)
-  || 'http://localhost:3000/api';
+/**
+ * Where the API lives.
+ *
+ * Same origin whenever the page was served by the API itself — which is the
+ * normal way to run this now, and makes every request same-origin: no
+ * preflight, no CORS, no allowlist to keep in step with whatever port the
+ * frontend happens to use.
+ *
+ * The absolute fallback covers the older arrangement, where a separate static
+ * server hosts the pages. It is settled once by a probe rather than guessed
+ * from the port number.
+ */
+function resolveLannentApi() {
+  if (typeof window === 'undefined') return 'http://localhost:3000/api';
+  if (window.LANNENT_API) return window.LANNENT_API;
+
+  var ABSOLUTE = 'http://localhost:3000/api';
+  var loc = window.location;
+  if (!loc || !/^https?:$/.test(loc.protocol)) return ABSOLUTE;
+
+  var sameOrigin = loc.origin + '/api';
+  var CACHE_KEY = 'lannent_api_base';
+
+  // The answer cannot change within a session, and this runs on every page —
+  // without caching, the two-origin arrangement logged a 404 per page load
+  // from a probe whose result was already known.
+  try {
+    var cached = window.sessionStorage.getItem(CACHE_KEY);
+    if (cached) return cached;
+  } catch (e) { /* private mode, or storage disabled */ }
+
+  var resolved = ABSOLUTE;
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', sameOrigin + '/expert-applications/status?email=probe@none.invalid', false);
+    xhr.send();
+    if (xhr.status >= 200 && xhr.status < 400) resolved = sameOrigin;
+  } catch (e) { /* falls through to the absolute base */ }
+
+  try { window.sessionStorage.setItem(CACHE_KEY, resolved); } catch (e) {}
+  return resolved;
+}
+
+const LANNENT_API = resolveLannentApi();
+if (typeof window !== 'undefined') window.LANNENT_API = LANNENT_API;
 
 const Store = (() => {
   const API = LANNENT_API;
@@ -76,6 +119,132 @@ const Store = (() => {
     return /^https?:\/\//i.test(path) ? path : API.replace(/\/api$/, '') + path;
   }
 
+  /** True when `href` points at a stored file, which is a route that needs credentials. */
+  function _isFileHref(href) {
+    if (!href) return false;
+    const origin = API.replace(/\/api$/, '');
+    return href.indexOf(API + '/files/') === 0 || href.indexOf(origin + '/api/files/') === 0 || href.indexOf('/api/files/') === 0;
+  }
+
+  /**
+   * Downloads a stored file and hands it to the browser to save.
+   *
+   * `GET /api/files/:id` is behind RequireAuthMiddleware, and identity lives in
+   * localStorage — it is attached per request by `_headers()`. A plain
+   * `<a href download>` sends none of it, so the browser followed the link
+   * anonymously, received a 401 JSON body, and saved *that* under the .pdf
+   * name. The file looked downloaded and would not open. Fetching it here
+   * carries the credentials and saves the actual bytes.
+   */
+  async function downloadFile(ref, filename) {
+    const url = fileUrl(ref);
+    if (!url) throw new Error('That file was never stored on the server.');
+    const name = filename || (ref && typeof ref === 'object' && ref.name) || 'download';
+
+    // A GET carries no body, and declaring a JSON content type on one is both
+    // meaningless and enough to trigger a preflight.
+    const h = _headers();
+    delete h['Content-Type'];
+
+    let res;
+    try {
+      res = await fetch(url, { headers: h });
+    } catch (e) {
+      throw new Error('The server could not be reached, so the file was not downloaded.');
+    }
+
+    if (!res.ok) {
+      // Read the reason rather than saving it as the file.
+      let message = '';
+      try { message = ((await res.json()) || {}).message || ''; } catch (e) {}
+      if (!message) {
+        message = res.status === 401 || res.status === 403
+          ? 'You are not signed in with an account that can open this file.'
+          : `The file could not be downloaded (${res.status}).`;
+      }
+      throw new Error(message);
+    }
+
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    // A link with no `download` attribute still deserves the real filename,
+    // which the server already states on the response.
+    a.download = name !== 'download' ? name : (_filenameFromResponse(res) || name);
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Revoking immediately can cancel the save while it is still being read.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
+    return true;
+  }
+
+  /** The filename from `Content-Disposition`, preferring the RFC 5987 form. */
+  function _filenameFromResponse(res) {
+    try {
+      const cd = res.headers.get('Content-Disposition') || '';
+      const star = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+      if (star) return decodeURIComponent(star[1].trim());
+      const plain = /filename="?([^";]+)"?/i.exec(cd);
+      if (plain) return plain[1].trim();
+    } catch (e) {}
+    return '';
+  }
+
+  /** A message the user can actually see, on a page whose CSS we cannot assume. */
+  function _notifyDownloadError(message) {
+    try {
+      const el = document.createElement('div');
+      el.setAttribute('role', 'alert');
+      el.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:2147483647;' +
+        'max-width:min(460px,92vw);background:#dc2626;color:#fff;padding:12px 16px;border-radius:12px;' +
+        'font:500 13.5px/1.5 system-ui,-apple-system,sans-serif;box-shadow:0 12px 32px rgba(0,0,0,0.25);';
+      el.textContent = message;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 6000);
+    } catch (e) {
+      console.error('[Store] download failed:', message);
+    }
+  }
+
+  /**
+   * Makes every existing file link work without touching the pages that build
+   * them. The links are rendered into innerHTML across several pages, so this
+   * is delegated from the document rather than bound per element — including
+   * the ones rendered after this runs.
+   */
+  function _interceptFileLinks() {
+    if (typeof document === 'undefined' || document.__lannentFileLinks) return;
+    document.__lannentFileLinks = true;
+    // Capture phase: several pages call stopPropagation() inside cards, which
+    // would keep a bubbling listener from ever seeing the click.
+    document.addEventListener('click', (e) => {
+      const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (!a) return;
+      if (!_isFileHref(a.getAttribute('href'))) return;
+
+      // Opening it in a new tab would be anonymous too, so every click is
+      // handled here rather than only the plain ones.
+      e.preventDefault();
+      if (a.dataset.downloading === '1') return;
+      a.dataset.downloading = '1';
+
+      downloadFile(a.getAttribute('href'), a.getAttribute('download') || '')
+        .catch(err => _notifyDownloadError(err && err.message ? err.message : 'The file could not be downloaded.'))
+        .finally(() => { delete a.dataset.downloading; });
+    }, true);
+  }
+
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', _interceptFileLinks);
+    } else {
+      _interceptFileLinks();
+    }
+  }
+
   async function _fetch(url, opts = {}) {
     try {
       const res = await fetch(url, { headers: _headers(), ...opts });
@@ -143,7 +312,16 @@ const Store = (() => {
     return null;
   }
 
-  function _syncPost(url, body) {
+  /**
+   * POST, reporting *why* it failed.
+   *
+   * `_syncPost` collapses "the server said no" and "the server is not there"
+   * into one null, and callers that fall back to a local write cannot tell
+   * them apart. A rejected write must not be retried as something weaker.
+   *
+   * Returns `{ ok, status, data, message }`; `status === 0` means unreachable.
+   */
+  function _syncPostRaw(url, body) {
     try {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', url, false);
@@ -152,13 +330,20 @@ const Store = (() => {
       xhr.send(JSON.stringify(body));
       if (xhr.status >= 200 && xhr.status < 300) {
         const json = JSON.parse(xhr.responseText);
-        return json.data !== undefined ? json.data : json;
+        return { ok: true, status: xhr.status, data: json.data !== undefined ? json.data : json };
       }
-      console.error('[Store] _syncPost FAILED:', url, 'status:', xhr.status, 'response:', xhr.responseText.substring(0, 300));
+      let message = '';
+      try { message = (JSON.parse(xhr.responseText) || {}).message || ''; } catch (e) {}
+      console.error('[Store] POST rejected:', url, 'status:', xhr.status, 'response:', xhr.responseText.substring(0, 300));
+      return { ok: false, status: xhr.status, data: null, message: message };
     } catch (e) {
       console.warn('Store sync POST error:', url, e);
+      return { ok: false, status: 0, data: null, message: 'The server could not be reached.' };
     }
-    return null;
+  }
+
+  function _syncPost(url, body) {
+    return _syncPostRaw(url, body).data;
   }
 
   function _syncPatch(url, body) {
@@ -213,8 +398,28 @@ const Store = (() => {
     // Expert applications hold applicants' contact details and are admin-only.
     // Fetching them for every role logged a 403 on every page load, which buries
     // real errors in the console.
-    let role = null;
-    try { role = JSON.parse(localStorage.getItem('lannent_session') || '{}').role; } catch {}
+    let role = null, token = null;
+    try {
+      role = JSON.parse(localStorage.getItem('lannent_session') || '{}').role;
+      token = localStorage.getItem('lannent_token');
+    } catch {}
+
+    // Nobody is signed in — on the login page, the landing page, signup. Every
+    // endpoint below now requires credentials, so firing them anyway produced
+    // ten 401s and ten console errors before the visitor had typed anything.
+    // The cache stays empty until there is someone to fill it for.
+    if (!role && !token) {
+      // Still establish reachability, or `isOnline()` would report the API
+      // down to every visitor who has not signed in. One public endpoint is
+      // enough — this is the application-status lookup, which needs no
+      // credentials by design.
+      let reachable = null;
+      try { reachable = _syncFetch(API + '/expert-applications/status?email=ping@none.invalid'); } catch (e) {}
+      _online = reachable !== null;
+      _reachedEndpoints = _online ? 1 : 0;
+      return;
+    }
+
     const allowed = endpoints.filter(([key]) => key !== 'expertApplications' || (role === 'intake-admin' || role === 'compliance-admin'));
 
     _reachedEndpoints = 0;
@@ -510,12 +715,23 @@ const Store = (() => {
   }
 
   function submitDeliverable(milestoneId, deliverable) {
-    const result = _syncPost(`${API}/milestones/${milestoneId}/submit`, { deliverable });
-    if (result) {
+    const res = _syncPostRaw(`${API}/milestones/${milestoneId}/submit`, { deliverable });
+    if (res.ok) {
       const idx = _cache.milestones.findIndex(m => m.id === milestoneId);
-      if (idx >= 0) _cache.milestones[idx] = result;
-      return result;
+      if (idx >= 0) _cache.milestones[idx] = res.data;
+      return res.data;
     }
+
+    // The server answered and refused. The old fallback re-sent this as a
+    // milestone PATCH, whose schema has no `deliverable` and no `submittedAt`
+    // — validation stripped both, so the milestone flipped to "submitted"
+    // carrying nothing, and the client opened it to an empty file list. A
+    // refusal has to surface, not degrade into silent data loss.
+    if (res.status > 0) {
+      throw new Error(res.message || `The server rejected this submission (${res.status}).`);
+    }
+
+    // Genuinely offline — keep the local write so the work is not lost.
     return updateMilestone(milestoneId, { status: 'submitted', submittedAt: new Date().toISOString().slice(0, 10), deliverable });
   }
 
@@ -841,7 +1057,7 @@ const Store = (() => {
     getAuditRequests, getAuditRequestById, createAuditRequest, updateAuditRequest,
     getAuditPreview, getAuditRequestsByTask, makeAuditOffer, acceptAuditOffer, fundAuditEscrow,
     acceptAuditEngagement, declineAuditEngagement, cancelDraftTask, getExperts,
-    uploadFile, fileUrl,
+    uploadFile, fileUrl, downloadFile,
     getAuditReports, getAuditReportByRequest, getReportsByRequest, getReportsByTask, saveAuditReport,
     getDisputes, getDisputeById, createDispute, resolveDispute,
     getTransactions, getTransactionsByUser, createTransaction,

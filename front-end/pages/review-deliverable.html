@@ -40,7 +40,19 @@
 
       // Load milestone from Store
       let milestone = milestoneId ? Store.getMilestoneById(milestoneId) : null;
-      // Fallback: find first submitted milestone for client's tasks
+
+      // The workroom records the milestone the client actually selected before
+      // sending them here. Honour it before guessing — the scan below picks the
+      // first submitted milestone across every project, which is rarely the one
+      // they clicked.
+      if (!milestone) {
+        try {
+          const stored = JSON.parse(localStorage.getItem('selectedMilestone') || 'null');
+          if (stored && stored.id) milestone = Store.getMilestoneById(stored.id);
+        } catch (e) { /* nothing usable stored */ }
+      }
+
+      // Last resort: the first submitted milestone for the client's tasks.
       if (!milestone) {
         const tasks = Store.getTasksByClient(session.userId);
         for (const t of tasks) {

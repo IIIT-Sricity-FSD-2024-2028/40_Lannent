@@ -6,9 +6,9 @@
 const Auth = (() => {
   const SESSION_KEY = 'lannent_session';
   const TOKEN_KEY = 'lannent_token';
-  const API = (typeof LANNENT_API !== 'undefined')
-    ? LANNENT_API
-    : 'http://localhost:3000/api';
+  // store.js settles this once and publishes it, so both agree on one origin.
+  const API = (typeof window !== 'undefined' && window.LANNENT_API)
+    || (typeof LANNENT_API !== 'undefined' ? LANNENT_API : 'http://localhost:3000/api');
 
   function login(email, password) {
     // Synchronous wrapper: try API first, fall back to Store

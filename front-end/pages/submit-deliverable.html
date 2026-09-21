@@ -603,8 +603,10 @@
       runAllValidation();
       lucide.createIcons();
 
-      const params = new URLSearchParams(window.location.search);
-      const msId = params.get('milestoneId') || params.get('id') || '';
+      // Same id the submission will use. A file uploaded with no taskId is
+      // visible only to its uploader and staff, so the client reviewing the
+      // milestone was refused access to the very files under review.
+      const msId = resolveMilestoneId();
       const ms = msId && typeof Store !== 'undefined' ? Store.getMilestoneById(msId) : null;
 
       pending.forEach(({ row, file }) => {
@@ -722,6 +724,42 @@
       }
     }
 
+    /**
+     * The milestone being submitted for. The query string is the contract; the
+     * key the workrooms write is honoured as a fallback so a page opened
+     * without the parameter still knows what it is looking at.
+     */
+    function resolveMilestoneId() {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get('milestoneId') || params.get('id');
+      if (fromUrl) return fromUrl;
+      try {
+        const stored = JSON.parse(localStorage.getItem('selectedMilestone') || 'null');
+        if (stored && stored.id) return stored.id;
+      } catch (e) { /* nothing usable stored */ }
+      return '';
+    }
+
+    /** Replaces the confirm dialog with the reason the submission did not go through. */
+    function showSubmitError(message) {
+      const modal = document.getElementById('confirmModal');
+      if (modal) modal.style.display = 'none';
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:300;backdrop-filter:blur(4px);';
+      overlay.innerHTML = `
+        <div style="background:white;border-radius:24px;padding:40px;text-align:center;max-width:420px;margin:0 16px;box-shadow:0 32px 80px rgba(0,0,0,0.2);">
+          <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#ef4444,#dc2626);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;box-shadow:0 12px 32px rgba(239,68,68,0.3);">
+            <span style="font-size:32px;color:white;">!</span>
+          </div>
+          <h2 style="font-size:22px;font-weight:600;margin-bottom:8px;">Not submitted</h2>
+          <p style="color:var(--muted-foreground);font-size:14px;line-height:1.6;margin-bottom:24px;"></p>
+          <button class="btn-primary" style="width:100%;padding:12px;border-radius:12px;">Back to the form</button>
+        </div>`;
+      overlay.querySelector('p').textContent = message;
+      overlay.querySelector('button').onclick = () => overlay.remove();
+      document.body.appendChild(overlay);
+    }
+
     function submitDeliverable() {
       if (!runAllValidation()) return;
 
@@ -734,21 +772,34 @@
 
       // Save to store
       const params = new URLSearchParams(window.location.search);
-      const milestoneId = params.get('milestoneId') || params.get('id');
-      if (milestoneId && typeof Store !== 'undefined') {
+      const milestoneId = resolveMilestoneId();
+
+      // Without an id there is nothing to attach the work to. This used to
+      // fall straight through to the success screen: the worker was told the
+      // deliverable was submitted while nothing had been sent at all.
+      if (!milestoneId || typeof Store === 'undefined') {
+        showSubmitError('This page could not tell which milestone you are submitting for. Open it from the milestone board and try again.');
+        return;
+      }
+
+      {
         try {
           // Everything the form collected goes with the submission. The branch
           // was gathered and validated here and then dropped on the floor, so
           // the reviewer auditing the work could never see which branch it was on.
+          // Blank optional fields are left out rather than sent as "". An
+          // empty string is not a URL, so posting one made the server reject
+          // the whole submission — files included.
+          const branch = (document.getElementById('branchName')?.value || '').trim();
           const deliverable = {
             title: title,
             description: notes || 'Milestone deliverable submitted.',
-            link: repoLink || '',
-            branch: (document.getElementById('branchName')?.value || '').trim(),
             files: uploadedFiles
               .filter(f => !f.error)
               .map(f => f.ref || { name: f.name, size: f.size, mime: f.type }),
           };
+          if (repoLink) deliverable.link = repoLink;
+          if (branch) deliverable.branch = branch;
           Store.submitDeliverable(milestoneId, deliverable);
           const _ms = Store.getMilestoneById(milestoneId);
           const _task = _ms ? Store.getTaskById(_ms.taskId) : null;
@@ -761,10 +812,14 @@
           // client assigned — and only that reviewer. This page used to loop
           // over every expert account and notify all of them, then create a
           // second audit request for a milestone that already had one.
-        } catch(e) { console.warn('Store save failed', e); }
+        } catch(e) {
+          console.warn('Store save failed', e);
+          showSubmitError(e && e.message ? e.message : 'The submission could not be saved. Your draft has been kept.');
+          return;
+        }
       }
 
-      // Clear draft
+      // Clear draft — only now that the server has the submission.
       try { localStorage.removeItem('deliverableDraft'); } catch(e) {}
 
       // Resolve taskId for workroom link

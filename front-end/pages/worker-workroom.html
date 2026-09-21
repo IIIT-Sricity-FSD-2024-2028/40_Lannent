@@ -138,7 +138,11 @@
       } catch (e) {
         console.warn('Could not set selectedMilestone in localStorage', e);
       }
-      window.location.href = 'submit-deliverable.html';
+      // The id has to travel in the URL. Without it the submit page had
+      // nothing to attach the work to, and uploaded the files with no project
+      // on them — so the client could neither see them nor open them.
+      window.location.href = 'submit-deliverable.html?milestoneId=' +
+        encodeURIComponent(m.id);
     }
 
     function raiseDisputeFromWorkroom() {

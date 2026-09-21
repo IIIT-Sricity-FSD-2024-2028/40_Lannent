@@ -7,6 +7,9 @@ dist/
 # Environment
 .env
 .env.*
+# ...except the documented template, which carries no secret and is the only
+# record of which variables exist.
+!.env.example
 
 # IDE
 .vscode/
