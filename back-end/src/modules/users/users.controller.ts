@@ -42,6 +42,15 @@ export class UsersController {
     return redact(this.usersService.findById(id));
   }
 
+  @Post('staff')
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @ApiHeader({ name: 'role', required: true, description: 'User role required' })
+  @Roles('superuser')
+  @ApiOperation({ summary: 'Create any user type including staff/admin (superuser only)' })
+  createStaff(@Body() dto: CreateUserDto) {
+    return redact(this.usersService.createPrivileged(dto));
+  }
+
   @Post()
   @Throttle({ default: { ttl: 60_000, limit: 10 } })
   @ApiOperation({ summary: 'Register a new user' })

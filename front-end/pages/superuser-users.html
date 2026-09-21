@@ -71,7 +71,7 @@
         return;
       }
 
-      const roleColors = { client:'badge-blue', worker:'badge-green', expert:'badge-purple', superuser:'badge-red' };
+      const roleColors = { client:'badge-blue', worker:'badge-green', expert:'badge-purple', superuser:'badge-red', 'revenue-admin':'badge-orange', 'intake-admin':'badge-blue', 'compliance-admin':'badge-purple' };
 
       tbody.innerHTML = filtered.map(u => `
         <tr id="userRow_${u.id}">
@@ -173,7 +173,7 @@
         Validate.toast('User updated successfully.', 'success');
       } else {
         const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2);
-        const colors = { client:'linear-gradient(135deg,#6366f1,#4f46e5)', worker:'linear-gradient(135deg,#10b981,#059669)', expert:'linear-gradient(135deg,#a855f7,#7c3aed)', superuser:'linear-gradient(135deg,#ef4444,#dc2626)' };
+        const colors = { client:'linear-gradient(135deg,#6366f1,#4f46e5)', worker:'linear-gradient(135deg,#10b981,#059669)', expert:'linear-gradient(135deg,#a855f7,#7c3aed)', superuser:'linear-gradient(135deg,#ef4444,#dc2626)', 'revenue-admin':'linear-gradient(135deg,#f97316,#ea580c)', 'intake-admin':'linear-gradient(135deg,#3b82f6,#2563eb)', 'compliance-admin':'linear-gradient(135deg,#8b5cf6,#7c3aed)' };
         Store.createUser({ name, email, password, role, status, avatar: initials, avatarColor: colors[role] || '' });
         Validate.toast('User created successfully.', 'success');
       }
@@ -231,6 +231,9 @@
             <option value="worker">Worker</option>
             <option value="expert">Expert</option>
             <option value="superuser">Super User</option>
+            <option value="revenue-admin">Revenue Admin</option>
+            <option value="intake-admin">Intake Admin</option>
+            <option value="compliance-admin">Compliance Admin</option>
           </select>
           <button class="btn-add" onclick="openAddModal()">
             <i data-lucide="plus" style="width:16px;height:16px;"></i> Add User
@@ -275,6 +278,9 @@
                 <option value="worker">Worker</option>
                 <option value="expert">Expert</option>
                 <option value="superuser">Super User</option>
+                <option value="revenue-admin">Revenue Admin</option>
+                <option value="intake-admin">Intake Admin</option>
+                <option value="compliance-admin">Compliance Admin</option>
               </select>
             </div>
             <div class="form-group">

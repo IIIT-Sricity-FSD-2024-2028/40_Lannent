@@ -101,8 +101,10 @@
           <span style="display:block;">Client: <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">client@gmail.com</code> / <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">Password@123</code></span>
           <span style="display:block;">Worker: <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">worker@gmail.com</code> / <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">Password@123</code></span>
           <span style="display:block;">Expert: <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">expert@gmail.com</code> / <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">Password@123</code></span>
-          <span style="display:block;">Super User: <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">super@gmail.com</code> / <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">Superadmin@123</code></span>
-          <span style="display:block;">Admin: <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">admin@gmail.com</code> / <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">Admin@123</code></span>
+          <span style="display:block;">Super Admin: <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">super@gmail.com</code> / <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">Superadmin@123</code></span>
+          <span style="display:block;">Revenue Admin: <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">admin@gmail.com</code> / <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">Admin@123</code></span>
+          <span style="display:block;">Intake Admin: <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">intake@gmail.com</code> / <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">Intake@123</code></span>
+          <span style="display:block;">Compliance Admin: <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">compliance@gmail.com</code> / <code style="background:#e2e8f0;padding:1px 5px;border-radius:4px;">Compliance@123</code></span>
         </div>
       </div>
     </div>
@@ -127,7 +129,9 @@
       worker: { email: 'worker@gmail.com', password: 'Password@123' },
       expert: { email: 'expert@gmail.com', password: 'Password@123' },
       superuser: { email: 'super@gmail.com', password: 'Superadmin@123' },
-      admin: { email: 'admin@gmail.com', password: 'Admin@123' },
+      'revenue-admin': { email: 'admin@gmail.com', password: 'Admin@123' },
+      'intake-admin': { email: 'intake@gmail.com', password: 'Intake@123' },
+      'compliance-admin': { email: 'compliance@gmail.com', password: 'Compliance@123' },
     };
     const demoRole = new URLSearchParams(window.location.search).get('demo');
     if (demoRole && DEMO_ACCOUNTS[demoRole]) {

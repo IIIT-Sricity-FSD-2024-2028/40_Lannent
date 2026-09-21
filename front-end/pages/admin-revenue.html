@@ -369,38 +369,6 @@
       box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
-    // ── Per-user table ─────────────────────────────────────────────────────
-    function renderByUser() {
-      const rows = data.byUser || [];
-      const box = document.getElementById('userTable');
-      if (!rows.length) {
-        box.innerHTML = '<div style="padding:28px;text-align:center;color:var(--muted-foreground);font-size:13px;">No user activity yet.</div>';
-        return;
-      }
-      box.innerHTML = `
-        <table class="viz-table">
-          <thead><tr>
-            <th>User</th><th>Role</th>
-            <th class="num">Gross earned</th><th class="num">Fees paid</th>
-            <th class="num">Net received</th><th class="num">Effective rate</th>
-            <th class="num">Funded to escrow</th><th class="num">Wallet</th>
-          </tr></thead>
-          <tbody>${rows.map(u => `
-            <tr>
-              <td><span style="display:flex;align-items:center;gap:9px;">
-                <span class="rev-avatar" style="background:${u.avatarColor || '#94a3b8'};">${esc(u.avatar || '?')}</span>
-                ${esc(u.name)}</span></td>
-              <td><span class="rev-role">${esc(u.role)}</span></td>
-              <td class="num">${u.grossEarned ? money(u.grossEarned) : '—'}</td>
-              <td class="num" style="color:${u.feesPaid ? '#b45309' : 'inherit'};">${u.feesPaid ? money(u.feesPaid) : '—'}</td>
-              <td class="num" style="font-weight:600;">${u.netReceived ? money(u.netReceived) : '—'}</td>
-              <td class="num">${u.grossEarned ? u.effectiveRate + '%' : '—'}</td>
-              <td class="num">${u.escrowFunded ? money(u.escrowFunded) : '—'}</td>
-              <td class="num">${money(u.walletBalance)}</td>
-            </tr>`).join('')}</tbody>
-        </table>`;
-    }
-
     function toggleTable(id, btn) {
       const el = document.getElementById(id);
       const open = el.hasAttribute('hidden');
@@ -421,7 +389,6 @@
         summary: Store.getRevenueSummary(),
         byFeeType: Store.getRevenueByFeeType(),
         timeseries: Store.getRevenueTimeseries(period),
-        byUser: Store.getRevenueByUser(),
         distribution: Store.getRevenueDistribution(),
         byProject: Store.getRevenueByProject(),
       };
@@ -522,11 +489,6 @@
             <div id="projectDetail"></div>
           </div>
 
-          <div class="viz-card">
-            <div class="viz-title">What each user receives</div>
-            <div class="viz-sub">Gross earned is before fees; net received is what reached their wallet.</div>
-            <div class="viz-table-wrap" id="userTable"></div>
-          </div>
         </div>`;
 
       initDashboard({
@@ -541,7 +503,6 @@
       renderByFeeType();
       renderDistribution();
       renderProjects();
-      renderByUser();
       if (window.lucide) lucide.createIcons();
     });
   </script>

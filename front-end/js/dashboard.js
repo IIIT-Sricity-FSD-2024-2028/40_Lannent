@@ -53,10 +53,8 @@ function initDashboard(config = {}) {
   const superItems = [
     { icon: 'layout-dashboard', label: 'Dashboard', path: 'superuser-dashboard.html' },
     { icon: 'users', label: 'Manage Users', path: 'superuser-users.html' },
-    { icon: 'plus-circle', label: 'Create Task', path: 'superuser-create-task.html' },
     { icon: 'folder-kanban', label: 'Manage Tasks', path: 'superuser-tasks.html' },
     { icon: 'wallet', label: 'Escrow & Finance', path: 'superuser-escrow.html' },
-    { icon: 'scale', label: 'All Disputes', path: 'superuser-disputes.html' },
   ];
 
   // The single admin desk is now three, and each sees only its own work. A

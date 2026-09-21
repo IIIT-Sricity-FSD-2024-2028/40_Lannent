@@ -36,7 +36,7 @@ export class TasksController {
 
   @Post()
   @ApiHeader({ name: 'role', required: true, description: 'User role required' })
-  @Roles('client', 'superuser')
+  @Roles('client')
   @ApiOperation({ summary: 'Create a new task' })
   create(@Body() dto: CreateTaskDto) {
     return this.tasksService.create(dto);
@@ -44,7 +44,7 @@ export class TasksController {
 
   @Patch(':id')
   @ApiHeader({ name: 'role', required: true, description: 'User role required' })
-  @Roles('client', 'superuser')
+  @Roles('client')
   @ApiOperation({ summary: 'Update a task' })
   update(@Param('id') id: string, @Body() dto: UpdateTaskDto) {
     return this.tasksService.update(id, dto);
@@ -52,7 +52,7 @@ export class TasksController {
 
   @Post(':id/cancel-draft')
   @ApiHeader({ name: 'role', required: true, description: 'User role required' })
-  @Roles('client', 'superuser')
+  @Roles('client')
   @ApiOperation({
     summary: 'Abandon a draft project',
     description: 'Cancels a project still awaiting its technical audit and refunds any audit escrow.',

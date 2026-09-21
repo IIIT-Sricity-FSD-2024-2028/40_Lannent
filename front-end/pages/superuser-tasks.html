@@ -51,10 +51,9 @@
   </style>
   <script>
     let allTasks = [];
-    let editingTaskId = null;
 
     const statusBadge = s => {
-      const map = { 'open':'badge-orange','in-progress':'badge-blue','completed':'badge-green','cancelled':'badge-red' };
+      const map = { 'open':'badge-orange','in-progress':'badge-blue','completed':'badge-green','cancelled':'badge-red','draft':'badge-blue' };
       return `<span class="badge ${map[s]||'badge-blue'}">${s.replace(/-/g,' ')}</span>`;
     };
 
@@ -97,7 +96,7 @@
           <td>${statusBadge(t.status)}</td>
           <td>
             <div class="action-btns">
-              <button class="btn-edit" onclick="openEditModal('${t.id}')">Edit</button>
+              <button class="btn-edit" onclick="viewTaskDetails('${t.id}')">View</button>
               ${t.status === 'open' && !t.workerId ? `<button class="btn-delete" onclick="deleteTask('${t.id}')">Delete</button>` : ''}
             </div>
           </td>
@@ -105,70 +104,26 @@
       }).join('');
     }
 
-    function openAddModal() {
-      editingTaskId = null;
-      document.getElementById('tModalTitle').textContent = 'Add New Task';
-      document.getElementById('tModalSub').textContent = 'Create a new task on the platform.';
-      document.getElementById('tSaveBtn').textContent = 'Create Task';
-      clearTaskForm();
-      document.getElementById('taskModal').classList.add('open');
-    }
-
-    function openEditModal(id) {
+    function viewTaskDetails(id) {
       const task = Store.getTaskById(id);
       if (!task) return;
-      editingTaskId = id;
-      document.getElementById('tModalTitle').textContent = 'Edit Task';
-      document.getElementById('tModalSub').textContent = 'Update task: ' + task.title;
-      document.getElementById('tSaveBtn').textContent = 'Save Changes';
-      document.getElementById('tTitle').value = task.title;
-      document.getElementById('tCategory').value = task.category;
-      document.getElementById('tBudget').value = task.budget;
-      document.getElementById('tStatus').value = task.status;
-      document.getElementById('tDeadline').value = task.deadline || '';
-      document.getElementById('tDesc').value = task.description || '';
-      document.getElementById('taskModal').classList.add('open');
+      const client = Store.getUserById(task.clientId);
+      const worker = task.workerId ? Store.getUserById(task.workerId) : null;
+      document.getElementById('detailTitle').textContent = task.title;
+      document.getElementById('detailCategory').textContent = task.category || '—';
+      document.getElementById('detailStatus').innerHTML = statusBadge(task.status);
+      document.getElementById('detailBudget').textContent = '$' + task.budget.toLocaleString();
+      document.getElementById('detailDeadline').textContent = task.deadline || '—';
+      document.getElementById('detailClient').textContent = client ? client.name : 'Unknown';
+      document.getElementById('detailWorker').textContent = worker ? worker.name : 'Unassigned';
+      document.getElementById('detailProgress').textContent = task.progress + '%';
+      document.getElementById('detailDesc').textContent = task.description || 'No description provided.';
+      document.getElementById('detailCreated').textContent = task.createdAt || '—';
+      document.getElementById('taskDetailModal').classList.add('open');
     }
 
-    function closeTaskModal() {
-      document.getElementById('taskModal').classList.remove('open');
-      editingTaskId = null;
-      Validate.clearAllErrors();
-    }
-
-    function clearTaskForm() {
-      ['tTitle','tBudget','tDeadline','tDesc'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-      const cat = document.getElementById('tCategory'); if (cat) cat.value = 'Web Development';
-      const st = document.getElementById('tStatus'); if (st) st.value = 'open';
-    }
-
-    function saveTask() {
-      const title = document.getElementById('tTitle').value.trim();
-      const category = document.getElementById('tCategory').value;
-      const budget = document.getElementById('tBudget').value;
-      const status = document.getElementById('tStatus').value;
-      const deadline = document.getElementById('tDeadline').value;
-      const description = document.getElementById('tDesc').value.trim();
-
-      const { valid } = Validate.form([
-        { fieldId: 'tTitle', value: title, checks: [v => Validate.required(v, 'Title'), v => Validate.minLength(v, 5, 'Title')] },
-        { fieldId: 'tBudget', value: budget, checks: [v => Validate.positiveNumber(v, 'Budget')] },
-        { fieldId: 'tDesc', value: description, checks: [v => Validate.required(v, 'Description')] },
-      ]);
-      if (!valid) return;
-
-      if (editingTaskId) {
-        Store.updateTask(editingTaskId, { title, category, budget: parseFloat(budget), status, deadline, description });
-        Validate.toast('Task updated successfully.', 'success');
-      } else {
-        const session = typeof Auth !== "undefined" ? Auth.getCurrentUser() : null;
-        Store.createTask({ title, category, budget: parseFloat(budget), status, deadline, description, clientId: session?.userId || 'u1', skills: [], currency: 'USD', auditEnabled: false });
-        Validate.toast('Task created successfully.', 'success');
-      }
-
-      allTasks = Store.getTasks();
-      closeTaskModal();
-      renderTasks();
+    function closeDetailModal() {
+      document.getElementById('taskDetailModal').classList.remove('open');
     }
 
     function deleteTask(id) {
@@ -214,9 +169,6 @@
             <option value="in-progress">In Progress</option>
             <option value="completed">Completed</option>
           </select>
-          <a href="superuser-create-task.html" class="btn-add" style="text-decoration:none;">
-            <i data-lucide="plus" style="width:16px;height:16px;"></i> Add Task
-          </a>
         </div>
 
         <div style="margin-bottom:12px;font-size:13px;color:var(--muted-foreground);">Showing <strong id="taskCount"></strong></div>
@@ -230,58 +182,68 @@
           </table>
         </div>
 
-        <!-- Modal -->
-        <div class="modal-overlay" id="taskModal">
+        <!-- View Detail Modal (read-only) -->
+        <div class="modal-overlay" id="taskDetailModal">
           <div class="modal">
-            <p class="modal-title" id="tModalTitle">Add Task</p>
-            <p class="modal-sub" id="tModalSub"></p>
-            <div class="form-group">
-              <label class="form-label">Title <span class="req">*</span></label>
-              <input class="form-input" id="tTitle" placeholder="e.g. E-commerce Website Redesign" />
-            </div>
+            <p class="modal-title" id="detailTitle">Task Details</p>
+            <p class="modal-sub">Read-only view of task information.</p>
             <div class="grid-2">
               <div class="form-group">
                 <label class="form-label">Category</label>
-                <select class="form-select" id="tCategory">
-                  <option>Web Development</option><option>Mobile Development</option><option>Backend / API</option><option>UI/UX Design</option><option>AI / Machine Learning</option><option>DevOps / Cloud</option>
-                </select>
+                <div style="padding:10px 14px;background:var(--secondary);border-radius:10px;font-size:14px;" id="detailCategory">—</div>
               </div>
               <div class="form-group">
                 <label class="form-label">Status</label>
-                <select class="form-select" id="tStatus">
-                <option value="open">Open</option><option value="in-progress">In Progress</option><option value="completed">Completed</option>
-                </select>
+                <div style="padding:10px 14px;" id="detailStatus">—</div>
               </div>
             </div>
             <div class="grid-2">
               <div class="form-group">
-                <label class="form-label">Budget (USD) <span class="req">*</span></label>
-                <input class="form-input" id="tBudget" type="number" placeholder="5000" />
+                <label class="form-label">Budget</label>
+                <div style="padding:10px 14px;background:var(--secondary);border-radius:10px;font-size:14px;font-weight:600;" id="detailBudget">—</div>
               </div>
               <div class="form-group">
                 <label class="form-label">Deadline</label>
-                <input class="form-input" id="tDeadline" type="date" />
+                <div style="padding:10px 14px;background:var(--secondary);border-radius:10px;font-size:14px;" id="detailDeadline">—</div>
+              </div>
+            </div>
+            <div class="grid-2">
+              <div class="form-group">
+                <label class="form-label">Client</label>
+                <div style="padding:10px 14px;background:var(--secondary);border-radius:10px;font-size:14px;" id="detailClient">—</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Worker</label>
+                <div style="padding:10px 14px;background:var(--secondary);border-radius:10px;font-size:14px;" id="detailWorker">—</div>
+              </div>
+            </div>
+            <div class="grid-2">
+              <div class="form-group">
+                <label class="form-label">Progress</label>
+                <div style="padding:10px 14px;background:var(--secondary);border-radius:10px;font-size:14px;" id="detailProgress">—</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Created</label>
+                <div style="padding:10px 14px;background:var(--secondary);border-radius:10px;font-size:14px;" id="detailCreated">—</div>
               </div>
             </div>
             <div class="form-group">
-              <label class="form-label">Description <span class="req">*</span></label>
-              <textarea class="form-textarea" id="tDesc" rows="3" placeholder="Task description..."></textarea>
+              <label class="form-label">Description</label>
+              <div style="padding:10px 14px;background:var(--secondary);border-radius:10px;font-size:14px;line-height:1.6;max-height:120px;overflow-y:auto;" id="detailDesc">—</div>
             </div>
             <div class="modal-actions">
-              <button class="btn-cancel-modal" onclick="closeTaskModal()">Cancel</button>
-              <button class="btn-save-modal" id="tSaveBtn" onclick="saveTask()">Save</button>
+              <button class="btn-cancel-modal" onclick="closeDetailModal()" style="flex:1;">Close</button>
             </div>
           </div>
         </div>
       `;
 
-      initDashboard({ role: 'superuser', activePath: 'superuser-tasks.html', pageTitle: 'Manage Tasks', pageSubtitle: 'View, edit or remove any task on the platform', content });
+      initDashboard({ role: 'superuser', activePath: 'superuser-tasks.html', pageTitle: 'Manage Tasks', pageSubtitle: 'View task details or delete tasks on the platform', content });
 
       setTimeout(() => {
         lucide.createIcons();
         renderTasks();
-        document.getElementById('taskModal')?.addEventListener('click', e => { if (e.target.id === 'taskModal') closeTaskModal(); });
-        ['tTitle','tBudget','tDesc'].forEach(id => document.getElementById(id)?.addEventListener('input', () => Validate.clearError(id)));
+        document.getElementById('taskDetailModal')?.addEventListener('click', e => { if (e.target.id === 'taskDetailModal') closeDetailModal(); });
       }, 100);
     });
   </script>

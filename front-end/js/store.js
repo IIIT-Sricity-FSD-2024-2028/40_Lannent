@@ -447,7 +447,18 @@ const Store = (() => {
   function getUserByEmail(email) { return _cache.users.find(u => u.email.toLowerCase() === email.toLowerCase()) || null; }
 
   function createUser(data) {
-    const result = _syncPost(`${API}/users`, data);
+    // Staff/admin roles cannot be created through the public signup endpoint.
+    // When the caller is a superuser creating a privileged role, use the
+    // dedicated staff route that bypasses the self-service restriction.
+    const STAFF_ROLES = ['superuser', 'revenue-admin', 'intake-admin', 'compliance-admin', 'expert'];
+    let endpoint = `${API}/users`;
+    try {
+      const session = JSON.parse(localStorage.getItem('lannent_session') || '{}');
+      if (session.role === 'superuser' && STAFF_ROLES.includes(data.role)) {
+        endpoint = `${API}/users/staff`;
+      }
+    } catch {}
+    const result = _syncPost(endpoint, data);
     if (result) { _cache.users.push(result); return result; }
     // Fallback if API fails
     const initials = data.name ? data.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : 'U';

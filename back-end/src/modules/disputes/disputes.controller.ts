@@ -34,7 +34,7 @@ export class DisputesController {
 
   @Post(':id/resolve')
   @ApiHeader({ name: 'role', required: true, description: 'User role required' })
-  @Roles('expert', 'superuser')
+  @Roles('expert')
   @ApiOperation({ summary: 'Resolve a dispute (updates milestone status based on verdict)' })
   resolve(@Param('id') id: string, @Body() dto: ResolveDisputeDto) {
     return this.disputesService.resolve(id, dto);

@@ -154,7 +154,12 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      if (typeof Auth !== 'undefined' && !Auth.requireRole('superuser')) return;
+      // Superuser is no longer permitted to access the disputes page — redirect to dashboard.
+      if (typeof Auth !== 'undefined') {
+        const session = Auth.getCurrentUser();
+        if (!session) { window.location.href = 'login.html'; return; }
+        if (session.role === 'superuser') { window.location.href = 'superuser-dashboard.html'; return; }
+      }
 
       const disputes = Store.getDisputes();
       const open = disputes.filter(d => d.status === 'open').length;

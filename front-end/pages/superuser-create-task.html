@@ -544,7 +544,13 @@
        INIT
     ═══════════════════════════════════════════════ */
     document.addEventListener('DOMContentLoaded', () => {
-      if (typeof Auth !== 'undefined' && !Auth.requireRole('superuser')) return;
+      // Superuser is no longer permitted to create tasks — redirect to dashboard.
+      if (typeof Auth !== 'undefined') {
+        const session = Auth.getCurrentUser();
+        if (!session) { window.location.href = 'login.html'; return; }
+        if (session.role === 'superuser') { window.location.href = 'superuser-dashboard.html'; return; }
+        if (session.role !== 'superuser') { window.location.href = Auth.getDashboardUrl(session.role); return; }
+      }
 
       // Get client list
       const clients = Store.getUsers().filter(u => u.role === 'client');
