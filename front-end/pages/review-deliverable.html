@@ -96,7 +96,7 @@
             <div class="check-box${item.checked ? ' checked' : ''}" id="chkBox${item.id}">
               ${item.checked ? '<i data-lucide="check" style="width:12px;height:12px;color:white;"></i>' : ''}
             </div>
-            <span style="font-size:14px;${item.checked ? 'text-decoration:line-through;color:var(--muted-foreground);' : ''}">${item.label}</span>
+            <span style="font-size:14px;${item.checked ? 'text-decoration:line-through;color:var(--muted-foreground);' : ''}">${escapeHtml(item.label)}</span>
           </div>`).join('');
       }
 
@@ -110,26 +110,35 @@
       }
 
       const notesHtml = deliverable.deliverable && deliverable.deliverable.description
-        ? `<div style="background:var(--input-bg);border-radius:12px;padding:16px;font-size:14px;color:#374151;line-height:1.7;">${deliverable.deliverable.description}</div>`
+        ? `<div style="background:var(--input-bg);border-radius:12px;padding:16px;font-size:14px;color:#374151;line-height:1.7;">${esc(deliverable.deliverable.description)}</div>`
         : `<div style="background:var(--input-bg);border-radius:12px;padding:16px;font-size:14px;color:#374151;line-height:1.7;">
             <p style="margin-bottom:12px;"><strong>Deliverable submitted</strong> for review.</p>
             <p>Worker has submitted work for this milestone. Review the files and checklist before approving.</p>
           </div>`;
 
       const filesHtml = deliverable.deliverable && deliverable.deliverable.files && deliverable.deliverable.files.length
-        ? deliverable.deliverable.files.map(f => `
+        ? deliverable.deliverable.files.map(f => {
+            // Submissions made before the file store exists carry a bare name
+            // and nothing to fetch, so the control says so instead of being a
+            // button that does nothing.
+            const name = typeof f === 'string' ? f : (f && f.name) || 'File';
+            const href = typeof f === 'object' ? Store.fileUrl(f) : '';
+            const size = typeof f === 'object' && f.size ? (Number(f.size) / 1024).toFixed(0) + ' KB' : 'Submitted file';
+            return `
             <div class="file-row">
               <div class="file-icon-wrap" style="background:#eef2ff;">
                 <i data-lucide="file" style="width:18px;height:18px;color:#6366f1;"></i>
               </div>
               <div style="flex:1;min-width:0;">
-                <div style="font-weight:500;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f}</div>
-                <div style="font-size:12px;color:var(--muted-foreground);">Submitted file</div>
+                <div style="font-weight:500;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(name)}</div>
+                <div style="font-size:12px;color:var(--muted-foreground);">${esc(size)}</div>
               </div>
               <div style="display:flex;gap:8px;">
-                <button class="btn-sm" title="Download"><i data-lucide="download" style="width:14px;height:14px;"></i></button>
+                ${href
+                  ? `<a class="btn-sm" href="${esc(href)}" download="${esc(name)}" title="Download"><i data-lucide="download" style="width:14px;height:14px;"></i></a>`
+                  : `<span style="font-size:11px;color:var(--muted-foreground);" title="Uploaded before the file store existed, so only the name was kept.">Not stored</span>`}
               </div>
-            </div>`).join('')
+            </div>`; }).join('')
         : `<div style="padding:24px;text-align:center;color:var(--muted-foreground);">
              <i data-lucide="file-x" style="width:32px;height:32px;opacity:0.4;margin:0 auto 8px;display:block;"></i>
              <div style="font-size:13px;">No files attached to this submission.</div>
@@ -141,6 +150,10 @@
         fail:        { label: 'Failed the technical audit',  bg:'#fef2f2', border:'#fecaca', text:'#b91c1c', icon:'x-circle' },
         conditional: { label: 'Passed with conditions',      bg:'#fffbeb', border:'#fde68a', text:'#b45309', icon:'alert-triangle' },
       };
+
+      /** Hoisted deliberately: a `const` arrow here threw whenever a new esc()
+       *  call was added above its declaration. */
+      function esc(v) { return window.escapeHtml(v); }
 
       function scoreBar(label, value) {
         const v = Number(value) || 0;
@@ -171,10 +184,10 @@
             </div>
 
             <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;background:${v.bg};border:1px solid ${v.border};margin-bottom:16px;">
-              <i data-lucide="${v.icon}" style="width:22px;height:22px;color:${v.text};flex:none;"></i>
+              <i data-lucide="${v.icon}" style="width:22px;height:22px;color:${escapeHtml(v.text)};flex:none;"></i>
               <div>
-                <div style="font-size:14px;font-weight:700;color:${v.text};">${v.label}</div>
-                <div style="font-size:12.5px;color:${v.text};opacity:.85;">
+                <div style="font-size:14px;font-weight:700;color:${escapeHtml(v.text)};">${escapeHtml(v.label)}</div>
+                <div style="font-size:12.5px;color:${escapeHtml(v.text)};opacity:.85;">
                   Reviewed by ${_reviewer ? _reviewer.name : 'an Expert Reviewer'}${avg ? ' · overall ' + avg + '/5' : ''}
                 </div>
               </div>
@@ -189,7 +202,7 @@
 
             ${_auditReport.findings ? `
               <div style="font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted-foreground);margin-bottom:6px;">Findings</div>
-              <div style="font-size:13px;line-height:1.65;color:var(--muted-foreground);">${_auditReport.findings}</div>` : ''}
+              <div style="font-size:13px;line-height:1.65;color:var(--muted-foreground);">${escapeHtml(_auditReport.findings)}</div>` : ''}
           </div>`;
       } else if (_engagement && !['declined','cancelled'].includes(_engagement.status)) {
         auditHtml = `
@@ -234,7 +247,7 @@
             ${auditHtml}
             <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;">
               <h3 style="font-size:15px;font-weight:600;margin-bottom:4px;">Submitted Files</h3>
-              <div style="font-size:13px;color:var(--muted-foreground);margin-bottom:16px;">${deliverable.project} · ${deliverable.milestone}</div>
+              <div style="font-size:13px;color:var(--muted-foreground);margin-bottom:16px;">${escapeHtml(deliverable.project)} · ${escapeHtml(deliverable.milestone)}</div>
               ${filesHtml}
             </div>
 

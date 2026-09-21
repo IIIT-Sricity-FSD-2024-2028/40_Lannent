@@ -5,8 +5,9 @@ import { DisputesRepository } from './disputes.repository';
 import { MilestonesService } from '../milestones/milestones.service';
 import { TasksService } from '../tasks/tasks.service';
 import { LedgerService } from '../ledger/ledger.service';
-import { canViewTask, isStaff } from '../../common/guards/viewer.util';
+import { canViewTask, canViewAnyRecord } from '../../common/guards/viewer.util';
 import { AuditRequestsService } from '../audit-requests/audit-requests.service';
+import { AppLoggerService } from '../../common/logging/app-logger.service';
 
 /**
  * DisputesService — Business Logic Layer
@@ -22,11 +23,12 @@ export class DisputesService {
     @Inject(forwardRef(() => TasksService)) private tasksService: TasksService,
     @Inject(forwardRef(() => LedgerService)) private ledger: LedgerService,
     @Inject(forwardRef(() => AuditRequestsService)) private auditRequests: AuditRequestsService,
+    private readonly log: AppLoggerService,
   ) {}
 
   findAll(viewer?: { id?: string; role?: string }) {
     const all = this.disputesRepository.findAll();
-    if (!viewer || isStaff(viewer.role)) return all;
+    if (!viewer || canViewAnyRecord(viewer.role)) return all;
     // Visible to the parties and the reviewer arbitrating it — not to every
     // reviewer on the platform, which is what an unguarded GET allowed.
     return all.filter((d: any) => this.canView(d, viewer));
@@ -53,6 +55,15 @@ export class DisputesService {
   }
 
   create(dto: CreateDisputeDto) {
+    // Check the reviewer before recording anything. The engagement below is
+    // best-effort, so an unassignable reviewer used to leave a dispute stored
+    // with an expertId that could never take the case — no arbitration, and
+    // nothing on screen to say why.
+    if (dto.expertId) {
+      const task = this.safe(() => this.tasksService.findById(dto.taskId));
+      this.auditRequests.assertAssignableExpert(dto.expertId, task?.category);
+    }
+
     const dispute = {
       id: this.disputesRepository.generateId(),
       status: 'open',
@@ -68,7 +79,13 @@ export class DisputesService {
 
     // If milestone exists, set it to disputed
     if (dto.milestoneId) {
-      try { this.milestonesService.update(dto.milestoneId, { status: 'disputed' }); } catch {}
+      try {
+        this.milestonesService.update(dto.milestoneId, { status: 'disputed' });
+      } catch (e) {
+        // Swallowing is right — the dispute is recorded either way — but a
+        // milestone left un-flagged is a real inconsistency to know about.
+        this.log.warn('disputes.create', `could not flag milestone ${dto.milestoneId} as disputed`, e);
+      }
     }
 
     // Open an audit engagement so an expert can preview the claim, agree a fee
@@ -92,7 +109,15 @@ export class DisputesService {
         status: 'preview-sent',
       });
       (dispute as any).auditRequestId = auditRequest.id;
-    } catch {}
+    } catch (e) {
+      // The dispute stands, but with no engagement no reviewer can be paid to
+      // arbitrate it — it would otherwise sit unassigned with nothing logged.
+      this.log.warn(
+        'disputes.create',
+        `dispute ${dispute.id} recorded without an audit engagement (task ${dto.taskId}, reviewer ${dto.expertId})`,
+        e,
+      );
+    }
 
     return dispute;
   }

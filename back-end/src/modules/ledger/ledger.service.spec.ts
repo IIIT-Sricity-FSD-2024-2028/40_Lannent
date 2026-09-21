@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { LedgerService } from './ledger.service';
+import { LoggingModule } from '../../common/logging/logging.module';
 import { LedgerRepository } from './ledger.repository';
 import { UsersModule } from '../users/users.module';
 import { TransactionsModule } from '../transactions/transactions.module';
@@ -26,7 +27,9 @@ describe('LedgerService', () => {
 
   beforeEach(async () => {
     const mod = await Test.createTestingModule({
-      imports: [UsersModule, TransactionsModule],
+      // LoggingModule is @Global, so importing it here registers AppLoggerService
+      // for LedgerModule too — the same way AppModule does it at runtime.
+      imports: [LoggingModule, UsersModule, TransactionsModule],
       providers: [LedgerRepository, LedgerService],
     }).compile();
 

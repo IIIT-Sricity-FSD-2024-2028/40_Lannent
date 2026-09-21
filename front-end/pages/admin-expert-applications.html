@@ -368,7 +368,7 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      if (typeof Auth !== 'undefined' && !Auth.requireRole('admin')) return;
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('intake-admin', 'compliance-admin')) return;
       const session = Auth.getCurrentUser();
 
       let activeFilter = 'all';
@@ -426,8 +426,8 @@
             <div class="app-card" id="acard-${a.id}">
               <div class="app-avatar" style="background:${color};">${initials}</div>
               <div class="app-info">
-                <div class="app-name">${a.name}</div>
-                <div class="app-email">${a.email}</div>
+                <div class="app-name">${escapeHtml(a.name)}</div>
+                <div class="app-email">${escapeHtml(a.email)}</div>
                 <div class="app-meta">
                   <span class="app-meta-item">
                     <i data-lucide="briefcase" style="width:12px;height:12px;"></i>
@@ -467,7 +467,29 @@
         }).join('');
       }
 
-      function render() {
+      const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g,
+      c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+    /**
+     * One document on an application. A reference means the file is in the
+     * store and the reviewer can open it; a bare name is an application filed
+     * before the store existed, when only the name was kept.
+     */
+    function docRow(label, ref, name) {
+      const shown = (ref && ref.name) || name;
+      if (!shown) return '';
+      const href = ref ? Store.fileUrl(ref) : '';
+      return `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <span style="color:var(--muted-foreground);min-width:78px;">${esc(label)}</span>
+          <strong style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(shown)}</strong>
+          ${href
+            ? `<a href="${esc(href)}" download="${esc(shown)}" style="font-size:12px;color:#4f46e5;text-decoration:none;white-space:nowrap;">Download</a>`
+            : `<span style="font-size:11px;color:var(--muted-foreground);white-space:nowrap;" title="Filed before the platform stored documents.">Not stored</span>`}
+        </div>`;
+    }
+
+    function render() {
         const list = getFiltered();
         const el = document.getElementById('appsList');
         if (el) {
@@ -540,7 +562,7 @@
       `;
 
       initDashboard({
-        role: 'admin',
+        role: (Auth.getCurrentUser() || {}).role,
         activePath: 'admin-expert-applications.html',
         pageTitle: 'Expert Applications',
         pageSubtitle: 'Review and manage expert reviewer applications.',
@@ -572,8 +594,8 @@
         const isApprove = status === 'approved';
         document.getElementById('confirmTitle').textContent = isApprove ? 'Approve Application' : 'Reject Application';
         document.getElementById('confirmText').innerHTML = isApprove
-          ? `Are you sure you want to <strong>approve</strong> <strong>${app?.name}</strong>'s application? This will create an expert account and allow them to log in.`
-          : `Are you sure you want to <strong>reject</strong> <strong>${app?.name}</strong>'s application? They will not be able to log in as an expert reviewer.`;
+          ? `Are you sure you want to <strong>approve</strong> <strong>${escapeHtml(app?.name)}</strong>'s application? This will create an expert account and allow them to log in.`
+          : `Are you sure you want to <strong>reject</strong> <strong>${escapeHtml(app?.name)}</strong>'s application? They will not be able to log in as an expert reviewer.`;
         const confirmBtn = document.getElementById('confirmBtn');
         confirmBtn.textContent = isApprove ? 'Approve' : 'Reject';
         confirmBtn.className = 'confirm-btn ' + (isApprove ? 'confirm-btn-approve' : 'confirm-btn-reject');
@@ -595,8 +617,8 @@
         // Toast
         const app = Store.getExpertApplicationById(appId);
         const msg = status === 'approved'
-          ? `✓ ${app?.name}'s application approved. Expert account created.`
-          : `✗ ${app?.name}'s application rejected.`;
+          ? `✓ ${escapeHtml(app?.name)}'s application approved. Expert account created.`
+          : `✗ ${escapeHtml(app?.name)}'s application rejected.`;
         if (typeof Validate !== 'undefined') {
           Validate.toast(msg, status === 'approved' ? 'success' : 'error');
         }
@@ -616,8 +638,8 @@
           <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border);">
             <div class="app-avatar" style="background:${avatarColors[0]};width:52px;height:52px;font-size:16px;">${getInitials(app.name)}</div>
             <div>
-              <div style="font-size:16px;font-weight:600;">${app.name}</div>
-              <div style="font-size:13px;color:var(--muted-foreground);">${app.email}</div>
+              <div style="font-size:16px;font-weight:600;">${escapeHtml(app.name)}</div>
+              <div style="font-size:13px;color:var(--muted-foreground);">${escapeHtml(app.email)}</div>
             </div>
             <div style="margin-left:auto;">${statusBadge(app.status)}</div>
           </div>
@@ -650,15 +672,14 @@
           <div class="detail-field" style="margin-top:6px;">
             <div class="detail-label">Documents</div>
             <div class="detail-value" style="font-weight:400;font-size:13px;">
-              ${app.resumeName
-                ? `Resume: <strong>${app.resumeName}</strong>${app.certificateName ? ` · Certificate: <strong>${app.certificateName}</strong>` : ''}
-                   <div style="color:var(--muted-foreground);font-size:12px;margin-top:3px;">Uploaded files are not retained — the platform has no document storage yet.</div>`
+              ${(app.resumeName || app.resumeFile || app.certificateFile)
+                ? `${docRow('Résumé', app.resumeFile, app.resumeName)}${docRow('Certificate', app.certificateFile, app.certificateName)}`
                 : 'No documents recorded with this application.'}
             </div>
           </div>
           <div class="detail-field" style="margin-top:6px;">
             <div class="detail-label">Motivation</div>
-            <div class="detail-value" style="font-size:13px;line-height:1.65;color:var(--muted-foreground);font-weight:400;">${app.motivation || 'No motivation provided.'}</div>
+            <div class="detail-value" style="font-size:13px;line-height:1.65;color:var(--muted-foreground);font-weight:400;">${escapeHtml(app.motivation || 'No motivation provided.')}</div>
           </div>
           <div class="detail-grid" style="margin-top:10px;padding-top:14px;border-top:1px solid var(--border);">
             <div class="detail-field">

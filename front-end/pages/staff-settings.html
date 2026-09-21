@@ -41,7 +41,7 @@
     };
 
     document.addEventListener('DOMContentLoaded', () => {
-      if (typeof Auth !== 'undefined' && !Auth.requireRole('superuser', 'admin')) return;
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('superuser', 'revenue-admin', 'intake-admin', 'compliance-admin')) return;
 
       const session = Auth.getCurrentUser();
       const user = Store.getUserById(session.userId);
@@ -70,19 +70,19 @@
               <div class="ss-id">
                 <div class="ss-avatar" style="background:${user.avatarColor};">${user.avatar}</div>
                 <div>
-                  <div style="font-size:16px;font-weight:700;">${user.name}</div>
-                  <div style="font-size:13px;color:var(--muted-foreground);margin-bottom:6px;">${user.email}</div>
+                  <div style="font-size:16px;font-weight:700;">${escapeHtml(user.name)}</div>
+                  <div style="font-size:13px;color:var(--muted-foreground);margin-bottom:6px;">${escapeHtml(user.email)}</div>
                   <span class="ss-role">${user.role}</span>
                 </div>
               </div>
 
               <div class="ss-field">
                 <label for="ssName">Display name</label>
-                <input id="ssName" class="form-input" type="text" value="${user.name}" />
+                <input id="ssName" class="form-input" type="text" value="${escapeHtml(user.name)}" />
               </div>
               <div class="ss-field">
                 <label for="ssEmail">Email</label>
-                <input id="ssEmail" class="form-input" type="email" value="${user.email}" />
+                <input id="ssEmail" class="form-input" type="email" value="${escapeHtml(user.email)}" />
               </div>
               <button class="btn-primary" onclick="saveStaffProfile()">Save changes</button>
             </div>

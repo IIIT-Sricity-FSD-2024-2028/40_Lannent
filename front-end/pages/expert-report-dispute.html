@@ -325,7 +325,7 @@
       if (_milestone) {
         _evidence.push({
           label: 'Disputed milestone',
-          text: `${_milestone.title} — $${Number(_milestone.budget || 0).toLocaleString()}, status ${_milestone.status}`,
+          text: `${escapeHtml(_milestone.title)} — $${Number(_milestone.budget || 0).toLocaleString()}, status ${_milestone.status}`,
         });
       }
       if (_deliverable) {
@@ -397,7 +397,7 @@
         expertAnalysis: rawDispute.resolution || null,
         files: _files,
         timeline: [
-          { dot:'blue',   time: rawDispute.createdAt ? new Date(rawDispute.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—', text:'Dispute raised', sub: _expert ? `Escrow frozen. Assigned to ${_expert.name}.` : 'Escrow frozen. Awaiting a reviewer.' },
+          { dot:'blue',   time: rawDispute.createdAt ? new Date(rawDispute.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—', text:'Dispute raised', sub: _expert ? `Escrow frozen. Assigned to ${escapeHtml(_expert.name)}.` : 'Escrow frozen. Awaiting a reviewer.' },
           { dot:'purple', time: rawDispute.resolvedAt ? new Date(rawDispute.resolvedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—', text:'Expert reviewed case', sub: rawDispute.resolvedAt ? 'Deliverable and dispute details reviewed.' : 'Not yet reviewed.' },
           { dot:'green',  time: rawDispute.resolvedAt ? new Date(rawDispute.resolvedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—', text:'Verdict issued', sub: rawDispute.resolution ? rawDispute.resolution.substring(0,80)+'...' : 'Resolution issued.' },
         ],
@@ -409,7 +409,7 @@
         <div class="tl-item">
           <div class="tl-dot ${t.dot}"></div>
           <div class="tl-time">${t.time}</div>
-          <div class="tl-text">${t.text}</div>
+          <div class="tl-text">${escapeHtml(t.text)}</div>
           <div class="tl-sub">${t.sub}</div>
         </div>
       `).join('');
@@ -417,8 +417,8 @@
       const evidenceHTML = (r.evidenceReviewed && r.evidenceReviewed.length)
         ? r.evidenceReviewed.map(e => `
           <div class="evidence-quote">
-            <div class="evidence-label">${e.label}</div>
-            ${e.text}
+            <div class="evidence-label">${escapeHtml(e.label)}</div>
+            ${escapeHtml(e.text)}
           </div>
         `).join('')
         : '<div style="font-size:13px;color:var(--muted-foreground);padding:12px;">No specific evidence items recorded.</div>';
@@ -430,12 +430,12 @@
               <i data-lucide="${f.icon || 'file'}" style="width:16px;height:16px;color:${f.iconColor || '#6b7280'};"></i>
             </div>
             <div style="flex:1;min-width:0;">
-              <div class="file-name">${f.name}</div>
+              <div class="file-name">${escapeHtml(f.name)}</div>
               <div class="file-size">${f.size}</div>
             </div>
             ${/^https?:\/\//.test(f.name)
               ? `<a class="btn-act" style="width:auto;padding:5px 12px;font-size:12px;margin-bottom:0;text-decoration:none;"
-                    href="${f.name}" target="_blank" rel="noopener noreferrer">
+                    href="${escapeHtml(f.name)}" target="_blank" rel="noopener noreferrer">
                    <i data-lucide="external-link" style="width:12px;height:12px;"></i> Open
                  </a>`
               : ''}
@@ -464,7 +464,7 @@
             ${r.reportId}
           </div>
           <div class="report-title-main">${r.type} Report</div>
-          <div class="report-subtitle">${r.project} · ${r.milestone}</div>
+          <div class="report-subtitle">${escapeHtml(r.project)} · ${escapeHtml(r.milestone)}</div>
           <div class="report-meta-row">
             <div class="report-meta-item">
               <span class="report-meta-label">Case ID</span>
@@ -522,7 +522,7 @@
                 <div class="party-card">
                   <div class="party-avatar" style="background:${r.raisedByColor};">${r.raisedByInitials}</div>
                   <div>
-                    <div class="party-name">${r.raisedByName}</div>
+                    <div class="party-name">${escapeHtml(r.raisedByName)}</div>
                     <div class="party-role">${r.raisedBy}</div>
                   </div>
                   <span class="party-tag tag-raiser">Dispute Raiser</span>
@@ -598,7 +598,7 @@
                 <span class="rc-head-title">Resolution & Next Steps</span>
               </div>
               <div class="rc-body">
-                <div class="summary-box">${r.resolution}</div>
+                <div class="summary-box">${escapeHtml(r.resolution)}</div>
               </div>
             </div>
 
@@ -621,7 +621,7 @@
             <!-- Expert Signature -->
             <div class="expert-sig" style="margin-bottom:16px;">
               <div class="expert-avatar">${r.expertInitials}</div>
-              <div class="expert-name">${r.expertName}</div>
+              <div class="expert-name">${escapeHtml(r.expertName)}</div>
               <div class="expert-role">${r.expertTitle}</div>
               <hr class="section-divider" />
               <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:#78716c;margin-bottom:6px;">Final Verdict</div>
@@ -648,11 +648,11 @@
                   </div>
                   <div class="info-cell">
                     <span class="info-label">Project</span>
-                    <span class="info-value">${r.project}</span>
+                    <span class="info-value">${escapeHtml(r.project)}</span>
                   </div>
                   <div class="info-cell">
                     <span class="info-label">Milestone</span>
-                    <span class="info-value">${r.milestone}</span>
+                    <span class="info-value">${escapeHtml(r.milestone)}</span>
                   </div>
                   <div class="info-cell">
                     <span class="info-label">Escrow Amount</span>
@@ -686,7 +686,7 @@
         role: role,
         activePath: role === 'worker' ? 'worker-milestone-board.html' : role === 'client' ? 'client-my-projects.html' : 'expert-reports.html',
         pageTitle: 'Dispute Resolution Report',
-        pageSubtitle: `${r.reportId} · ${r.project}`,
+        pageSubtitle: `${r.reportId} · ${escapeHtml(r.project)}`,
         content,
       });
 

@@ -246,6 +246,26 @@
     };
     const toUiStatus = s => UI_STATUS[s] || 'Awaiting Review';
 
+    /**
+     * A project audit is not finished when the reviewer files their first
+     * report — it is finished when every milestone on the project has one.
+     * The engagement is priced and paid once, so its lifecycle status turns
+     * 'paid' early; reading that as "Completed" hid the milestones still
+     * waiting. The server sends the real coverage in `auditProgress`.
+     */
+    function auditUiStatus(a) {
+      const lifecycle = toUiStatus(a.status);
+      const p = a.auditProgress;
+      if (!p || a.kind === 'dispute-audit') return lifecycle;
+      // Terminal states are terminal regardless of coverage.
+      if (['Declined', 'Cancelled'].includes(lifecycle)) return lifecycle;
+      // Before the reviewer has taken the engagement on, nothing has changed.
+      if (!['In Review', 'Completed'].includes(lifecycle)) return lifecycle;
+
+      if (p.complete) return 'Completed';
+      return p.awaitingReview > 0 ? 'In Review' : 'Awaiting Review';
+    }
+
     // Build audit requests from store
     function getAuditRequests() {
       const session = Auth.getCurrentUser();
@@ -262,8 +282,9 @@
         worker: a.worker,
         milestone: a.milestone,
         submitted: a.createdAt,
-        status: toUiStatus(a.status),
+        status: auditUiStatus(a),
         rawStatus: a.status,
+        auditProgress: a.auditProgress || null,
         kind: a.kind,
         agreedAmount: a.agreedAmount,
         priority: a.severity === 'High' ? 'high' : a.severity === 'Low' ? 'low' : 'normal',
@@ -310,7 +331,7 @@
           <div class="audit-card-top">
             <div class="audit-card-left">
               <div class="audit-card-title-row">
-                <span class="audit-card-title">${a.project}</span>
+                <span class="audit-card-title">${escapeHtml(a.project)}</span>
                 <span class="prio-badge prio-${a.priority}">${a.priority.toUpperCase()}</span>
               </div>
               <div class="audit-card-meta">
@@ -322,6 +343,11 @@
                   <i data-lucide="calendar" style="width:13px;height:13px;"></i>
                   ${a.submitted}
                 </span>
+                ${a.auditProgress && a.auditProgress.total ? `
+                <span title="Milestones on this project that have an audit report">
+                  <i data-lucide="check-circle-2" style="width:13px;height:13px;"></i>
+                  ${a.auditProgress.audited} of ${a.auditProgress.total} milestones audited
+                </span>` : ''}
               </div>
             </div>
             <span class="status-badge ${statusClass[a.status]}">${a.status}</span>
@@ -329,7 +355,7 @@
 
           <!-- divider + milestone + severity -->
           <div class="audit-card-divider">
-            <div class="audit-milestone">Milestone: <strong>${a.milestone}</strong></div>
+            <div class="audit-milestone">Milestone: <strong>${escapeHtml(a.milestone)}</strong></div>
             <div class="severity-chip severity-${a.severity}">
               <i data-lucide="${severityIcon[a.severity]}" style="width:13px;height:13px;flex-shrink:0;"></i>
               <span>${a.severity.charAt(0).toUpperCase() + a.severity.slice(1)} — ${a.severityLabel}</span>
@@ -338,7 +364,11 @@
 
           <!-- CTA -->
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            ${a.rawStatus === 'in-progress' && a.milestoneId ? `<a href="review-deliverable.html?id=${a.milestoneId}&role=expert&auditId=${a.id}" class="btn-review"><i data-lucide="file-search" style="width:15px;height:15px;"></i>Review Deliverable</a>` : ''}
+            <!-- "Review Deliverable" used to sit here, linking to the client's
+                 approve/request-changes screen. It was the wrong screen for a
+                 reviewer, it stayed visible after the report was filed, and its
+                 form reopened for a milestone that was already audited. Open →
+                 the engagement's milestone list is the way in now. -->
             ${!['paid','declined','cancelled'].includes(a.rawStatus) ? `<button onclick="openAudit('${a.id}')" class="btn-review" style="background:#ecfdf5;color:#166534;border:1px solid #bbf7d0;"><i data-lucide="eye" style="width:15px;height:15px;"></i>${a.rawStatus === 'in-progress' ? 'Open' : 'Review &amp; quote'}</button>` : ''}
             ${a.rawStatus === 'paid' ? `<a href="expert-report-audit.html?id=${a.id}" class="btn-review" style="background:#f8f9fb;color:var(--foreground);border:1px solid var(--border);"><i data-lucide="file-text" style="width:15px;height:15px;"></i>View Report</a>` : ''}
           </div>

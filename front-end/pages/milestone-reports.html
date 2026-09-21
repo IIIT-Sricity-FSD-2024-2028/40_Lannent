@@ -407,12 +407,14 @@
           ${r.type === 'dispute-resolution' ? 'Awaiting a verdict' : 'Awaiting review'}
         </div>`;
       }
-      return `<div class="report-verdict" style="background:${v.bg};border-color:${v.border};color:${v.text};">${v.label}</div>`;
+      return `<div class="report-verdict" style="background:${v.bg};border-color:${v.border};color:${escapeHtml(v.text)};">${escapeHtml(v.label)}</div>`;
     }
 
     /** A readable opening of the reviewer's reasoning, not the whole report. */
+    /** Trims a report finding for a card. Escapes, because the text is the
+     *  reviewer's free prose being rendered to the client and the worker. */
     function excerpt(text, max = 160) {
-      const t = String(text || '').trim();
+      const t = escapeHtml(String(text || '').trim());
       if (t.length <= max) return t;
       const cut = t.slice(0, max);
       const stop = cut.lastIndexOf(' ');
@@ -492,16 +494,16 @@
               <div class="report-info">
                 <div class="report-milestone-name">${r.milestoneName}</div>
                 <div class="report-type-label">
-                  ${tc.label}
+                  ${escapeHtml(tc.label)}
                   ${r.project ? '&nbsp;·&nbsp; ' + r.project : ''}
                   &nbsp;·&nbsp; <span style="font-family:monospace;font-size:11px;">${r.id}</span>
                 </div>
                 ${verdictChip(r)}
                 ${r.findings ? `<div class="report-findings">${excerpt(r.findings)}</div>` : ''}
                 <div class="report-meta-row">
-                  <span class="status-pill" style="background:${sc.bg};border-color:${sc.border};color:${sc.text};">
+                  <span class="status-pill" style="background:${sc.bg};border-color:${sc.border};color:${escapeHtml(sc.text)};">
                     <span class="status-dot" style="background:${sc.dot};"></span>
-                    ${sc.label}
+                    ${escapeHtml(sc.label)}
                   </span>
                   <div class="report-meta-item">
                     <div style="width:22px;height:22px;border-radius:50%;background:${r.reviewerColor};display:flex;align-items:center;justify-content:center;color:white;font-size:8px;font-weight:700;flex-shrink:0;">${r.reviewerInitials}</div>
@@ -509,7 +511,7 @@
                   </div>
                   ${r.workerName ? `<div class="report-meta-item">
                     <i data-lucide="user" style="width:13px;height:13px;"></i>
-                    <strong>${r.workerName}</strong>
+                    <strong>${escapeHtml(r.workerName)}</strong>
                   </div>` : ''}
                   <div class="report-meta-item">
                     <i data-lucide="calendar" style="width:13px;height:13px;"></i>

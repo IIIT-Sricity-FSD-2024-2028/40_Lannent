@@ -5,6 +5,7 @@
 
 const Auth = (() => {
   const SESSION_KEY = 'lannent_session';
+  const TOKEN_KEY = 'lannent_token';
   const API = (typeof LANNENT_API !== 'undefined')
     ? LANNENT_API
     : 'http://localhost:3000/api';
@@ -13,7 +14,8 @@ const Auth = (() => {
     // Synchronous wrapper: try API first, fall back to Store
     try {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${API}/users/login`, false); // synchronous
+      // /auth/login returns a bearer token alongside the session.
+      xhr.open('POST', `${API}/auth/login`, false); // synchronous
       xhr.setRequestHeader('Content-Type', 'application/json');
       xhr.send(JSON.stringify({ email, password }));
 
@@ -23,8 +25,13 @@ const Auth = (() => {
         const user = data.user;
         const session = data.session;
         if (user && session) {
-          try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch(e) {}
-          return { success: true, user, session };
+          try {
+            localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+            // Store.js reads this on every request. Kept beside the session so
+            // signing out clears both.
+            if (data.token) localStorage.setItem(TOKEN_KEY, data.token);
+          } catch(e) {}
+          return { success: true, user, session, token: data.token };
         }
       } else {
         const err = JSON.parse(xhr.responseText);
@@ -46,7 +53,9 @@ const Auth = (() => {
   }
 
   function logout() {
-    try { localStorage.removeItem(SESSION_KEY); } catch(e) {}
+    // The token has to go with the session, or the next sign-in inherits the
+    // previous person's credentials.
+    try { localStorage.removeItem(SESSION_KEY); localStorage.removeItem(TOKEN_KEY); } catch(e) {}
     window.location.href = _getRoot() + 'index.html';
   }
 
@@ -92,12 +101,18 @@ const Auth = (() => {
     worker:    'worker-dashboard.html',
     expert:    'expert-dashboard.html',
     superuser: 'superuser-dashboard.html',
-    admin:     'admin-dashboard.html',
+    'revenue-admin':    'admin-revenue.html',
+    'intake-admin':     'admin-expert-applications.html',
+    'compliance-admin': 'compliance-dashboard.html',
   };
 
   function getDashboardUrl(role) {
     return DASHBOARDS[role] || 'login.html';
   }
 
-  return { login, logout, getCurrentUser, isLoggedIn, requireAuth, requireRole, getDashboardUrl };
+  function getToken() {
+    try { return localStorage.getItem(TOKEN_KEY) || ''; } catch(e) { return ''; }
+  }
+
+  return { login, logout, getToken, getCurrentUser, isLoggedIn, requireAuth, requireRole, getDashboardUrl };
 })();

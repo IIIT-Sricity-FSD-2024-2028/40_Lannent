@@ -18,21 +18,21 @@ export class RevenueController {
   constructor(private readonly revenue: RevenueService) {}
 
   @Get('summary')
-  @Roles(ROLES.ADMIN)
+  @Roles(ROLES.REVENUE_ADMIN, ROLES.COMPLIANCE_ADMIN)
   @ApiOperation({ summary: 'Headline figures: revenue, volume, take rate, escrow held' })
   summary() {
     return this.revenue.summary();
   }
 
   @Get('by-fee-type')
-  @Roles(ROLES.ADMIN)
+  @Roles(ROLES.REVENUE_ADMIN, ROLES.COMPLIANCE_ADMIN)
   @ApiOperation({ summary: 'Revenue broken down by fee type' })
   byFeeType() {
     return this.revenue.byFeeType();
   }
 
   @Get('timeseries')
-  @Roles(ROLES.ADMIN)
+  @Roles(ROLES.REVENUE_ADMIN, ROLES.COMPLIANCE_ADMIN)
   @ApiQuery({ name: 'period', required: false, enum: ['day', 'week', 'month'] })
   @ApiOperation({ summary: 'Revenue over time' })
   timeseries(@Query('period') period?: string) {
@@ -40,28 +40,28 @@ export class RevenueController {
   }
 
   @Get('by-user')
-  @Roles(ROLES.ADMIN)
+  @Roles(ROLES.REVENUE_ADMIN, ROLES.COMPLIANCE_ADMIN)
   @ApiOperation({ summary: 'Per-user gross earned, fees paid and net received' })
   byUser() {
     return this.revenue.byUser();
   }
 
   @Get('distribution')
-  @Roles(ROLES.ADMIN)
+  @Roles(ROLES.REVENUE_ADMIN, ROLES.COMPLIANCE_ADMIN)
   @ApiOperation({ summary: 'How every escrowed dollar splits between workers, reviewers and the platform' })
   distribution() {
     return this.revenue.distribution();
   }
 
   @Get('by-project')
-  @Roles(ROLES.ADMIN)
+  @Roles(ROLES.REVENUE_ADMIN, ROLES.COMPLIANCE_ADMIN)
   @ApiOperation({ summary: 'Every project with its platform revenue' })
   byProject() {
     return this.revenue.byProject();
   }
 
   @Get('project/:taskId')
-  @Roles(ROLES.ADMIN)
+  @Roles(ROLES.REVENUE_ADMIN, ROLES.COMPLIANCE_ADMIN)
   @ApiOperation({
     summary: 'Complete money flow for one project',
     description: 'What the client paid, what the worker and reviewers took, split by audit vs dispute, and what the platform kept.',
@@ -71,14 +71,16 @@ export class RevenueController {
   }
 
   @Get('fee-config')
-  @Roles(ROLES.ADMIN)
+  @Roles(ROLES.REVENUE_ADMIN, ROLES.COMPLIANCE_ADMIN)
   @ApiOperation({ summary: 'Current fee rates' })
   getFeeConfig() {
     return this.revenue.getFeeConfig();
   }
 
   @Patch('fee-config')
-  @Roles(ROLES.ADMIN)
+  // Changing a rate alters what every user is charged — the revenue desk
+  // only. Compliance reads this endpoint, it does not write it.
+  @Roles(ROLES.REVENUE_ADMIN)
   @ApiOperation({
     summary: 'Tune fee rates',
     description: 'Applies to future charges only — existing revenue keeps the rate it was charged at.',

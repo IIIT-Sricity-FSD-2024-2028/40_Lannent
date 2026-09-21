@@ -61,21 +61,21 @@
         <div class="dispute-card ${d.status === 'resolved' ? 'resolved' : ''}" id="dispute_${d.id}">
           <div class="dispute-header">
             <div>
-              <div class="dispute-project">${d.project}</div>
+              <div class="dispute-project">${escapeHtml(d.project)}</div>
               <div style="font-size:12px;color:var(--muted-foreground);margin-top:2px;">Raised ${d.createdAt}</div>
             </div>
             <span class="badge ${d.status === 'open' ? 'badge-orange' : 'badge-green'}">${d.status}</span>
           </div>
           <div class="dispute-meta">
-            <span><strong>Raised by:</strong> ${d.raisedByName}</span>
-            <span><strong>Against:</strong> ${d.againstName}</span>
+            <span><strong>Raised by:</strong> ${escapeHtml(d.raisedByName)}</span>
+            <span><strong>Against:</strong> ${escapeHtml(d.againstName)}</span>
             <span><strong>Amount:</strong> ${d.amount}</span>
-            ${d.milestone ? `<span><strong>Milestone:</strong> ${d.milestone}</span>` : ''}
+            ${d.milestone ? `<span><strong>Milestone:</strong> ${escapeHtml(d.milestone)}</span>` : ''}
           </div>
-          <div class="dispute-reason">${d.reason}</div>
+          <div class="dispute-reason">${escapeHtml(d.reason)}</div>
           ${d.status === 'resolved' ? `
             <div class="resolution-box">
-              <strong>Resolution (${d.verdict?.replace(/-/g,' ')}):</strong> ${d.resolution}
+              <strong>Resolution (${d.verdict?.replace(/-/g,' ')}):</strong> ${escapeHtml(d.resolution)}
               ${d.resolvedAt ? `<br><span style="opacity:0.7;">Resolved on ${d.resolvedAt}</span>` : ''}
             </div>
           ` : `
@@ -100,10 +100,10 @@
           // Notify both parties
           const vLabel = verdict === 'worker-favour' ? 'in favour of the Worker' : verdict === 'client-favour' ? 'in favour of the Client' : 'with a 50/50 split';
           if (d && d.raisedBy) {
-            Store.addNotification({ userId: d.raisedBy, type: 'dispute-resolved', text: `Dispute resolved: ${d.project}`, subtext: `Verdict ${vLabel}` });
+            Store.addNotification({ userId: d.raisedBy, type: 'dispute-resolved', text: `Dispute resolved: ${escapeHtml(d.project)}`, subtext: `Verdict ${vLabel}` });
           }
           if (d && d.againstId) {
-            Store.addNotification({ userId: d.againstId, type: 'dispute-resolved', text: `Dispute resolved: ${d.project}`, subtext: `Verdict ${vLabel}` });
+            Store.addNotification({ userId: d.againstId, type: 'dispute-resolved', text: `Dispute resolved: ${escapeHtml(d.project)}`, subtext: `Verdict ${vLabel}` });
           }
           Validate.toast('Dispute resolved successfully.', 'success');
           const filter = document.getElementById('statusFilterD')?.value || 'all';
@@ -142,10 +142,10 @@
       // Notify both parties
       const vLabel = verdict === 'worker-favour' ? 'in favour of the Worker' : verdict === 'client-favour' ? 'in favour of the Client' : 'with a 50/50 split';
       if (d && d.raisedBy) {
-        Store.addNotification({ userId: d.raisedBy, type: 'dispute-resolved', text: `Dispute resolved: ${d.project}`, subtext: `Verdict ${vLabel}` });
+        Store.addNotification({ userId: d.raisedBy, type: 'dispute-resolved', text: `Dispute resolved: ${escapeHtml(d.project)}`, subtext: `Verdict ${vLabel}` });
       }
       if (d && d.againstId) {
-        Store.addNotification({ userId: d.againstId, type: 'dispute-resolved', text: `Dispute resolved: ${d.project}`, subtext: `Verdict ${vLabel}` });
+        Store.addNotification({ userId: d.againstId, type: 'dispute-resolved', text: `Dispute resolved: ${escapeHtml(d.project)}`, subtext: `Verdict ${vLabel}` });
       }
       closeOverrideModal();
       Validate.toast('Dispute override applied.', 'success');

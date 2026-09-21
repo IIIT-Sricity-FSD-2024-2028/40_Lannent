@@ -27,8 +27,20 @@ export class AuditReportsRepository {
     return this.reports.find(r => r.id === id) || null;
   }
 
-  findByAuditRequestId(auditRequestId: string): any | null {
-    return this.reports.find(r => r.auditRequestId === auditRequestId) || null;
+  /**
+   * A report belongs to one milestone of one engagement.
+   *
+   * This used to match on the engagement alone, which was fine when an audit
+   * meant a single report. Now that one engagement covers every milestone on
+   * the project, matching that way made each new report overwrite the last —
+   * four milestones audited, one row left.
+   */
+  findByEngagementAndMilestone(auditRequestId: string, milestoneId?: string | null): any | null {
+    return (
+      this.reports.find(
+        r => r.auditRequestId === auditRequestId && (r.milestoneId ?? null) === (milestoneId ?? null),
+      ) || null
+    );
   }
 
   insert(report: any): any {
@@ -36,8 +48,14 @@ export class AuditReportsRepository {
     return report;
   }
 
-  updateByIndex(auditRequestId: string, partial: any): any | null {
-    const idx = this.reports.findIndex(r => r.auditRequestId === auditRequestId);
+  updateByEngagementAndMilestone(
+    auditRequestId: string,
+    milestoneId: string | null | undefined,
+    partial: any,
+  ): any | null {
+    const idx = this.reports.findIndex(
+      r => r.auditRequestId === auditRequestId && (r.milestoneId ?? null) === (milestoneId ?? null),
+    );
     if (idx === -1) return null;
     this.reports[idx] = { ...this.reports[idx], ...partial };
     return this.reports[idx];

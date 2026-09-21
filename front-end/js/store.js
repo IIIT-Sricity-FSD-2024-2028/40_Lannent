@@ -26,8 +26,54 @@ const Store = (() => {
       const session = JSON.parse(localStorage.getItem('lannent_session') || '{}');
       if (session.role) h['role'] = session.role;
       if (session.userId) h['user-id'] = session.userId;
+      // The bearer token is authoritative server-side and overrides the two
+      // headers above; they stay for sessions created before tokens existed.
+      const token = localStorage.getItem('lannent_token');
+      if (token) h['Authorization'] = 'Bearer ' + token;
     } catch {}
     return h;
+  }
+
+  /**
+   * Uploads one file and resolves to the reference a deliverable stores:
+   * `{ id, name, size, mime, url }`.
+   *
+   * This cannot go through `_syncPost`: that sends a JSON string over a
+   * synchronous XHR, and `_headers()` forces `Content-Type: application/json`.
+   * A multipart body needs the browser to set the content type itself, so the
+   * boundary is right — hence async fetch and a headers object with the
+   * content type deliberately left out.
+   */
+  async function uploadFile(file, meta = {}) {
+    const form = new FormData();
+    form.append('file', file);
+    if (meta.taskId) form.append('taskId', meta.taskId);
+    if (meta.milestoneId) form.append('milestoneId', meta.milestoneId);
+    if (meta.purpose) form.append('purpose', meta.purpose);
+
+    const h = _headers();
+    delete h['Content-Type'];
+
+    // An Expert Reviewer applicant has no account yet, so their résumé goes to
+    // the public application route — the authenticated one would refuse a
+    // request with no role header.
+    const endpoint = meta.purpose === 'expert-application' ? `${API}/files/application` : `${API}/files`;
+
+    const res = await fetch(endpoint, { method: 'POST', headers: h, body: form });
+    let payload = null;
+    try { payload = await res.json(); } catch {}
+    if (!res.ok || !payload || payload.success === false) {
+      throw new Error((payload && payload.message) || `Upload failed (${res.status})`);
+    }
+    return payload.data !== undefined ? payload.data : payload;
+  }
+
+  /** Absolute URL for a stored file, for links and download buttons. */
+  function fileUrl(ref) {
+    if (!ref) return '';
+    const path = typeof ref === 'string' ? ref : ref.url;
+    if (!path) return '';
+    return /^https?:\/\//i.test(path) ? path : API.replace(/\/api$/, '') + path;
   }
 
   async function _fetch(url, opts = {}) {
@@ -169,7 +215,7 @@ const Store = (() => {
     // real errors in the console.
     let role = null;
     try { role = JSON.parse(localStorage.getItem('lannent_session') || '{}').role; } catch {}
-    const allowed = endpoints.filter(([key]) => key !== 'expertApplications' || role === 'admin');
+    const allowed = endpoints.filter(([key]) => key !== 'expertApplications' || (role === 'intake-admin' || role === 'compliance-admin'));
 
     _reachedEndpoints = 0;
     for (const [key, path] of allowed) {
@@ -596,7 +642,23 @@ const Store = (() => {
 
   // ─── AUDIT REPORTS ────────────────────────────────────────────────────────
   function getAuditReports() { return _cache.auditReports; }
-  function getAuditReportByRequest(auditRequestId) { return _cache.auditReports.find(r => r.auditRequestId === auditRequestId) || null; }
+  /**
+   * One engagement now covers every milestone on the project, so a report is
+   * identified by the pair. Called with only an engagement id it returns that
+   * engagement's first report, which is what the pre-milestone callers expect.
+   */
+  function getAuditReportByRequest(auditRequestId, milestoneId) {
+    if (milestoneId === undefined) {
+      return _cache.auditReports.find(r => r.auditRequestId === auditRequestId) || null;
+    }
+    return _cache.auditReports.find(r =>
+      r.auditRequestId === auditRequestId && (r.milestoneId || null) === (milestoneId || null)) || null;
+  }
+
+  /** Every report filed under one engagement, newest first. */
+  function getReportsByRequest(auditRequestId) {
+    return _cache.auditReports.filter(r => r.auditRequestId === auditRequestId);
+  }
   function getReportsByTask(taskId) { return _cache.auditReports.filter(r => r.taskId === taskId); }
 
   function saveAuditReport(data) {
@@ -605,7 +667,8 @@ const Store = (() => {
     const result = _syncPost(`${API}/audit-reports`, data);
     console.log('[Store] _syncPost result:', result);
     if (result) {
-      const existing = _cache.auditReports.findIndex(r => r.auditRequestId === data.auditRequestId);
+      const existing = _cache.auditReports.findIndex(r =>
+        r.auditRequestId === data.auditRequestId && (r.milestoneId || null) === (data.milestoneId || null));
       if (existing >= 0) _cache.auditReports[existing] = result;
       else _cache.auditReports.push(result);
       // Refresh related caches
@@ -778,7 +841,8 @@ const Store = (() => {
     getAuditRequests, getAuditRequestById, createAuditRequest, updateAuditRequest,
     getAuditPreview, getAuditRequestsByTask, makeAuditOffer, acceptAuditOffer, fundAuditEscrow,
     acceptAuditEngagement, declineAuditEngagement, cancelDraftTask, getExperts,
-    getAuditReports, getAuditReportByRequest, getReportsByTask, saveAuditReport,
+    uploadFile, fileUrl,
+    getAuditReports, getAuditReportByRequest, getReportsByRequest, getReportsByTask, saveAuditReport,
     getDisputes, getDisputeById, createDispute, resolveDispute,
     getTransactions, getTransactionsByUser, createTransaction,
     getNotifications, addNotification, markNotificationsRead,

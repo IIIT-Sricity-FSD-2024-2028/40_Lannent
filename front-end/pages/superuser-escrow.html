@@ -90,14 +90,14 @@
                 <i data-lucide="${tc.icon}" style="width:16px;height:16px;color:${tc.color};"></i>
               </div>
               <div>
-                <div style="font-weight:500;font-size:13px;">${tx.description}</div>
+                <div style="font-weight:500;font-size:13px;">${escapeHtml(tx.description)}</div>
                 <div style="font-size:12px;color:var(--muted-foreground);">${tx.createdAt}</div>
               </div>
             </div>
           </td>
           <td style="font-size:13px;">${from?.name || tx.fromId}</td>
           <td style="font-size:13px;">${to?.name || tx.toId}</td>
-          <td style="font-size:13px;color:var(--muted-foreground);">${task?.title || '—'}</td>
+          <td style="font-size:13px;color:var(--muted-foreground);">${escapeHtml(task?.title || '—')}</td>
           <td class="${isCredit ? 'amount-credit' : 'amount-debit'}">
             ${isCredit ? '+' : '-'}$${tx.amount.toLocaleString()}
           </td>

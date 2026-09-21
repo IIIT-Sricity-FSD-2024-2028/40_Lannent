@@ -4,7 +4,7 @@ import { AuditReportsRepository } from './audit-reports.repository';
 import { AuditRequestsService } from '../audit-requests/audit-requests.service';
 import { MilestonesService } from '../milestones/milestones.service';
 import { TasksService } from '../tasks/tasks.service';
-import { canViewTask, isStaff } from '../../common/guards/viewer.util';
+import { canViewTask, canViewAnyRecord } from '../../common/guards/viewer.util';
 
 /**
  * AuditReportsService — Business Logic Layer
@@ -24,7 +24,7 @@ export class AuditReportsService {
   findAll(query?: { taskId?: string; auditRequestId?: string },
           viewer?: { id?: string; role?: string }) {
     const all = this.auditReportsRepository.findAll(query);
-    if (!viewer || isStaff(viewer.role)) return all;
+    if (!viewer || canViewAnyRecord(viewer.role)) return all;
     // A report belongs to the project it audits. It was readable by anyone —
     // this route had no guard at all.
     return all.filter((r: any) => this.canView(r, viewer));
@@ -61,10 +61,15 @@ export class AuditReportsService {
   }
 
   create(dto: CreateAuditReportDto) {
-    const existing = this.auditReportsRepository.findByAuditRequestId(dto.auditRequestId);
+    // Keyed on the milestone as well as the engagement: re-filing a report
+    // updates that milestone's report, it does not replace another one.
+    const existing = this.auditReportsRepository.findByEngagementAndMilestone(
+      dto.auditRequestId,
+      dto.milestoneId,
+    );
 
     const report = existing
-      ? this.auditReportsRepository.updateByIndex(dto.auditRequestId, {
+      ? this.auditReportsRepository.updateByEngagementAndMilestone(dto.auditRequestId, dto.milestoneId, {
           ...dto,
           createdAt: new Date().toISOString().slice(0, 10),
         })
@@ -82,7 +87,10 @@ export class AuditReportsService {
     // is not in progress, so a report cannot be filed against an unfunded audit,
     // and it is idempotent, so re-submitting does not pay twice.
     // Deliberately NOT swallowed: a failed payout must surface, not vanish.
-    const { payout } = this.auditRequestsService.settle(dto.auditRequestId);
+    // The milestone id is what tells the engagement which part of the project
+    // this report covers — without it a four-milestone audit cannot know when
+    // it is done.
+    const { payout } = this.auditRequestsService.settle(dto.auditRequestId, dto.milestoneId);
 
     // Expert reports do not change milestone status — that stays with the client.
     return { ...report, payout };

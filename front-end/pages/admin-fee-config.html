@@ -146,12 +146,12 @@
     const band = n => n === Infinity || n === null || n > 1e9 ? 'above' : '$' + Number(n).toLocaleString();
 
     document.addEventListener('DOMContentLoaded', () => {
-      if (typeof Auth !== 'undefined' && !Auth.requireRole('admin')) return;
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('revenue-admin')) return;
 
       cfg = Store.getFeeConfig();
       if (!cfg) {
         renderEmptyState({
-          role: 'admin', activePath: 'admin-fee-config.html', pageTitle: 'Fee Configuration',
+          role: (Auth.getCurrentUser() || {}).role, activePath: 'admin-fee-config.html', pageTitle: 'Fee Configuration',
           message: 'Fee rates could not be loaded. Check that the API is running, then reload.',
           linkHref: 'admin-dashboard.html', linkLabel: 'Back to Dashboard',
         });
@@ -219,7 +219,7 @@
         </div>`;
 
       initDashboard({
-        role: 'admin',
+        role: (Auth.getCurrentUser() || {}).role,
         activePath: 'admin-fee-config.html',
         pageTitle: 'Fee Configuration',
         pageSubtitle: 'Every rate the platform charges',

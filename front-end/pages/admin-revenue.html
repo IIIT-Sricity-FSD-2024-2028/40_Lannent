@@ -428,7 +428,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      if (typeof Auth !== 'undefined' && !Auth.requireRole('admin')) return;
+      if (typeof Auth !== 'undefined' && !Auth.requireRole('revenue-admin', 'compliance-admin')) return;
       load();
 
       const s = data.summary || {};
@@ -530,7 +530,7 @@
         </div>`;
 
       initDashboard({
-        role: 'admin',
+        role: (Auth.getCurrentUser() || {}).role,
         activePath: 'admin-revenue.html',
         pageTitle: 'Revenue',
         pageSubtitle: 'How the platform earns, and what every user receives',

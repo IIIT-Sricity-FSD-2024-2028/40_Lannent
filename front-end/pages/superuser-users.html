@@ -79,8 +79,8 @@
             <div class="worker-cell">
               <div class="worker-avatar" style="${u.avatarColor ? 'background:' + u.avatarColor : ''}">${u.avatar}</div>
               <div>
-                <div style="font-weight:600;">${u.name}</div>
-                <div style="font-size:12px;color:var(--muted-foreground);">${u.email}</div>
+                <div style="font-weight:600;">${escapeHtml(u.name)}</div>
+                <div style="font-size:12px;color:var(--muted-foreground);">${escapeHtml(u.email)}</div>
               </div>
             </div>
           </td>
@@ -188,7 +188,7 @@
       if (!user) return;
       const newStatus = user.status === 'active' ? 'suspended' : 'active';
       Validate.confirm(
-        `Are you sure you want to ${newStatus === 'suspended' ? 'suspend' : 'activate'} ${user.name}?`,
+        `Are you sure you want to ${newStatus === 'suspended' ? 'suspend' : 'activate'} ${escapeHtml(user.name)}?`,
         () => {
           Store.updateUser(id, { status: newStatus });
           allUsers = Store.getUsers();
@@ -205,7 +205,7 @@
       if (session && session.userId === id) { Validate.toast('You cannot delete your own account.', 'error'); return; }
 
       Validate.confirm(
-        `Permanently delete ${user.name}? This action cannot be undone.`,
+        `Permanently delete ${escapeHtml(user.name)}? This action cannot be undone.`,
         () => {
           Store.deleteUser(id);
           allUsers = Store.getUsers();

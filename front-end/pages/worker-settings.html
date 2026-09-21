@@ -421,7 +421,9 @@ function wsRenderPortfolio() {
     wrap.innerHTML = '<div class="ws-portfolio-grid">'
       + wsState.portfolioProjects.map(function(p) {
           return '<div class="ws-portfolio-card">'
-            + '<div class="ws-portfolio-thumb"><img src="' + p.thumbnail + '" alt="' + p.title + '" loading="lazy" /></div>'
+            + (p.thumbnail
+                ? '<div class="ws-portfolio-thumb"><img src="' + escapeHtml(p.thumbnail) + '" alt="' + escapeHtml(p.title) + '" loading="lazy" /></div>'
+                : '<div class="ws-portfolio-thumb" style="display:flex;align-items:center;justify-content:center;background:var(--secondary);color:var(--muted-foreground);font-size:12px;">No image</div>')
             + '<div class="ws-portfolio-body">'
             + '<div class="ws-portfolio-title-row">'
             + '<div class="ws-portfolio-title">' + p.title + '</div>'
@@ -540,21 +542,15 @@ function wsAddPortfolioProject() {
     return;
   }
 
-  // Pick a random Unsplash thumbnail so new cards look real
-  var thumbs = [
-    'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=400&h=300&fit=crop',
-    'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=400&h=300&fit=crop',
-    'https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?w=400&h=300&fit=crop',
-    'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=300&fit=crop',
-  ];
-  var thumb = thumbs[Math.floor(Math.random() * thumbs.length)];
-
+  // A stock photo picked at random used to stand in here "so new cards look
+  // real" — it made every portfolio entry claim an image of work nobody did.
+  // Entries carry no thumbnail until there is a real one to carry.
   wsState.portfolioProjects.push({
     id: Date.now().toString(),
     title: title,
     description: desc || 'No description provided.',
     url: url || '#',
-    thumbnail: thumb,
+    thumbnail: null,
   });
 
   const session = Auth.getCurrentUser();

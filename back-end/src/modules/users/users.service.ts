@@ -1,8 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersRepository } from './users.repository';
 import { round2 } from '../ledger/fee-config';
+import { SELF_SERVICE_ROLES } from '../../common/constants/roles';
+import { hashPassword, verifyPassword } from '../../common/security/password.util';
 
 /**
  * EER Specialization — Users Service
@@ -34,7 +36,9 @@ export class UsersService {
   login(email: string, password: string) {
     const user = this.findByEmail(email);
     if (!user) throw new NotFoundException('No account found with this email address.');
-    if (user.password !== password) throw new BadRequestException('Incorrect password. Please try again.');
+    if (!verifyPassword(password, user.password)) {
+      throw new BadRequestException('Incorrect password. Please try again.');
+    }
     if (user.status === 'suspended') throw new BadRequestException('This account has been suspended. Contact support.');
 
     const session = {
@@ -48,7 +52,36 @@ export class UsersService {
     return { user, session };
   }
 
+  /**
+   * Public signup.
+   *
+   * `SELF_SERVICE_ROLES` existed and was never enforced: the DTO validated
+   * `role` against every role in the system and this endpoint has no guard, so
+   * an anonymous caller could POST `role: "admin"` and get a working admin
+   * account. Staff are created by seeding or by another staff member — never
+   * here. `createStaff()` is the deliberate path.
+   */
   create(dto: CreateUserDto) {
+    if (!SELF_SERVICE_ROLES.includes(dto.role as any)) {
+      throw new ForbiddenException(
+        `You cannot sign up as "${dto.role}". Public signup is for ${SELF_SERVICE_ROLES.join(' and ')} accounts.`,
+      );
+    }
+    return this.insertUser(dto);
+  }
+
+  /**
+   * Account creation on behalf of an authorised actor rather than public
+   * signup — the seeder, a staff member, and the Expert Reviewer intake, which
+   * creates the reviewer's account when an admin approves their application.
+   * Skips the self-service role restriction; the caller is responsible for
+   * having checked authority.
+   */
+  createPrivileged(dto: CreateUserDto) {
+    return this.insertUser(dto);
+  }
+
+  private insertUser(dto: CreateUserDto) {
     const existing = this.findByEmail(dto.email);
     if (existing) throw new BadRequestException('A user with this email already exists.');
 
@@ -67,7 +100,7 @@ export class UsersService {
       id,
       name: dto.name,
       email: dto.email,
-      password: dto.password,
+      password: hashPassword(dto.password),
       role: dto.role,
       avatar: dto.avatar || initials,
       avatarColor: dto.avatarColor || colors[Math.floor(Math.random() * colors.length)],
@@ -111,9 +144,8 @@ export class UsersService {
     // ── Update base USERS fields ────────────────────────────────────────
     const baseUpdates: any = {};
     if (dto.name !== undefined) baseUpdates.name = dto.name;
-    if (dto.email !== undefined) baseUpdates.email = dto.email;
-    if (dto.password !== undefined) baseUpdates.password = dto.password;
-    if (dto.role !== undefined) baseUpdates.role = dto.role;
+    // email, password and role are not writable through a general profile
+    // update — each has its own path, so a profile edit cannot change identity.
     if (dto.avatar !== undefined) baseUpdates.avatar = dto.avatar;
     if (dto.avatarColor !== undefined) baseUpdates.avatarColor = dto.avatarColor;
     if (dto.status !== undefined) baseUpdates.status = dto.status;

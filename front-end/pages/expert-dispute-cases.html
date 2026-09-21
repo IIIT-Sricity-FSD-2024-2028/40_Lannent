@@ -235,10 +235,10 @@
           <div class="dispute-card-top">
             <div class="dispute-card-left">
               <div class="dispute-title-row">
-                <span class="dispute-title">${d.project}</span>
+                <span class="dispute-title">${escapeHtml(d.project)}</span>
                 <i data-lucide="alert-triangle" style="width:16px;height:16px;flex-shrink:0;" class="${severityIconClass[d.severity] || 'severity-icon-medium'}"></i>
               </div>
-              <div class="dispute-meta">Milestone: ${d.milestone}</div>
+              <div class="dispute-meta">Milestone: ${escapeHtml(d.milestone)}</div>
               <div class="dispute-issue">${d.issue}</div>
               <div class="dispute-footer-row">
                 <span>Raised by: ${d.raisedBy}</span>

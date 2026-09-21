@@ -30,7 +30,7 @@ CREATE TABLE USERS (
   name          VARCHAR(100)  NOT NULL,
   email         VARCHAR(150)  NOT NULL UNIQUE,
   password      VARCHAR(255)  NOT NULL,
-  role          ENUM('client','worker','expert','superuser','admin') NOT NULL,
+  role          ENUM('client','worker','expert','superuser','revenue-admin','intake-admin','compliance-admin') NOT NULL,
   avatar        VARCHAR(10),
   avatarColor   VARCHAR(200),
   status        VARCHAR(20)   DEFAULT 'active',

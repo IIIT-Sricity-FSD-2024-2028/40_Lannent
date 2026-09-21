@@ -28,7 +28,14 @@
     const money = n => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     document.addEventListener('DOMContentLoaded', () => {
-      if (typeof Auth !== 'undefined' && !Auth.requireRole('admin')) return;
+      // The one admin desk became three, each landing on its own work. Anyone
+      // holding an old bookmark is sent where their role actually belongs.
+      if (typeof Auth !== 'undefined') {
+        const u = Auth.getCurrentUser();
+        if (!u) { Auth.requireRole('revenue-admin'); return; }
+        window.location.replace(Auth.getDashboardUrl(u.role));
+        return;
+      }
 
       const rev = Store.getRevenueSummary() || {};
       const apps = Store.getExpertApplications() || [];
@@ -109,7 +116,7 @@
         </div>`;
 
       initDashboard({
-        role: 'admin',
+        role: (Auth.getCurrentUser() || {}).role,
         activePath: 'admin-dashboard.html',
         pageTitle: 'Admin Dashboard',
         pageSubtitle: 'Expert Reviewer intake and platform oversight',

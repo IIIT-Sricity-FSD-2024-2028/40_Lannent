@@ -226,7 +226,7 @@
 
                 <div class="form-group">
                   <label class="form-label">Email</label>
-                  <input type="email" class="form-input" value="${profile.email}" id="es-email" />
+                  <input type="email" class="form-input" value="${escapeHtml(profile.email)}" id="es-email" />
                 </div>
 
                 <div class="form-row">
@@ -242,7 +242,7 @@
 
                 <div class="form-group">
                   <label class="form-label">Bio</label>
-                  <textarea class="form-input" rows="3" id="es-bio">${profile.bio}</textarea>
+                  <textarea class="form-input" rows="3" id="es-bio">${escapeHtml(profile.bio)}</textarea>
                   <div class="form-hint">Shown to Clients and Gig Workers when assigned to their case.</div>
                 </div>
 
@@ -303,7 +303,7 @@
                     <div class="domain-card ${d.active ? 'on' : 'off'}" onclick="toggleDomain(this)" data-id="${d.id}">
                       <div class="domain-card-icon"><i data-lucide="${d.icon}"></i></div>
                       <div>
-                        <div class="domain-card-title">${d.label}</div>
+                        <div class="domain-card-title">${escapeHtml(d.label)}</div>
                         <div class="domain-card-sub">${d.sub}</div>
                       </div>
                       <div class="domain-check"><div class="domain-check-dot"></div></div>

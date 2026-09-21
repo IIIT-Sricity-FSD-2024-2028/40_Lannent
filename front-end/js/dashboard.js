@@ -59,18 +59,36 @@ function initDashboard(config = {}) {
     { icon: 'scale', label: 'All Disputes', path: 'superuser-disputes.html' },
   ];
 
-  const adminItems = [
-    { icon: 'layout-dashboard', label: 'Dashboard', path: 'admin-dashboard.html' },
+  // The single admin desk is now three, and each sees only its own work. A
+  // revenue admin has no route to the application queue, and an intake admin
+  // none to the fee configuration — the split is in the navigation as well as
+  // in the guards, so neither is ever one wrong click from the other's job.
+  const STAFF_ROLES = ['superuser', 'revenue-admin', 'intake-admin', 'compliance-admin'];
+
+  const revenueAdminItems = [
     { icon: 'trending-up', label: 'Revenue', path: 'admin-revenue.html' },
     { icon: 'percent', label: 'Fee Configuration', path: 'admin-fee-config.html' },
+  ];
+
+  const intakeAdminItems = [
     { icon: 'shield-check', label: 'Expert Applications', path: 'admin-expert-applications.html' },
+  ];
+
+  // Everything compliance reaches is read-only, including the two pages it
+  // shares with the revenue desk.
+  const complianceAdminItems = [
+    { icon: 'clipboard-list', label: 'Audit Log', path: 'compliance-dashboard.html' },
+    { icon: 'trending-up', label: 'Revenue', path: 'admin-revenue.html' },
+    { icon: 'shield-check', label: 'Applications', path: 'admin-expert-applications.html' },
   ];
 
   const menuItems =
     role === 'worker' ? workerItems :
     role === 'expert' ? expertItems :
     role === 'superuser' ? superItems :
-    role === 'admin' ? adminItems :
+    role === 'revenue-admin' ? revenueAdminItems :
+    role === 'intake-admin' ? intakeAdminItems :
+    role === 'compliance-admin' ? complianceAdminItems :
     clientItems;
 
   // Read real user from session if auth is available
@@ -78,7 +96,9 @@ function initDashboard(config = {}) {
     role === 'worker' ? 'Alex W.' :
     role === 'expert' ? 'Dr. Jane S.' :
     role === 'superuser' ? 'Super Admin' :
-    role === 'admin' ? 'Admin' :
+    role === 'revenue-admin' ? 'Revenue Admin' :
+    role === 'intake-admin' ? 'Intake Admin' :
+    role === 'compliance-admin' ? 'Compliance' :
     'James Client';
   let userInitials = role === 'worker' ? 'AW' : role === 'expert' ? 'JS' : role === 'superuser' ? 'SA' : 'JC';
   let userEmail = userName.toLowerCase().replace(/\s+/g, '') + '@lannent.com';
@@ -263,7 +283,7 @@ function initDashboard(config = {}) {
 
     const settingsPage = role === 'worker' ? 'worker-settings.html'
                         : role === 'expert' ? 'expert-settings.html'
-                        : role === 'superuser' || role === 'admin' ? 'staff-settings.html'
+                        : STAFF_ROLES.includes(role) ? 'staff-settings.html'
                         : 'profile-settings.html';
 
     switch (action) {

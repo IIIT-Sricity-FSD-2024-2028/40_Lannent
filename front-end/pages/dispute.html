@@ -94,8 +94,8 @@
         Store.addNotification({
           userId: expert.id,
           type: 'dispute',
-          text: `New dispute raised: ${disputeData.project}`,
-          subtext: `${disputeData.raisedByName} raised a dispute — ${disputeData.reason}`,
+          text: `New dispute raised: ${escapeHtml(disputeData.project)}`,
+          subtext: `${escapeHtml(disputeData.raisedByName)} raised a dispute — ${escapeHtml(disputeData.reason)}`,
         });
       });
 
@@ -105,7 +105,7 @@
           userId: disputeData.againstId,
           type: 'dispute',
           text: `A dispute has been raised against you`,
-          subtext: `${disputeData.project} — ${disputeData.milestone}: ${disputeData.reason}`,
+          subtext: `${escapeHtml(disputeData.project)} — ${escapeHtml(disputeData.milestone)}: ${escapeHtml(disputeData.reason)}`,
         });
       }
 

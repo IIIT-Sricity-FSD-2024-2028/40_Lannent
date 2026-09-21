@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module, forwardRef, NestModule, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
 import { SeedController } from './seed.controller';
 import { SeedService } from './seed.service';
 import { UsersModule } from '../users/users.module';
@@ -12,6 +12,11 @@ import { TransactionsModule } from '../transactions/transactions.module';
 import { ExpertApplicationsModule } from '../expert-applications/expert-applications.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { LedgerModule } from '../ledger/ledger.module';
+import { FilesModule } from '../files/files.module';
+
+import { RequireAuthMiddleware } from '../../common/middleware/require-auth.middleware';
+import { AdminAuditMiddleware } from '../../common/middleware/admin-audit.middleware';
+import { SeedGuardMiddleware } from '../../common/middleware/seed-guard.middleware';
 
 @Module({
   imports: [
@@ -26,8 +31,15 @@ import { LedgerModule } from '../ledger/ledger.module';
     forwardRef(() => ExpertApplicationsModule),
     forwardRef(() => NotificationsModule),
     forwardRef(() => LedgerModule),
+    forwardRef(() => FilesModule),
   ],
   controllers: [SeedController],
   providers: [SeedService],
 })
-export class SeedModule {}
+export class SeedModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(RequireAuthMiddleware, AdminAuditMiddleware, SeedGuardMiddleware)
+      .forRoutes(SeedController);
+  }
+}

@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module, forwardRef, NestModule, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
 import { RevenueController } from './revenue.controller';
 import { RevenueService } from './revenue.service';
 import { LedgerModule } from '../ledger/ledger.module';
@@ -6,6 +6,9 @@ import { TransactionsModule } from '../transactions/transactions.module';
 import { UsersModule } from '../users/users.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { AuditRequestsModule } from '../audit-requests/audit-requests.module';
+
+import { RequireAuthMiddleware } from '../../common/middleware/require-auth.middleware';
+import { AdminAuditMiddleware } from '../../common/middleware/admin-audit.middleware';
 
 @Module({
   imports: [
@@ -19,4 +22,10 @@ import { AuditRequestsModule } from '../audit-requests/audit-requests.module';
   providers: [RevenueService],
   exports: [RevenueService],
 })
-export class RevenueModule {}
+export class RevenueModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(RequireAuthMiddleware, AdminAuditMiddleware)
+      .forRoutes(RevenueController);
+  }
+}

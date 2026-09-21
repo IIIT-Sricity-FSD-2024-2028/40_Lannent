@@ -118,8 +118,8 @@
               <i data-lucide="${s.icon}" style="width:18px;height:18px;color:${s.color};"></i>
             </div>
             <div style="flex:1;min-width:0;">
-              <div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.project}</div>
-              <div style="font-size:12px;color:var(--muted-foreground);">${e.milestone} \u00b7 ${e.date}</div>
+              <div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.project)}</div>
+              <div style="font-size:12px;color:var(--muted-foreground);">${escapeHtml(e.milestone)} \u00b7 ${e.date}</div>
             </div>
             <span class="badge ${s.cls}">${e.status}</span>
             <div style="text-align:right;flex-shrink:0;min-width:80px;">

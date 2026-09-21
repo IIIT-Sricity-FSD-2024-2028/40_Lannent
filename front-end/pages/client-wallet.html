@@ -106,7 +106,7 @@
                   <i data-lucide="${t.icon}" style="width:18px;height:18px;color:${t.color};"></i>
                 </div>
                 <div style="flex:1;">
-                  <div style="font-weight:600;font-size:14px;">${t.label}</div>
+                  <div style="font-weight:600;font-size:14px;">${escapeHtml(t.label)}</div>
                   <div style="font-size:12px;color:var(--muted-foreground);">${t.sub}</div>
                 </div>
                 <span class="${t.positive ? 'tx-amount-pos' : 'tx-amount-neg'}">${t.amount}</span>
@@ -116,7 +116,7 @@
         ? d.escrowProjects.map(p => `
               <div class="escrow-project">
                 <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-                  <span style="font-weight:600;font-size:14px;">${p.name}</span>
+                  <span style="font-weight:600;font-size:14px;">${escapeHtml(p.name)}</span>
                   <span style="font-size:13px;font-weight:700;color:#6366f1;">${p.total}</span>
                 </div>
                 <div style="font-size:12px;color:var(--muted-foreground);margin-bottom:10px;">Worker: ${p.worker}</div>
@@ -164,7 +164,7 @@
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
           ${stats.map(s => `
             <div class="stat-card">
-              <div><div class="stat-val" style="color:${s.color};">${s.val}</div><div class="stat-label">${s.label}</div></div>
+              <div><div class="stat-val" style="color:${s.color};">${s.val}</div><div class="stat-label">${escapeHtml(s.label)}</div></div>
               <div class="stat-icon-wrap" style="background:${s.color}20;">
                 <i data-lucide="${s.icon}" style="width:20px;height:20px;color:${s.color};"></i>
               </div>
@@ -270,7 +270,7 @@
                         <i data-lucide="${method.icon}" style="width:22px;height:22px;color:${method.color};"></i>
                       </div>
                       <div style="flex:1;">
-                        <div style="font-size:15px;font-weight:600;color:#111827;">${method.name}</div>
+                        <div style="font-size:15px;font-weight:600;color:#111827;">${escapeHtml(method.name)}</div>
                         <div style="font-size:13px;color:#6b7280;margin-top:2px;">${method.desc}</div>
                       </div>
                       <div style="width:20px;height:20px;border:2px solid #d1d5db;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;" class="method-radio">
@@ -619,7 +619,7 @@
                   <i data-lucide="${t.icon}" style="width:18px;height:18px;color:${t.color};"></i>
                 </div>
                 <div style="flex:1;">
-                  <div style="font-weight:600;font-size:14px;color:#111827;">${t.label}</div>
+                  <div style="font-weight:600;font-size:14px;color:#111827;">${escapeHtml(t.label)}</div>
                   <div style="font-size:12px;color:#6b7280;margin-top:4px;">${t.sub}</div>
                 </div>
                 <span class="${t.positive ? 'tx-amount-pos' : 'tx-amount-neg'}" style="font-size:16px;font-weight:700;">${t.amount}</span>

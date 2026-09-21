@@ -8,6 +8,7 @@ import { TransactionsService } from '../transactions/transactions.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { AuditRequestsService } from '../audit-requests/audit-requests.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AppLoggerService } from '../../common/logging/app-logger.service';
 
 /**
  * MilestonesService — Business Logic Layer
@@ -25,6 +26,7 @@ export class MilestonesService {
     @Inject(forwardRef(() => LedgerService)) private ledger: LedgerService,
     @Inject(forwardRef(() => AuditRequestsService)) private auditRequestsService: AuditRequestsService,
     @Inject(forwardRef(() => NotificationsService)) private notificationsService: NotificationsService,
+    private readonly log: AppLoggerService,
   ) {}
 
   findAll(query?: { taskId?: string }) {
@@ -64,27 +66,63 @@ export class MilestonesService {
     ms.submittedAt = new Date().toISOString().slice(0, 10);
     if (deliverable) ms.deliverable = deliverable;
 
-    // An audited project already has a hired expert from creation time, so a
-    // submission no longer spawns a fresh unassigned request. Point the live
-    // engagement at the milestone that now needs reviewing.
-    try {
-      const task = this.tasksService.findById(ms.taskId);
-      if (task && task.auditEnabled) {
-        const active = this.auditRequestsService
-          .findAll({ taskId: ms.taskId, kind: 'project-audit' })
-          .find((a: any) => a.status === 'in-progress');
-        if (active) {
-          const workerName = this.usersService.findById(ms.workerId)?.name || 'Worker';
-          this.auditRequestsService.update(active.id, {
-            milestoneId: id,
-            worker: workerName,
-            milestone: ms.title,
-          });
-        }
-      }
-    } catch {}
+    this.handOverToAuditor(ms);
 
     return ms;
+  }
+
+  /**
+   * Points the project's audit engagement at the milestone that now needs
+   * reviewing, and tells the reviewer.
+   *
+   * Two rules live here:
+   *
+   *  - **Only the assigned reviewer hears about it.** The page that used to do
+   *    this looped over every expert account and notified all of them, so
+   *    reviewers with no connection to the project were told about work they
+   *    could not open.
+   *  - **A milestone is audited once.** If a report already exists for it —
+   *    the case when a dispute sends the work back and the worker resubmits —
+   *    the engagement is left alone and nobody is notified again.
+   */
+  private handOverToAuditor(ms: any) {
+    try {
+      const task = this.tasksService.findById(ms.taskId);
+      if (!task?.auditEnabled) return;
+
+      const engagement = this.auditRequestsService.activeProjectAudit(ms.taskId);
+      if (!engagement || !engagement.expertId) return;
+
+      if (this.auditRequestsService.isMilestoneAudited(engagement, ms.id)) {
+        this.log.log(
+          'milestones.submit',
+          `milestone ${ms.id} was already audited under ${engagement.id}; no second audit raised`,
+        );
+        return;
+      }
+
+      const workerName = this.usersService.findById(ms.workerId)?.name || 'Worker';
+      this.auditRequestsService.update(engagement.id, {
+        milestoneId: ms.id,
+        worker: workerName,
+        milestone: ms.title,
+      });
+
+      this.notificationsService.create({
+        userId: engagement.expertId,
+        type: 'audit-needed',
+        text: 'New deliverable awaiting technical audit',
+        subtext: `${ms.title || 'Milestone'} — ${task.title || 'Project'}`,
+      } as any);
+    } catch (e) {
+      // Submission succeeded; only the audit hand-off failed. The reviewer
+      // would just never see the milestone, with no clue why.
+      this.log.warn(
+        'milestones.submit',
+        `could not attach milestone ${ms.id} to the active audit engagement`,
+        e,
+      );
+    }
   }
 
   approveDeliverable(id: string) {
@@ -128,7 +166,13 @@ export class MilestonesService {
         progress: pct,
         status: pct === 100 ? 'completed' : 'in-progress',
       });
-    } catch {}
+    } catch (e) {
+      this.log.warn(
+        'milestones.checkTaskCompletion',
+        `could not roll progress up to task ${taskId}`,
+        e,
+      );
+    }
   }
 
   resetToSeed() {

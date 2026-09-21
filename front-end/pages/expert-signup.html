@@ -1158,14 +1158,29 @@
         linkedin: el.linkedin.value.trim(),
         github: el.github.value.trim(),
         motivation: el.motivation.value.trim(),
-        // The form requires a resume, so record that one was supplied. The
-        // platform has no file storage yet, so the file itself is not kept —
-        // without at least the name, the reviewer sees no trace of it at all.
+        // Names are kept alongside the references so an older application, or
+        // one whose upload failed, still shows the reviewer what was offered.
         resumeName: el.resume?.files?.[0]?.name || null,
         certificateName: el.cert?.files?.[0]?.name || null,
+        resumeFile: null,
+        certificateFile: null,
       };
 
-      setTimeout(() => {
+      // The applicant has no account yet, so these go through the public
+      // application upload; the stored files are readable by staff only.
+      const uploads = [];
+      if (el.resume?.files?.[0]) {
+        uploads.push(Store.uploadFile(el.resume.files[0], { purpose: 'expert-application' })
+          .then(ref => { appData.resumeFile = ref; })
+          .catch(e => { console.warn('Resume upload failed:', e.message); }));
+      }
+      if (el.cert?.files?.[0]) {
+        uploads.push(Store.uploadFile(el.cert.files[0], { purpose: 'expert-application' })
+          .then(ref => { appData.certificateFile = ref; })
+          .catch(e => { console.warn('Certificate upload failed:', e.message); }));
+      }
+
+      Promise.all(uploads).then(() => {
         if (typeof Store !== 'undefined') {
           const result = Store.saveExpertApplication(appData);
           if (!result.success) {
@@ -1180,7 +1195,7 @@
         el.submitText.textContent = 'Submit Application';
         $('successModal').style.display = 'flex';
         lucide.createIcons();
-      }, 1800);
+      });
     });
 
     // Initial submit state

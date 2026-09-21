@@ -1,0 +1,124 @@
+<!-- Compliance desk. Read-only by design: this page has no control that changes
+     anything, because the role that reaches it has no route that would let it. -->
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Audit Log — Lannent</title>
+<link rel="stylesheet" href="../css/styles.css" />
+<style>
+  .audit-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .audit-table th { text-align:left; padding:9px 12px; font-size:11px; font-weight:600;
+    text-transform:uppercase; letter-spacing:.06em; color:var(--muted-foreground);
+    border-bottom:1px solid var(--border); white-space:nowrap; }
+  .audit-table td { padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+  .audit-table tr:hover td { background:var(--input-bg); }
+  .mono { font-family:ui-monospace,Menlo,monospace; font-size:12px; }
+  .kind { font-size:11px; font-weight:600; padding:2px 7px; border-radius:5px; white-space:nowrap; }
+  .kind-money        { background:#ecfdf5; color:#047857; }
+  .kind-fee          { background:#fef3c7; color:#92400e; }
+  .kind-admin-change { background:#eef2ff; color:#4338ca; }
+  .kind-admin-read   { background:var(--secondary); color:var(--muted-foreground); }
+  .outcome-refused   { color:#b91c1c; font-weight:600; }
+  .filters { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; align-items:center; }
+  .filters select, .filters input { padding:8px 10px; border:1px solid var(--border);
+    border-radius:9px; font-size:13px; background:var(--card); color:var(--foreground); }
+</style>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script src="../js/store.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/main.js"></script>
+<script src="../js/dashboard.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof Auth !== 'undefined' && !Auth.requireRole('compliance-admin')) return;
+
+    const API = 'http://localhost:3000/api';
+    const KIND_LABEL = {
+      'money': 'money', 'fee.change': 'fee change',
+      'admin.change': 'admin change', 'admin.read': 'admin read',
+    };
+    const KIND_CLASS = {
+      'money': 'kind-money', 'fee.change': 'kind-fee',
+      'admin.change': 'kind-admin-change', 'admin.read': 'kind-admin-read',
+    };
+
+    function fetchLog(kind) {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', `${API}/audit-log?limit=200${kind ? '&kind=' + encodeURIComponent(kind) : ''}`, false);
+      const token = localStorage.getItem('lannent_token');
+      if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+      const s = JSON.parse(localStorage.getItem('lannent_session') || '{}');
+      if (s.role) xhr.setRequestHeader('role', s.role);
+      if (s.userId) xhr.setRequestHeader('user-id', s.userId);
+      try { xhr.send(); } catch (e) { return null; }
+      if (xhr.status !== 200) return null;
+      try { return (JSON.parse(xhr.responseText).data) || null; } catch (e) { return null; }
+    }
+
+    /** A rate change is the one event whose detail is worth reading inline. */
+    function detailText(e) {
+      if (e.kind === 'fee.change' && e.detail && e.detail.changed) {
+        const rows = Object.entries(e.detail.changed);
+        if (!rows.length) return 'no rates changed';
+        return rows.map(([k, v]) => `${k}: ${v.before} → ${v.after}`).join(', ');
+      }
+      if (e.detail && e.detail.durationMs != null) return e.detail.durationMs + 'ms';
+      return '';
+    }
+
+    function rows(data) {
+      if (!data) return '<tr><td colspan="6" style="padding:28px;text-align:center;color:var(--muted-foreground);">The audit log could not be read.</td></tr>';
+      if (!data.events.length) return '<tr><td colspan="6" style="padding:28px;text-align:center;color:var(--muted-foreground);">No events recorded yet.</td></tr>';
+      return data.events.map(e => `
+        <tr>
+          <td class="mono" style="white-space:nowrap;">${escapeHtml(e.at.slice(0, 19).replace('T', ' '))}</td>
+          <td><span class="kind ${KIND_CLASS[e.kind] || 'kind-admin-read'}">${escapeHtml(KIND_LABEL[e.kind] || e.kind)}</span></td>
+          <td>${escapeHtml(e.actorId || '—')}<div style="color:var(--muted-foreground);font-size:11.5px;">${escapeHtml(e.actorRole || '')}</div></td>
+          <td class="mono">${escapeHtml((e.method || '') + ' ' + (e.path || ''))}</td>
+          <td class="${e.outcome === 'refused' ? 'outcome-refused' : ''}">${escapeHtml(e.outcome || '')} ${e.status ? '<span style="color:var(--muted-foreground);">' + escapeHtml(e.status) + '</span>' : ''}</td>
+          <td style="color:var(--muted-foreground);">${escapeHtml(detailText(e))}</td>
+        </tr>`).join('');
+    }
+
+    function render(kind) {
+      const data = fetchLog(kind);
+      const note = data
+        ? `${data.total} event${data.total === 1 ? '' : 's'} matching · ${data.stored} stored${data.droppedFromCapacity ? ' · ' + data.droppedFromCapacity + ' dropped at capacity' : ''}`
+        : 'unavailable';
+      return `
+        <div class="filters">
+          <select id="kindFilter">
+            <option value="">All events</option>
+            <option value="money">Money movements</option>
+            <option value="fee.change">Fee changes</option>
+            <option value="admin.change">Admin changes</option>
+            <option value="admin.read">Admin reads</option>
+          </select>
+          <span style="font-size:12.5px;color:var(--muted-foreground);">${escapeHtml(note)}</span>
+          <a href="${API}/audit-log/export" style="margin-left:auto;font-size:13px;color:#4f46e5;text-decoration:none;">Export CSV</a>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;">
+          <div style="overflow-x:auto;">
+            <table class="audit-table">
+              <thead><tr><th>When</th><th>Event</th><th>Actor</th><th>Route</th><th>Outcome</th><th>Detail</th></tr></thead>
+              <tbody id="auditRows">${rows(data)}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    initDashboard({
+      role: (Auth.getCurrentUser() || {}).role,
+      activePath: 'compliance-dashboard.html',
+      pageTitle: 'Audit Log',
+      pageSubtitle: 'Every financial read and every value-moving change, with the actor who asked.',
+      content: render(''),
+    });
+
+    document.getElementById('kindFilter').addEventListener('change', (ev) => {
+      const data = fetchLog(ev.target.value);
+      document.getElementById('auditRows').innerHTML = rows(data);
+    });
+    lucide.createIcons();
+  });
+</script>
+<body></body>

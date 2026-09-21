@@ -29,7 +29,7 @@ export class ExpertApplicationsController {
   @ApiHeader({ name: 'role', required: true, description: 'Admin role required' })
   // Applications carry applicants' phone numbers, emails and chosen passwords.
   // This was unguarded, so anyone could read every applicant's details.
-  @Roles(ROLES.ADMIN)
+  @Roles(ROLES.INTAKE_ADMIN, ROLES.COMPLIANCE_ADMIN)
   @ApiOperation({ summary: 'Get all expert applications' })
   findAll() {
     return this.expertApplicationsService.findAll();
@@ -37,7 +37,7 @@ export class ExpertApplicationsController {
 
   @Get(':id')
   @ApiHeader({ name: 'role', required: true, description: 'Admin role required' })
-  @Roles(ROLES.ADMIN)
+  @Roles(ROLES.INTAKE_ADMIN, ROLES.COMPLIANCE_ADMIN)
   @ApiOperation({ summary: 'Get expert application by ID' })
   findOne(@Param('id') id: string) {
     return this.expertApplicationsService.findById(id);
@@ -51,8 +51,9 @@ export class ExpertApplicationsController {
 
   @Patch(':id/status')
   @ApiHeader({ name: 'role', required: true, description: 'User role required' })
-  // Expert Reviewer intake is the Admin's responsibility, not the SuperUser's.
-  @Roles(ROLES.ADMIN)
+  // Approving creates the reviewer's account — the intake desk's decision
+  // alone. Compliance reads applications; it does not decide them.
+  @Roles(ROLES.INTAKE_ADMIN)
   @ApiOperation({ summary: 'Approve or reject expert application (auto-creates user on approval)' })
   updateStatus(@Param('id') id: string, @Body() dto: UpdateExpertApplicationStatusDto) {
     return this.expertApplicationsService.updateStatus(id, dto);

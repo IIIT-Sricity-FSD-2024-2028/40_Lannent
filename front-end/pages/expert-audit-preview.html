@@ -34,9 +34,52 @@
     .pv-actions { display:flex; flex-direction:column; gap:10px; margin-top:16px; }
   </style>
   <script>
-    let pv = null, arId = null;
+    let pv = null, arId = null, session = null;
 
     const money = n => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    /**
+     * One milestone in the reviewer's list.
+     *
+     * Three states, and only one of them is a way in:
+     *   audited    — the report is filed; open it to read, never to re-file.
+     *   submitted  — the worker has handed the work over; this is auditable.
+     *   waiting    — nothing submitted yet, so there is nothing to audit.
+     */
+    function milestoneRow(m, a) {
+      const audited = !!(a.auditProgress && a.auditProgress.auditedMilestoneIds.includes(m.id));
+      const submitted = ['submitted', 'review', 'disputed'].includes(m.status) || !!m.deliverable;
+      const engaged = a.status === 'in-progress' || a.status === 'paid';
+      const mine = session && a.expertId === session.userId;
+
+      let tag = '', action = '';
+      if (audited) {
+        tag = '<span class="st" style="color:#047857;">✓ Report submitted</span>';
+        action = mine
+          ? `<a href="expert-report-audit.html?id=${a.id}&milestoneId=${m.id}" class="btn-outline" style="text-decoration:none;padding:6px 12px;border-radius:8px;font-size:12.5px;white-space:nowrap;">View report</a>`
+          : '';
+      } else if (!submitted) {
+        tag = '<span class="st">Awaiting the worker\'s submission</span>';
+      } else if (engaged && mine) {
+        tag = '<span class="st" style="color:#b45309;">Ready to audit</span>';
+        action = `<a href="expert-report-audit.html?id=${a.id}&milestoneId=${m.id}" class="btn-primary" style="text-decoration:none;padding:6px 12px;border-radius:8px;font-size:12.5px;white-space:nowrap;">Audit this milestone</a>`;
+      } else {
+        tag = '<span class="st">Submitted</span>';
+      }
+
+      return `
+        <div class="pv-ms"${audited ? ' style="opacity:.72;"' : ''}>
+          <div style="min-width:0;">
+            <div style="font-weight:600;">${escapeHtml(m.title)}</div>
+            <div style="color:var(--muted-foreground);">${escapeHtml(m.description || '')}</div>
+            <div style="margin-top:4px;">${tag}</div>
+          </div>
+          <div style="text-align:right;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+            <div style="font-weight:700;">${money(m.budget)}</div>
+            ${action}
+          </div>
+        </div>`;
+    }
 
     function render() {
       const a = pv.auditRequest;
@@ -44,7 +87,7 @@
       const live = (pv.offers || []).find(o => o.status === 'pending');
       const canAccept = live && live.offeredBy === 'client';
       const negotiating = ['preview-sent', 'negotiating'].includes(a.status);
-      const session = Auth.getCurrentUser();
+      session = Auth.getCurrentUser();
 
       const offers = (pv.offers || []).length
         ? pv.offers.map(o => `
@@ -52,7 +95,7 @@
               <span class="offer-who">${o.offeredBy === 'expert' ? 'You' : 'Client'}</span>
               <span class="offer-amt">${money(o.amount)}</span>
               <span class="offer-tag ${o.status}">${o.status}</span>
-              <span style="color:var(--muted-foreground);flex:1;min-width:0;">${o.note || ''}</span>
+              <span style="color:var(--muted-foreground);flex:1;min-width:0;">${escapeHtml(o.note || '')}</span>
             </div>`).join('')
         : '<div class="offer-row" style="color:var(--muted-foreground);">No offers yet — name your price below.</div>';
 
@@ -68,12 +111,14 @@
       if (a.status === 'agreed') {
         actions += `<div class="pv-fee">Fee agreed at ${money(a.agreedAmount)}. Waiting for the client to fund escrow.</div>`;
       }
-      if (a.status === 'in-progress') {
-        const target = a.kind === 'dispute-audit'
-          ? `resolve-dispute.html?id=${a.disputeId}`
-          : `expert-report-audit.html?id=${a.id}`;
-        actions += `<a href="${target}" class="btn-primary" style="text-decoration:none;text-align:center;">Go to your report</a>`;
+      if (a.status === 'in-progress' && a.kind === 'dispute-audit') {
+        // A dispute is one claim, so there is a single place to go.
+        actions += `<a href="resolve-dispute.html?id=${a.disputeId}" class="btn-primary" style="text-decoration:none;text-align:center;">Resolve this dispute</a>`;
       }
+      // A project audit has no single report to "go to" — it has one per
+      // milestone, reached from the milestone list below. A blanket button here
+      // always opened the same form regardless of which milestone was ready.
+
       if (!['paid','declined','cancelled','in-progress'].includes(a.status)) {
         actions += `<button class="btn-outline" style="color:#b91c1c;border-color:#fca5a5;" onclick="decline()">Decline this audit</button>`;
       }
@@ -106,18 +151,11 @@
 
             <div class="pv-card">
               <h2>Milestones (${pv.milestones.length})</h2>
+              ${a.auditProgress ? `<div class="pv-fee" style="margin:-4px 0 12px;">
+                ${a.auditProgress.audited} of ${a.auditProgress.total} audited. You are paid once every milestone has a report.
+              </div>` : ''}
               ${pv.milestones.length
-                ? pv.milestones.map(m => `
-                    <div class="pv-ms">
-                      <div style="min-width:0;">
-                        <div style="font-weight:600;">${m.title}${pv.focusMilestone && pv.focusMilestone.id === m.id ? ' &nbsp;<span class="st" style="color:#b45309;">← under review</span>' : ''}</div>
-                        <div style="color:var(--muted-foreground);">${m.description || ''}</div>
-                      </div>
-                      <div style="text-align:right;flex:none;">
-                        <div style="font-weight:700;">${money(m.budget)}</div>
-                        <div class="st">${m.status}</div>
-                      </div>
-                    </div>`).join('')
+                ? pv.milestones.map(m => milestoneRow(m, a)).join('')
                 : '<div style="font-size:13px;color:var(--muted-foreground);">No milestones defined yet.</div>'}
             </div>
           </div>
@@ -199,7 +237,7 @@
     }
 
     function takeJob() {
-      const session = Auth.getCurrentUser();
+      session = Auth.getCurrentUser();
       const r = Store.acceptAuditEngagement(arId, session.userId);
       if (!r) { Validate.toast('Could not accept the engagement.', 'error'); return; }
       Validate.toast('Engagement accepted. You can now file your report.', 'success');

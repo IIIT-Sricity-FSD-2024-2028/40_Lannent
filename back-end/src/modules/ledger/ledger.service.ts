@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, Inject, forwardRef } from '@nestjs/com
 import { UsersService } from '../users/users.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { LedgerRepository } from './ledger.repository';
+import { AppLoggerService } from '../../common/logging/app-logger.service';
 import {
   round2,
   depositFee,
@@ -32,6 +33,7 @@ export class LedgerService {
     private readonly ledger: LedgerRepository,
     @Inject(forwardRef(() => UsersService)) private readonly users: UsersService,
     @Inject(forwardRef(() => TransactionsService)) private readonly transactions: TransactionsService,
+    private readonly log: AppLoggerService,
   ) {}
 
   private balanceOf(userId: string): number {
@@ -84,6 +86,9 @@ export class LedgerService {
       status: 'completed',
     });
 
+    this.log.money('deposit', {
+      user: userId, gross, fee, net, balance: this.balanceOf(userId),
+    });
     return { gross, fee, net, balance: this.balanceOf(userId) };
   }
 
@@ -122,6 +127,9 @@ export class LedgerService {
       status: 'completed',
     });
 
+    this.log.money('withdraw', {
+      user: userId, gross, fee, net, balance: this.balanceOf(userId),
+    });
     return { gross, fee, net, balance: this.balanceOf(userId) };
   }
 
@@ -184,6 +192,10 @@ export class LedgerService {
       status: 'completed',
     });
 
+    this.log.money('escrow.fund.project', {
+      task: taskId, client: clientId, budget, marketplace, initiation,
+      charged: total, held: this.ledger.getEscrow(taskId).projectHeld,
+    });
     return { budget, marketplace, initiation, totalCharged: total, held: this.ledger.getEscrow(taskId) };
   }
 
@@ -205,6 +217,10 @@ export class LedgerService {
       status: 'completed',
     });
 
+    this.log.money('escrow.fund.audit', {
+      task: taskId, client: clientId, fee: auditFee,
+      held: this.ledger.getEscrow(taskId).auditHeld,
+    });
     return { auditFee, held: this.ledger.getEscrow(taskId) };
   }
 
@@ -226,6 +242,11 @@ export class LedgerService {
     const { milestoneId, taskId, clientId, workerId, amount } = params;
 
     if (this.ledger.isMilestoneReleased(milestoneId)) {
+      // Not an error — the guard is doing its job — but a second approval
+      // arriving at all is worth seeing in the log.
+      this.log.money('milestone.release.skipped', {
+        milestone: milestoneId, task: taskId, reason: 'already-released',
+      });
       return { alreadyReleased: true, amount: 0, fee: 0, net: 0 };
     }
     if (amount <= 0) throw new BadRequestException('Milestone amount must be greater than zero.');
@@ -272,6 +293,11 @@ export class LedgerService {
       status: 'completed',
     });
 
+    this.log.money('milestone.release', {
+      milestone: milestoneId, task: taskId, client: clientId, worker: workerId,
+      gross: amount, fee, rate: `${rate}%`, net,
+      held: this.ledger.getEscrow(taskId).projectHeld,
+    });
     return { alreadyReleased: false, amount, fee, rate, net, balance: this.balanceOf(workerId) };
   }
 
@@ -289,6 +315,9 @@ export class LedgerService {
     const { auditRequestId, taskId, expertId, amount } = params;
 
     if (this.ledger.isAuditPaid(auditRequestId)) {
+      this.log.money('audit.release.skipped', {
+        audit: auditRequestId, task: taskId, reason: 'already-paid',
+      });
       return { alreadyPaid: true, amount: 0, fee: 0, net: 0 };
     }
     if (amount <= 0) throw new BadRequestException('Agreed audit fee must be greater than zero.');
@@ -334,6 +363,10 @@ export class LedgerService {
       status: 'completed',
     });
 
+    this.log.money('audit.release', {
+      audit: auditRequestId, task: taskId, expert: expertId,
+      gross: amount, fee, net, held: this.ledger.getEscrow(taskId).auditHeld,
+    });
     return { alreadyPaid: false, amount, fee, net, balance: this.balanceOf(expertId) };
   }
 
@@ -365,6 +398,10 @@ export class LedgerService {
       status: 'completed',
     });
 
+    this.log.money('refund.project', {
+      task: taskId, client: clientId, amount,
+      held: this.ledger.getEscrow(taskId).projectHeld, reason: params.reason,
+    });
     return { amount, balance: this.balanceOf(clientId) };
   }
 
@@ -393,6 +430,10 @@ export class LedgerService {
       status: 'completed',
     });
 
+    this.log.money('refund.audit', {
+      task: taskId, client: clientId, amount,
+      held: this.ledger.getEscrow(taskId).auditHeld, reason: params.reason,
+    });
     return { amount, balance: this.balanceOf(clientId) };
   }
 

@@ -117,7 +117,7 @@
         return `
           <div id="milestoneRow-${m.id}" class="milestone-row${m.id === selectedMilestoneId ? ' selected' : ''}" style="cursor:pointer;padding:10px;border-radius:10px;margin-bottom:8px;" onclick="markMilestoneSelected('${m.id}')">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-              <span style="font-size:14px;font-weight:600;max-width:70%;">${m.title}</span>
+              <span style="font-size:14px;font-weight:600;max-width:70%;">${escapeHtml(m.title)}</span>
               <span style="font-size:11px;font-weight:700;color:${statusColors[m.status]};background:${statusBgs[m.status]};padding:4px 10px;border-radius:9999px;min-width:fit-content;">${statusLabel}</span>
             </div>
             <div style="font-size:12px;color:var(--muted-foreground);margin-top:6px;">${m.amount}</div>
@@ -292,7 +292,7 @@
             <i data-lucide="arrow-left" style="width:16px;height:16px;"></i> Back
           </a>
           <span style="color:var(--border);">›</span>
-          <span style="font-size:14px;font-weight:500;">${project.name}</span>
+          <span style="font-size:14px;font-weight:500;">${escapeHtml(project.name)}</span>
           <span class="badge badge-blue" style="margin-left:auto;">${project.status}</span>
         </div>
 

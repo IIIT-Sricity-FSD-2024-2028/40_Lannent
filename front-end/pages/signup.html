@@ -179,7 +179,7 @@
         const item = document.createElement('div');
         item.className = 'pw-req';
         item.id = r.id;
-        item.innerHTML = `<span class="pw-req-icon">✓</span><span>${r.text}</span>`;
+        item.innerHTML = `<span class="pw-req-icon">✓</span><span>${escapeHtml(r.text)}</span>`;
         reqWrap.appendChild(item);
       });
       pwParent.appendChild(reqWrap);

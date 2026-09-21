@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { SEED_USERS, SEED_CLIENTS, SEED_WORKERS, SEED_EXPERTS } from '../seed/seed.data';
+import { hashPassword } from '../../common/security/password.util';
 
 /**
  * UsersRepository — In-Memory Data Access Layer
@@ -10,7 +11,7 @@ import { SEED_USERS, SEED_CLIENTS, SEED_WORKERS, SEED_EXPERTS } from '../seed/se
  */
 @Injectable()
 export class UsersRepository {
-  private users: any[]   = JSON.parse(JSON.stringify(SEED_USERS));
+  private users: any[]   = hashSeed(SEED_USERS);
   private clients: any[] = JSON.parse(JSON.stringify(SEED_CLIENTS));
   private workers: any[] = JSON.parse(JSON.stringify(SEED_WORKERS));
   private experts: any[] = JSON.parse(JSON.stringify(SEED_EXPERTS));
@@ -143,9 +144,21 @@ export class UsersRepository {
   // ── Reset to seed data ───────────────────────────────────────────────────
 
   resetToSeed(): void {
-    this.users   = JSON.parse(JSON.stringify(SEED_USERS));
+    this.users   = hashSeed(SEED_USERS);
     this.clients = JSON.parse(JSON.stringify(SEED_CLIENTS));
     this.workers = JSON.parse(JSON.stringify(SEED_WORKERS));
     this.experts = JSON.parse(JSON.stringify(SEED_EXPERTS));
   }
+}
+
+/**
+ * Seed users ship with readable passwords so the documented demo logins are
+ * usable. They are hashed on the way into the store, so nothing in a running
+ * process ever holds a plaintext password — reset included.
+ */
+function hashSeed(seed: any[]): any[] {
+  return JSON.parse(JSON.stringify(seed)).map((u: any) => ({
+    ...u,
+    password: hashPassword(u.password),
+  }));
 }

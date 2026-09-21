@@ -18,7 +18,11 @@ export class LedgerController {
 
   @Get('summary')
   @ApiHeader({ name: 'role', required: true, description: 'User role required' })
-  @Roles('superuser', 'admin')
+  // The authoritative financial state. The revenue desk needs it to reconcile
+  // the model it owns — every /revenue figure is derived from these totals, so
+  // granting the derived view while withholding the source would leave that
+  // desk unable to check its own numbers.
+  @Roles('superuser', 'revenue-admin', 'compliance-admin')
   @ApiOperation({ summary: 'Escrow held and platform revenue totals' })
   summary() {
     return {
@@ -31,7 +35,7 @@ export class LedgerController {
 
   @Get('escrow/:taskId')
   @ApiHeader({ name: 'role', required: true, description: 'User role required' })
-  @Roles('client', 'worker', 'expert', 'superuser', 'admin')
+  @Roles('client', 'worker', 'expert', 'superuser', 'revenue-admin', 'intake-admin', 'compliance-admin')
   @ApiOperation({ summary: 'Escrow held for one task' })
   escrow(@Param('taskId') taskId: string) {
     return this.ledger.getEscrow(taskId);

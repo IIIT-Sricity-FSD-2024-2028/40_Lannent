@@ -101,7 +101,7 @@
                 <tbody>
                   ${recentUsers.map(u => `
                   <tr>
-                    <td><div class="worker-cell"><div class="worker-avatar" style="${u.avatarColor?'background:'+u.avatarColor:''}">${u.avatar}</div><div><div style="font-weight:600;font-size:13px;">${u.name}</div><div style="font-size:12px;color:var(--muted-foreground);">${u.email}</div></div></div></td>
+                    <td><div class="worker-cell"><div class="worker-avatar" style="${u.avatarColor?'background:'+u.avatarColor:''}">${u.avatar}</div><div><div style="font-weight:600;font-size:13px;">${escapeHtml(u.name)}</div><div style="font-size:12px;color:var(--muted-foreground);">${escapeHtml(u.email)}</div></div></div></td>
                     <td><span class="badge ${u.role==='client'?'badge-blue':u.role==='expert'?'badge-purple':u.role==='superuser'?'badge-red':'badge-green'}">${u.role}</span></td>
                     <td><span class="badge ${u.status==='active'?'badge-green':'badge-red'}">${u.status}</span></td>
                     <td><a href="superuser-users.html" class="btn-sm">Edit</a></td>
@@ -123,7 +123,7 @@
                 <tbody>
                   ${recentTasks.map(t => `
                   <tr>
-                    <td style="font-weight:600;font-size:13px;">${t.title}</td>
+                    <td style="font-weight:600;font-size:13px;">${escapeHtml(t.title)}</td>
                     <td>$${t.budget.toLocaleString()}</td>
                     <td>${statusBadge(t.status)}</td>
                     <td><a href="superuser-tasks.html" class="btn-sm">View</a></td>

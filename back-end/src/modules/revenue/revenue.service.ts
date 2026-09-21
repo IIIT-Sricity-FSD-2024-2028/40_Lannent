@@ -4,6 +4,7 @@ import { TransactionsService } from '../transactions/transactions.service';
 import { UsersService } from '../users/users.service';
 import { TasksService } from '../tasks/tasks.service';
 import { AuditRequestsService } from '../audit-requests/audit-requests.service';
+import { AuditService } from '../audit/audit.service';
 import { FEE_CONFIG, round2 } from '../ledger/fee-config';
 import { UpdateFeeConfigDto } from './dto/update-fee-config.dto';
 
@@ -25,6 +26,7 @@ export class RevenueService {
     @Inject(forwardRef(() => UsersService)) private readonly users: UsersService,
     @Inject(forwardRef(() => TasksService)) private readonly tasks: TasksService,
     @Inject(forwardRef(() => AuditRequestsService)) private readonly auditRequests: AuditRequestsService,
+    private readonly audit: AuditService,
   ) {}
 
   private safe<T>(fn: () => T): T | null {
@@ -358,8 +360,17 @@ export class RevenueService {
   /**
    * Applies rate changes in place. Existing revenue entries keep the rate they
    * were charged at — changing a rate never rewrites history.
+   *
+   * A rate change alters what every user on the platform is charged, and this
+   * recorded nothing about who made it. With one admin that was survivable;
+   * with a dedicated revenue desk, "who cut the worker fee to 2%?" needs an
+   * answer. Before and after are captured and written to the audit trail.
    */
   updateFeeConfig(dto: UpdateFeeConfigDto) {
+    // A snapshot, not a reference. `getFeeConfig()` hands back the live
+    // FEE_CONFIG objects, so the rates below would mutate `before` too and
+    // every diff would come out empty.
+    const before = structuredClone(this.getFeeConfig());
     if (dto.depositPercent !== undefined) FEE_CONFIG.deposit.percent = dto.depositPercent;
     if (dto.depositFixed !== undefined) FEE_CONFIG.deposit.fixed = dto.depositFixed;
     if (dto.clientMarketplacePercent !== undefined) {
@@ -397,6 +408,31 @@ export class RevenueService {
       });
     }
 
-    return this.getFeeConfig();
+    const after = this.getFeeConfig();
+    this.audit.record({
+      kind: 'fee.change',
+      outcome: 'ok',
+      detail: { changed: diffRates(before, after) },
+    });
+    return after;
   }
+}
+
+/**
+ * Which rates actually moved, as `{ before, after }` per field. Recording the
+ * whole config on every change would bury the one number that mattered.
+ */
+function diffRates(before: any, after: any, path = ''): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const key of new Set([...Object.keys(before || {}), ...Object.keys(after || {})])) {
+    const a = before?.[key];
+    const b = after?.[key];
+    const where = path ? `${path}.${key}` : key;
+    if (a && b && typeof a === 'object' && typeof b === 'object') {
+      Object.assign(out, diffRates(a, b, where));
+    } else if (a !== b) {
+      out[where] = { before: a, after: b };
+    }
+  }
+  return out;
 }

@@ -4,7 +4,7 @@ import { UpdateAuditRequestDto } from './dto/update-audit-request.dto';
 import { CreateOfferDto, AcceptAuditDto, DeclineAuditDto } from './dto/audit-offer.dto';
 import { AuditRequestsRepository } from './audit-requests.repository';
 import { AUDIT_STATUS, AUDIT_KIND, NEGOTIABLE, TERMINAL } from './audit-request.constants';
-import { canViewTask, assertCanViewTask, isStaff } from '../../common/guards/viewer.util';
+import { canViewTask, assertCanViewTask, canViewAnyRecord } from '../../common/guards/viewer.util';
 import { TasksService } from '../tasks/tasks.service';
 import { MilestonesService } from '../milestones/milestones.service';
 import { UsersService } from '../users/users.service';
@@ -31,13 +31,15 @@ export class AuditRequestsService {
 
   findAll(query?: { expertId?: string; status?: string; taskId?: string; kind?: string },
           viewer?: { id?: string; role?: string }) {
-    const all = this.auditRequestsRepository.findAll(query);
-    if (!viewer || isStaff(viewer.role)) return all;
+    const all = this.auditRequestsRepository.findAll(query).map((ar: any) => this.withProgress(ar));
+    if (!viewer || canViewAnyRecord(viewer.role)) return all;
     // An engagement is only visible to its assigned reviewer and the parties to
     // the work. Previously every reviewer saw every project's audit.
-    return all.filter((ar: any) =>
-      canViewTask(viewer.id, viewer.role, this.taskOf(ar), ar.expertId, ar.clientId, ar.workerId),
-    );
+    return all
+      .filter((ar: any) =>
+        canViewTask(viewer.id, viewer.role, this.taskOf(ar), ar.expertId, ar.clientId, ar.workerId),
+      )
+      .map((ar: any) => this.withProgress(ar));
   }
 
   findById(id: string, viewer?: { id?: string; role?: string }) {
@@ -46,7 +48,7 @@ export class AuditRequestsService {
     if (viewer) {
       assertCanViewTask(viewer.id, viewer.role, this.taskOf(ar), ar.expertId, ar.clientId, ar.workerId);
     }
-    return ar;
+    return this.withProgress(ar);
   }
 
   /** Best-effort task lookup for scoping; a missing task must not throw here. */
@@ -72,6 +74,11 @@ export class AuditRequestsService {
       workerId: dto.workerId || null,
       agreedAmount: null as number | null,
       offers: [] as any[],
+      // Which milestones this engagement has already reported on. An audit is
+      // per-milestone even though the engagement is per-project, so this is
+      // what stops a milestone being audited twice and what decides when the
+      // whole engagement is finished.
+      auditedMilestoneIds: [] as string[],
     };
     if (ar.expertId) this.assertAssignableExpert(ar.expertId, dto.category);
     this.auditRequestsRepository.insert(ar);
@@ -229,33 +236,168 @@ export class AuditRequestsService {
     return this.auditRequestsRepository.update(id, ar);
   }
 
-  /** Called by AuditReportsService once a report is filed. Pays the expert. */
-  settle(id: string) {
-    const ar = this.findById(id);
-    if (ar.status === AUDIT_STATUS.PAID) return { auditRequest: ar, payout: { alreadyPaid: true } };
-    if (ar.status !== AUDIT_STATUS.IN_PROGRESS && ar.status !== AUDIT_STATUS.REPORT_SUBMITTED) {
+  /**
+   * Called by AuditReportsService once a report is filed. Pays the expert and
+   * moves the engagement on.
+   *
+   * The fee is agreed once for the whole project audit and is released once,
+   * when the audit is actually finished — every milestone on the task has a
+   * report. Until then it stays in escrow.
+   *
+   * Before this, the first report both paid the expert in full and closed the
+   * engagement, so a four-milestone project showed a finished audit after one
+   * milestone and held nothing against the three still unreviewed.
+   */
+  settle(id: string, milestoneId?: string) {
+    const ar = this.auditRequestsRepository.findById(id);
+    if (!ar) throw new NotFoundException(`Audit request with id "${id}" not found`);
+
+    const fileable = [
+      AUDIT_STATUS.IN_PROGRESS,
+      AUDIT_STATUS.REPORT_SUBMITTED,
+      // A paid engagement is still open for the milestones it has not covered.
+      AUDIT_STATUS.PAID,
+    ];
+    if (!fileable.includes(ar.status as any)) {
       throw new BadRequestException(
         `A report can only be filed against an audit in progress (current status: ${ar.status}).`,
       );
     }
 
+    // Record coverage before deciding whether the engagement is finished.
+    this.recordMilestoneAudited(id, milestoneId);
+    const fresh = this.auditRequestsRepository.findById(id);
+
+    const progress = this.auditProgress(fresh);
+    // A dispute audit covers the one claim it was raised for, so it finishes
+    // with its report. A project audit finishes only when nothing is left.
+    const finished = fresh.kind !== AUDIT_KIND.PROJECT || !progress || progress.complete;
+
+    if (!finished) {
+      // The fee stays in escrow. It buys the whole project audit, so paying it
+      // out after the first of four reports would leave the client with nothing
+      // held while three milestones were still unreviewed.
+      this.auditRequestsRepository.update(id, {
+        ...fresh,
+        status: AUDIT_STATUS.IN_PROGRESS,
+      });
+      return {
+        auditRequest: this.withProgress(this.auditRequestsRepository.findById(id)),
+        payout: {
+          pending: true,
+          reason: 'The audit fee is released once every milestone has a report.',
+          audited: progress.audited,
+          total: progress.total,
+          remaining: progress.pendingMilestoneIds,
+        },
+      };
+    }
+
+    const firstPayout = !fresh.feePaid;
     const payout = this.ledger.releaseAuditFee({
-      auditRequestId: ar.id,
-      taskId: ar.taskId,
-      expertId: ar.expertId,
-      amount: ar.agreedAmount,
+      auditRequestId: fresh.id,
+      taskId: fresh.taskId,
+      expertId: fresh.expertId,
+      amount: fresh.agreedAmount,
     });
+    fresh.feePaid = true;
+    fresh.paidAt = fresh.paidAt || new Date().toISOString().slice(0, 10);
+    fresh.status = AUDIT_STATUS.PAID;
+    this.auditRequestsRepository.update(id, fresh);
 
-    ar.status = AUDIT_STATUS.PAID;
-    this.auditRequestsRepository.update(id, ar);
+    // Credit the expert's review count — once per engagement, not per report.
+    if (firstPayout) {
+      this.safe(() => {
+        const expert = this.users.findById(fresh.expertId);
+        this.users.update(fresh.expertId, { reviewsDone: (expert?.reviewsDone || 0) + 1 });
+      });
+    }
 
-    // Credit the expert's review count — this was never incremented before.
-    this.safe(() => {
-      const expert = this.users.findById(ar.expertId);
-      this.users.update(ar.expertId, { reviewsDone: (expert?.reviewsDone || 0) + 1 });
-    });
+    return { auditRequest: this.withProgress(this.auditRequestsRepository.findById(id)), payout };
+  }
 
-    return { auditRequest: this.auditRequestsRepository.findById(id), payout };
+  // ── Per-milestone audit progress ──────────────────────────────────────────
+
+  /**
+   * How far through the project this engagement is.
+   *
+   * The engagement is priced and paid once for the whole project, but the work
+   * is done milestone by milestone. Filing the first report used to end the
+   * engagement, which showed the client and the reviewer a "Completed" audit
+   * while later milestones had never been looked at. Completion is now a fact
+   * about coverage: every milestone on the task has a report.
+   */
+  auditProgress(ar: any) {
+    if (!ar || ar.kind !== AUDIT_KIND.PROJECT) return null;
+    const milestones = ar.taskId
+      ? this.safe(() => this.milestones.findAll({ taskId: ar.taskId })) || []
+      : [];
+    const audited: string[] = ar.auditedMilestoneIds || [];
+
+    const auditedIds = milestones.filter((m: any) => audited.includes(m.id)).map((m: any) => m.id);
+    const pending = milestones.filter((m: any) => !audited.includes(m.id));
+    // Submitted and waiting on the reviewer, versus not yet handed over at all.
+    const awaitingReview = pending.filter((m: any) =>
+      ['submitted', 'review', 'disputed'].includes(m.status),
+    );
+
+    return {
+      total: milestones.length,
+      audited: auditedIds.length,
+      auditedMilestoneIds: auditedIds,
+      awaitingReview: awaitingReview.length,
+      awaitingReviewMilestoneIds: awaitingReview.map((m: any) => m.id),
+      pendingMilestoneIds: pending.map((m: any) => m.id),
+      // No milestones means nothing left to audit, rather than never finished —
+      // otherwise the fee could never be released.
+      complete: pending.length === 0,
+    };
+  }
+
+  /** Read shape: the stored row plus its computed coverage. */
+  private withProgress(ar: any) {
+    if (!ar) return ar;
+    const progress = this.auditProgress(ar);
+    return progress ? { ...ar, auditProgress: progress } : ar;
+  }
+
+  /** True once a report has been filed for this milestone under this engagement. */
+  isMilestoneAudited(ar: any, milestoneId?: string): boolean {
+    if (!ar || !milestoneId) return false;
+    return (ar.auditedMilestoneIds || []).includes(milestoneId);
+  }
+
+  /**
+   * Records that a milestone has been reported on. Called when a report is
+   * filed; idempotent, so re-filing the same report does not double-count.
+   */
+  recordMilestoneAudited(id: string, milestoneId?: string) {
+    if (!milestoneId) return null;
+    const ar = this.auditRequestsRepository.findById(id);
+    if (!ar) return null;
+    const audited: string[] = ar.auditedMilestoneIds || [];
+    if (!audited.includes(milestoneId)) {
+      ar.auditedMilestoneIds = [...audited, milestoneId];
+      this.auditRequestsRepository.update(id, ar);
+    }
+    return this.auditRequestsRepository.findById(id);
+  }
+
+  /**
+   * The live project audit for a task, if there is one. An engagement stays
+   * live after it has been paid while milestones remain unaudited — the fee
+   * covers the project, not the first milestone that happens to arrive.
+   */
+  activeProjectAudit(taskId: string) {
+    const candidates = this.auditRequestsRepository
+      .findAll({ taskId, kind: AUDIT_KIND.PROJECT })
+      .filter((a: any) => ![AUDIT_STATUS.DECLINED, AUDIT_STATUS.CANCELLED].includes(a.status));
+    // An engagement an expert has actually taken on comes first.
+    return (
+      candidates.find((a: any) => a.expertId && !this.auditProgress(a)?.complete) ||
+      candidates.find((a: any) => a.expertId) ||
+      null
+    );
   }
 
   /**

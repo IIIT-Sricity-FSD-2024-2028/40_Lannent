@@ -1,4 +1,6 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { FileRefDto } from '../../milestones/dto/update-milestone.dto';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateExpertApplicationDto {
@@ -53,4 +55,12 @@ export class CreateExpertApplicationDto {
   @ApiPropertyOptional({ example: 'aws-cert.pdf' })
   @IsOptional() @IsString()
   certificateName?: string;
+
+  @ApiPropertyOptional({ description: 'Reference to the uploaded résumé in the file store' })
+  @IsOptional() @ValidateNested() @Type(() => FileRefDto)
+  resumeFile?: FileRefDto;
+
+  @ApiPropertyOptional({ description: 'Reference to the uploaded certificate in the file store' })
+  @IsOptional() @ValidateNested() @Type(() => FileRefDto)
+  certificateFile?: FileRefDto;
 }

@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module, forwardRef, NestModule, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
 import { MilestonesController } from './milestones.controller';
 import { MilestonesService } from './milestones.service';
 import { MilestonesRepository } from './milestones.repository';
@@ -8,6 +8,9 @@ import { TransactionsModule } from '../transactions/transactions.module';
 import { AuditRequestsModule } from '../audit-requests/audit-requests.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { LedgerModule } from '../ledger/ledger.module';
+
+import { RequireAuthMiddleware } from '../../common/middleware/require-auth.middleware';
+import { MoneyTrailMiddleware } from '../../common/middleware/money-trail.middleware';
 
 @Module({
   imports: [
@@ -22,4 +25,10 @@ import { LedgerModule } from '../ledger/ledger.module';
   providers: [MilestonesRepository, MilestonesService],
   exports: [MilestonesService],
 })
-export class MilestonesModule {}
+export class MilestonesModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(RequireAuthMiddleware, MoneyTrailMiddleware)
+      .forRoutes(MilestonesController);
+  }
+}

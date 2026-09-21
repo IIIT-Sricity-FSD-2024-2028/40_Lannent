@@ -73,7 +73,7 @@
                 <span class="offer-who">${o.offeredBy === 'client' ? 'You' : 'Reviewer'}</span>
                 <span class="offer-amt">${money(o.amount)}</span>
                 <span class="offer-tag ${o.status}">${o.status}</span>
-                <span style="color:var(--muted-foreground);flex:1;min-width:0;">${o.note || ''}</span>
+                <span style="color:var(--muted-foreground);flex:1;min-width:0;">${escapeHtml(o.note || '')}</span>
               </div>`).join('')
           : '<div class="offer-row" style="color:var(--muted-foreground);">No offers yet.</div>';
 

@@ -467,13 +467,13 @@
               <div class="form-grid-2">
                 <div class="field-group">
                   <label>Full Name</label>
-                  <input type="text" class="field-input" value="${profile.name}" id="p-fullname">
+                  <input type="text" class="field-input" value="${escapeHtml(profile.name)}" id="p-fullname">
                 </div>
                 <div class="field-group">
                   <label>Email Address</label>
                   <div class="field-wrap">
                     <i data-lucide="mail" class="field-icon"></i>
-                    <input type="email" class="field-input with-icon" value="${profile.email}" id="p-email">
+                    <input type="email" class="field-input with-icon" value="${escapeHtml(profile.email)}" id="p-email">
                   </div>
                 </div>
                 <div class="field-group" style="grid-column: 1 / -1;">
@@ -505,7 +505,7 @@
               </div>
               <div class="field-group" style="margin-bottom:4px;">
                 <label>Bio</label>
-                <textarea class="field-input" rows="4" id="p-bio" oninput="updateCharCount()">${profile.bio}</textarea>
+                <textarea class="field-input" rows="4" id="p-bio" oninput="updateCharCount()">${escapeHtml(profile.bio)}</textarea>
               </div>
               <div class="char-count" id="bioCharCount">${profile.bio.length}/500 characters</div>
 
@@ -541,7 +541,7 @@
               <div class="form-grid-2">
                 <div class="field-group">
                   <label>Company Name</label>
-                  <input type="text" class="field-input" value="${company.name}" id="c-name">
+                  <input type="text" class="field-input" value="${escapeHtml(company.name)}" id="c-name">
                 </div>
                 <div class="field-group">
                   <label>Industry</label>
