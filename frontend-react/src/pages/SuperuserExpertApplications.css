@@ -1,0 +1,353 @@
+    /* ── Filter toolbar ── */
+    .app-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .app-search-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 200px;
+    }
+    .app-search-wrap svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted-foreground);
+      pointer-events: none;
+    }
+    .app-search {
+      width: 100%;
+      height: 40px;
+      padding: 0 14px 0 38px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--foreground);
+      outline: none;
+      transition: box-shadow 0.15s;
+    }
+    .app-search::placeholder { color: var(--muted-foreground); }
+    .app-search:focus { box-shadow: 0 0 0 2px rgba(99,102,241,0.18); }
+
+    .filter-pill {
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      color: var(--muted-foreground);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .filter-pill:hover { background: var(--secondary); color: var(--foreground); }
+    .filter-pill.active {
+      background: var(--foreground);
+      color: var(--primary-foreground);
+      border-color: var(--foreground);
+    }
+
+    /* ── Application card ── */
+    .app-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 24px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      transition: box-shadow 0.2s, transform 0.15s;
+      animation: fadeUp 0.3s ease both;
+    }
+    .app-card:hover {
+      box-shadow: 0 6px 20px rgba(0,0,0,0.07);
+      transform: translateY(-1px);
+    }
+    .app-card:nth-child(1) { animation-delay: 0.03s; }
+    .app-card:nth-child(2) { animation-delay: 0.06s; }
+    .app-card:nth-child(3) { animation-delay: 0.09s; }
+    .app-card:nth-child(4) { animation-delay: 0.12s; }
+
+    .app-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .app-info { flex: 1; min-width: 0; }
+    .app-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--foreground);
+      margin-bottom: 2px;
+    }
+    .app-email {
+      font-size: 13px;
+      color: var(--muted-foreground);
+      margin-bottom: 10px;
+    }
+    .app-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: var(--muted-foreground);
+    }
+    .app-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .app-meta-item strong { color: var(--foreground); font-weight: 500; }
+
+    .app-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    /* ── Status badge ── */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid;
+    }
+    .sb-pending  { background: #fffbeb; border-color: #fde68a; color: #b45309; }
+    .sb-approved { background: #ecfdf5; border-color: #a7f3d0; color: #059669; }
+    .sb-rejected { background: #fef2f2; border-color: #fca5a5; color: #b91c1c; }
+
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+    }
+    .sd-pending  { background: #f59e0b; }
+    .sd-approved { background: #10b981; }
+    .sd-rejected { background: #ef4444; }
+
+    /* ── Action buttons ── */
+    .app-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .btn-approve, .btn-reject {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-approve {
+      background: #ecfdf5;
+      border-color: #a7f3d0;
+      color: #059669;
+    }
+    .btn-approve:hover { background: #d1fae5; transform: scale(1.02); }
+    .btn-approve:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-reject {
+      background: #fef2f2;
+      border-color: #fca5a5;
+      color: #b91c1c;
+    }
+    .btn-reject:hover { background: #fee2e2; transform: scale(1.02); }
+    .btn-reject:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .btn-details {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--foreground);
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .btn-details:hover { background: var(--secondary); }
+
+    /* ── Confirmation modal ── */
+    .confirm-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 500;
+      animation: fadeIn 0.2s ease;
+    }
+    .confirm-overlay.show { display: flex; }
+    .confirm-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 28px 32px;
+      max-width: 420px;
+      width: 90%;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+      animation: modalIn 0.3s ease;
+    }
+    @keyframes modalIn {
+      from { opacity: 0; transform: scale(0.95) translateY(10px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .confirm-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .confirm-text {
+      font-size: 14px;
+      color: var(--muted-foreground);
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+    .confirm-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    .confirm-btn {
+      padding: 9px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      transition: all 0.15s;
+    }
+    .confirm-btn-cancel {
+      background: var(--card);
+      color: var(--muted-foreground);
+    }
+    .confirm-btn-cancel:hover { background: var(--secondary); color: var(--foreground); }
+    .confirm-btn-approve {
+      background: #059669;
+      border-color: #059669;
+      color: #fff;
+    }
+    .confirm-btn-approve:hover { background: #047857; }
+    .confirm-btn-reject {
+      background: #dc2626;
+      border-color: #dc2626;
+      color: #fff;
+    }
+    .confirm-btn-reject:hover { background: #b91c1c; }
+
+    /* ── Detail modal ── */
+    .detail-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 500;
+      animation: fadeIn 0.2s ease;
+    }
+    .detail-overlay.show { display: flex; }
+    .detail-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 28px 32px;
+      max-width: 560px;
+      width: 90%;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+      animation: modalIn 0.3s ease;
+    }
+    .detail-field {
+      margin-bottom: 14px;
+    }
+    .detail-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted-foreground);
+      margin-bottom: 3px;
+    }
+    .detail-value {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--foreground);
+      word-break: break-word;
+    }
+    .detail-value a {
+      color: #6366f1;
+      text-decoration: none;
+    }
+    .detail-value a:hover { text-decoration: underline; }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 16px;
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 56px 24px;
+      text-align: center;
+      color: var(--muted-foreground);
+    }
+    .empty-state svg { margin: 0 auto 14px; display: block; }
+    .empty-state p { font-size: 14px; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    @media (max-width: 640px) {
+      .app-card { flex-direction: column; }
+      .app-right { flex-direction: row; width: 100%; justify-content: space-between; }
+    }
+  
