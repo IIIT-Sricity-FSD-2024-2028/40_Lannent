@@ -1,0 +1,10 @@
+    .wallet-hero { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:24px; }
+    .wallet-hero-card { border-radius:20px; padding:28px; color:white; position:relative; overflow:hidden; }
+    .wallet-hero-card::after { content:''; position:absolute; top:-40px; right:-40px; width:160px; height:160px; border-radius:50%; background:rgba(255,255,255,0.08); pointer-events:none; }
+    .tx-row { display:flex; align-items:center; gap:14px; padding:14px 0; border-bottom:1px solid rgba(0,0,0,0.05); }
+    .tx-row:last-child { border-bottom:none; }
+    .method-card { border:1.5px solid var(--border); border-radius:14px; padding:16px; cursor:pointer; transition:all 0.15s; }
+    .method-card:hover { border-color:#c7d2fe; background:#fafbff; }
+    .method-card.selected { border-color:#6366f1; background:#eef2ff; }
+    @media(max-width:768px){ .wallet-hero{ grid-template-columns:1fr; } }
+  
