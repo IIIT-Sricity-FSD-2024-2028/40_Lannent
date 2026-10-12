@@ -1,0 +1,10 @@
+    .workers-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
+    .worker-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px; cursor:pointer; transition:box-shadow 0.2s,transform 0.2s; }
+    .worker-card:hover { box-shadow:0 8px 32px rgba(0,0,0,0.1); transform:translateY(-2px); }
+    .avail-dot { width:10px; height:10px; border-radius:50%; border:2px solid white; }
+    .profile-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:200; overflow-y:auto; backdrop-filter:blur(4px); }
+    .profile-panel { background:white; margin:24px auto; border-radius:24px; max-width:700px; overflow:hidden; box-shadow:0 32px 80px rgba(0,0,0,0.15); }
+    .filter-sidebar { width:220px; flex-shrink:0; }
+    .hire-layout { display:flex; gap:20px; }
+    @media(max-width:768px){ .hire-layout{ flex-direction:column; } .filter-sidebar{ width:100%; } }
+  
