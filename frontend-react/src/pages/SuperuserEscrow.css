@@ -1,0 +1,21 @@
+    .finance-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:28px; }
+    .finance-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px 22px; }
+    .finance-card-label { font-size:12px; color:var(--muted-foreground); font-weight:600; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:8px; }
+    .finance-card-val { font-size:28px; font-weight:600; letter-spacing:-0.02em; }
+    .finance-card-sub { font-size:12px; color:var(--muted-foreground); margin-top:4px; }
+    .tx-table-wrap { background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+    .tx-table-wrap table { width:100%; border-collapse:collapse; }
+    .tx-table-wrap th { padding:12px 16px; text-align:left; font-size:12px; font-weight:600; color:var(--muted-foreground); background:var(--secondary); border-bottom:1px solid var(--border); text-transform:uppercase; letter-spacing:0.04em; }
+    .tx-table-wrap td { padding:14px 16px; border-bottom:1px solid var(--border); font-size:14px; vertical-align:middle; }
+    .tx-table-wrap tr:last-child td { border-bottom:none; }
+    .tx-table-wrap tr:hover td { background:rgba(0,0,0,0.015); }
+    .tx-type-icon { width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .su-toolbar { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+    .su-search { flex:1; min-width:200px; padding:10px 16px; border:1px solid var(--border); border-radius:12px; background:var(--background); font-size:14px; font-family:inherit; outline:none; }
+    .su-filter { padding:10px 14px; border:1px solid var(--border); border-radius:12px; background:var(--background); font-size:14px; font-family:inherit; cursor:pointer; }
+    .amount-credit { color:#10b981; font-weight:600; }
+    .amount-debit { color:#ef4444; font-weight:600; }
+    .btn-force { padding:5px 12px; border-radius:8px; border:1px solid #fde68a; background:#fffbeb; color:#92400e; font-size:12px; font-weight:500; cursor:pointer; }
+    .btn-force:hover { background:#fde68a; }
+  
+.btn-add{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:12px;color:#fff;border:none;font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;background:linear-gradient(to bottom,hsl(0,0%,16%),hsl(0,0%,10%));}
