@@ -1,0 +1,309 @@
+    /* ── Filter toolbar ── */
+    .report-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .filter-btn {
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      color: var(--muted-foreground);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .filter-btn:hover { background: var(--secondary); color: var(--foreground); }
+    .filter-btn.active {
+      background: var(--foreground);
+      color: var(--primary-foreground);
+      border-color: var(--foreground);
+    }
+
+    /* ── Select wrapper ── */
+    .select-wrap {
+      position: relative;
+      display: inline-block;
+    }
+    .select-wrap select {
+      height: 36px;
+      padding: 0 32px 0 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      color: var(--foreground);
+      cursor: pointer;
+      appearance: none;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .select-wrap select:focus { border-color: #6366f1; }
+    .select-wrap .chev {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      color: var(--muted-foreground);
+    }
+
+    /* ── Report card ── */
+    .report-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 24px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 20px;
+      transition: box-shadow 0.2s, transform 0.15s;
+    }
+    .report-card:hover {
+      box-shadow: 0 6px 20px rgba(0,0,0,0.07);
+      transform: translateY(-1px);
+    }
+    .report-card:last-child { margin-bottom: 0; }
+
+    .report-type-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .report-left {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .report-info { flex: 1; min-width: 0; }
+    .report-milestone-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--foreground);
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .report-type-label {
+      font-size: 12px;
+      color: var(--muted-foreground);
+      margin-bottom: 10px;
+    }
+
+    .report-verdict {
+      display: inline-block;
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 7px;
+      border: 1px solid;
+      margin-bottom: 8px;
+    }
+    .report-findings {
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: var(--muted-foreground);
+      margin-bottom: 10px;
+      max-width: 68ch;
+    }
+
+    .report-meta-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .report-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: var(--muted-foreground);
+    }
+    .report-meta-item strong { color: var(--foreground); font-weight: 500; }
+
+    .report-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .btn-view {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--secondary);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      color: var(--foreground);
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+      text-decoration: none;
+    }
+    .btn-view:hover { background: var(--muted); }
+
+    .btn-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 8px;
+      border: none;
+      background: linear-gradient(to bottom, #2a2a2a, #1a1a1a);
+      box-shadow: inset -4px -6px 25px rgba(201,201,201,0.08), inset 4px 4px 10px rgba(29,29,29,0.24);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      color: #fff;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s;
+      white-space: nowrap;
+    }
+    .btn-download:hover { transform: scale(1.02); }
+
+    /* ── Status pill ── */
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid;
+    }
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+    }
+
+    /* ── Section header ── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--foreground);
+    }
+    .count-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 22px;
+      border-radius: 11px;
+      background: var(--muted);
+      color: var(--muted-foreground);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 0 6px;
+      margin-left: 8px;
+    }
+
+    /* ── Summary stat cards ── */
+    .reports-summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 900px) { .reports-summary { grid-template-columns: repeat(2,1fr); } }
+    @media (max-width: 500px) { .reports-summary { grid-template-columns: 1fr; } }
+
+    .summary-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .summary-icon {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .summary-val {
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 2px;
+    }
+    .summary-label {
+      font-size: 12px;
+      color: var(--muted-foreground);
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 48px 24px;
+      text-align: center;
+    }
+    .empty-icon-wrap {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      background: var(--secondary);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 14px;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .report-card { flex-direction: column; }
+      .report-actions { flex-direction: row; width: 100%; }
+      .btn-view, .btn-download { flex: 1; justify-content: center; }
+    }
+
+    /* ── Page fade in ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .report-card { animation: fadeUp 0.3s ease both; }
+    .report-card:nth-child(1) { animation-delay: 0.04s; }
+    .report-card:nth-child(2) { animation-delay: 0.08s; }
+    .report-card:nth-child(3) { animation-delay: 0.12s; }
+    .report-card:nth-child(4) { animation-delay: 0.16s; }
+    .report-card:nth-child(5) { animation-delay: 0.20s; }
+  

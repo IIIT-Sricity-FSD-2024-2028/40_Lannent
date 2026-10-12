@@ -1,0 +1,23 @@
+    .ao-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:22px; margin-bottom:16px; }
+    .ao-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:14px; flex-wrap:wrap; }
+    .ao-title { font-size:16px; font-weight:700; margin-bottom:4px; }
+    .ao-sub { font-size:13px; color:var(--muted-foreground); }
+    .ao-status { font-size:11px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; padding:5px 10px; border-radius:6px; white-space:nowrap; }
+    .st-preview-sent  { background:#eff6ff; color:#1d4ed8; }
+    .st-negotiating   { background:#fffbeb; color:#b45309; }
+    .st-agreed        { background:#ecfdf5; color:#047857; }
+    .st-escrow-funded { background:#eef2ff; color:#4338ca; }
+    .st-in-progress   { background:#f0f9ff; color:#0369a1; }
+    .st-paid          { background:#f1f5f9; color:#475569; }
+    .st-declined, .st-cancelled { background:#fef2f2; color:#b91c1c; }
+    .offer-row { display:flex; align-items:center; gap:12px; padding:11px 0; border-top:1px solid var(--border); font-size:13px; }
+    .offer-who { font-weight:600; min-width:74px; }
+    .offer-amt { font-weight:700; font-variant-numeric:tabular-nums; }
+    .offer-tag { font-size:10px; text-transform:uppercase; letter-spacing:0.05em; padding:3px 7px; border-radius:4px; background:var(--secondary); color:var(--muted-foreground); }
+    .offer-tag.pending  { background:#fffbeb; color:#b45309; }
+    .offer-tag.accepted { background:#ecfdf5; color:#047857; }
+    .ao-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
+    .ao-counter { display:flex; gap:10px; align-items:center; margin-top:14px; flex-wrap:wrap; }
+    .ao-counter input { max-width:150px; }
+    .ao-empty { padding:56px 24px; text-align:center; background:var(--card); border:1px solid var(--border); border-radius:16px; }
+  
