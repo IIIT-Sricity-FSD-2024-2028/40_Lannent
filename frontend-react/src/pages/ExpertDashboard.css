@@ -1,0 +1,3 @@
+    .audit-card-item { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; margin-bottom:12px; transition:box-shadow 0.2s,transform 0.2s; cursor:pointer; }
+    .audit-card-item:hover { box-shadow:0 8px 24px rgba(0,0,0,0.08); transform:translateY(-2px); }
+  
