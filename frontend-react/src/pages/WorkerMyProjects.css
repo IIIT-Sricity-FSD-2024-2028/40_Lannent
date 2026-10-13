@@ -1,0 +1,9 @@
+    .project-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:24px; transition:box-shadow 0.2s,transform 0.2s; }
+    .project-card:hover { box-shadow:0 8px 32px rgba(0,0,0,0.08); transform:translateY(-2px); }
+    .projects-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:16px; }
+    .tab-bar { display:flex; gap:4px; background:var(--input-bg); padding:4px; border-radius:12px; margin-bottom:20px; width:fit-content; }
+    .tab-btn { padding:7px 16px; border-radius:9px; font-size:14px; font-weight:500; cursor:pointer; transition:background 0.15s,color 0.15s; border:none; background:transparent; color:var(--muted-foreground); font-family:inherit; }
+    .tab-btn.active { background:var(--card); color:var(--foreground); box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+    .empty-state { text-align:center; padding:64px 32px; color:var(--muted-foreground); }
+    .empty-state-icon { width:56px; height:56px; background:var(--secondary); border-radius:16px; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; }
+  

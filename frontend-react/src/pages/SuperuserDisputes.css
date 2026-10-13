@@ -1,0 +1,28 @@
+    .dispute-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px 24px; margin-bottom:16px; }
+    .dispute-card.resolved { opacity:0.7; }
+    .dispute-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:12px; }
+    .dispute-project { font-size:15px; font-weight:600; }
+    .dispute-meta { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; font-size:13px; color:var(--muted-foreground); }
+    .dispute-reason { font-size:13px; line-height:1.6; color:var(--muted-foreground); padding:12px 16px; background:var(--secondary); border-radius:10px; margin-bottom:16px; }
+    .dispute-actions { display:flex; gap:10px; flex-wrap:wrap; }
+    .btn-worker { padding:8px 16px; border-radius:10px; background:#ecfdf5; border:1px solid #bbf7d0; color:#166534; font-size:13px; font-weight:500; cursor:pointer; }
+    .btn-worker:hover { background:#bbf7d0; }
+    .btn-client { padding:8px 16px; border-radius:10px; background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; font-size:13px; font-weight:500; cursor:pointer; }
+    .btn-client:hover { background:#bfdbfe; }
+    .btn-split { padding:8px 16px; border-radius:10px; background:#faf5ff; border:1px solid #e9d5ff; color:#6b21a8; font-size:13px; font-weight:500; cursor:pointer; }
+    .btn-split:hover { background:#e9d5ff; }
+    .resolution-box { margin-top:12px; padding:12px 16px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; font-size:13px; color:#166534; line-height:1.5; }
+    .su-toolbar { display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
+    .su-filter { padding:10px 14px; border:1px solid var(--border); border-radius:12px; background:var(--background); font-size:14px; font-family:inherit; cursor:pointer; }
+    /* Override Modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; display:none; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:var(--card); border-radius:20px; padding:28px; max-width:480px; width:100%; box-shadow:0 24px 64px rgba(0,0,0,0.18); }
+    .form-label { display:block; font-size:13px; font-weight:500; margin-bottom:6px; }
+    .form-select, .form-textarea { width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:10px; background:var(--background); font-size:14px; font-family:inherit; outline:none; box-sizing:border-box; }
+    .form-textarea { resize:vertical; }
+    .form-group { margin-bottom:16px; }
+    .modal-actions { display:flex; gap:10px; margin-top:20px; }
+    .btn-cancel-modal { flex:1; padding:10px; border-radius:12px; border:1px solid var(--border); background:var(--background); font-size:14px; cursor:pointer; }
+    .btn-save-modal { flex:2; padding:10px; border-radius:12px; border:none; background:linear-gradient(to bottom,hsl(0,0%,16%),hsl(0,0%,10%)); color:#fff; font-size:14px; font-weight:500; cursor:pointer; }
+  

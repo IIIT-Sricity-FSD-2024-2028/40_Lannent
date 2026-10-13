@@ -1,0 +1,216 @@
+    /* ── Audit card grid ── */
+    .audit-grid {
+      display: grid;
+      gap: 16px;
+    }
+    .audit-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      transition: box-shadow 0.2s, transform 0.2s;
+    }
+    .audit-card:hover {
+      box-shadow: 0 8px 28px rgba(0,0,0,0.08);
+      transform: translateY(-1px);
+    }
+
+    /* ── Card top row ── */
+    .audit-card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+    .audit-card-left { flex: 1; min-width: 0; }
+    .audit-card-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .audit-card-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--foreground);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .audit-card-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 13px;
+      color: var(--muted-foreground);
+      flex-wrap: wrap;
+    }
+    .audit-card-meta span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* ── Priority badge ── */
+    .prio-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 9px;
+      border-radius: 9999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border: 1px solid;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .prio-urgent  { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+    .prio-high    { background: #fff7ed; border-color: #fdba74; color: #c2410c; }
+    .prio-normal  { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+    .prio-low     { background: #f3f4f6; border-color: #d1d5db; color: #4b5563; }
+
+    /* ── Status badge ── */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .status-awaiting { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+    .status-in-review { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+    .status-completed { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+
+    /* ── Divider row ── */
+    .audit-card-divider {
+      border-top: 1px solid rgba(0,0,0,0.06);
+      margin: 14px 0;
+      padding-top: 14px;
+    }
+    .audit-milestone {
+      font-size: 13px;
+      color: var(--muted-foreground);
+      margin-bottom: 10px;
+    }
+    .audit-milestone strong {
+      color: var(--foreground);
+      font-weight: 500;
+    }
+
+    /* ── Severity chip ── */
+    .severity-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 8px;
+      border-left: 3px solid;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .severity-critical { background:#fef2f2; border-color:#ef4444; color:#b91c1c; }
+    .severity-major    { background:#fff7ed; border-color:#f59e0b; color:#92400e; }
+    .severity-minor    { background:#fffbeb; border-color:#eab308; color:#854d0e; }
+    .severity-suggestion { background:#eff6ff; border-color:#3b82f6; color:#1d4ed8; }
+
+    /* ── Review button ── */
+    .btn-review {
+      width: 100%;
+      height: 40px;
+      margin-top: 14px;
+      border-radius: 10px;
+      background: linear-gradient(180deg, hsl(0,0%,16%) 0%, hsl(0,0%,10%) 100%);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: none;
+      font-family: inherit;
+      box-shadow: inset -4px -6px 25px 0px rgba(201,201,201,0.08), inset 4px 4px 10px 0px rgba(29,29,29,0.24);
+      transition: transform 0.15s, opacity 0.15s;
+      text-decoration: none;
+    }
+    .btn-review:hover  { transform: scale(1.01); opacity: 0.92; }
+    .btn-review:active { transform: scale(0.99); }
+
+    /* ── Search & filter bar ── */
+    .audit-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .audit-search-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 200px;
+    }
+    .audit-search-wrap svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted-foreground);
+      pointer-events: none;
+    }
+    .audit-search {
+      width: 100%;
+      height: 40px;
+      padding: 0 14px 0 38px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--foreground);
+      outline: none;
+      transition: box-shadow 0.15s;
+    }
+    .audit-search::placeholder { color: var(--muted-foreground); }
+    .audit-search:focus { box-shadow: 0 0 0 2px rgba(99,102,241,0.18); }
+
+    .filter-btn {
+      height: 40px;
+      padding: 0 16px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      color: var(--muted-foreground);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .filter-btn:hover { background: var(--secondary); color: var(--foreground); }
+    .filter-btn.active {
+      background: var(--foreground);
+      color: var(--primary-foreground);
+      border-color: var(--foreground);
+    }
+
+    /* ── Empty state ── */
+    .audit-empty {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 56px 24px;
+      text-align: center;
+      color: var(--muted-foreground);
+    }
+    .audit-empty svg { margin: 0 auto 14px; display: block; }
+    .audit-empty p { font-size: 14px; }
+  
