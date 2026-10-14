@@ -1,0 +1,142 @@
+    /* ── Grid helpers ──────────────────────────────────────── */
+    .pa-grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+    .pa-grid-3 { display:grid; grid-template-columns:2fr 1fr; gap:24px; }
+    .pa-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    .pa-grid-3col { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+
+    @media(max-width:1100px) {
+      .pa-grid-4 { grid-template-columns:repeat(2,1fr); }
+      .pa-grid-3 { grid-template-columns:1fr; }
+    }
+    @media(max-width:700px) {
+      .pa-grid-4 { grid-template-columns:1fr; }
+      .pa-grid-2 { grid-template-columns:1fr; }
+      .pa-grid-3col { grid-template-columns:1fr; }
+    }
+
+    /* ── Stat cards ────────────────────────────────────────── */
+    .pa-stat {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 10px 40px 5px rgba(194,194,194,.12);
+    }
+    .pa-stat-top { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; }
+    .pa-stat-icon { padding:10px; border-radius:10px; display:flex; align-items:center; justify-content:center; }
+    .pa-stat-val  { font-size:28px; font-weight:500; line-height:1.1; margin-bottom:4px; }
+    .pa-stat-label{ font-size:13px; color:var(--muted-foreground); }
+
+    /* ── Section cards ─────────────────────────────────────── */
+    .pa-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 40px 5px rgba(194,194,194,.12);
+    }
+    .pa-card-title    { font-size:17px; font-weight:500; margin-bottom:4px; }
+    .pa-card-subtitle { font-size:13px; color:var(--muted-foreground); margin-bottom:20px; }
+    .pa-card-header   { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; }
+
+    /* ── Chart wrappers ────────────────────────────────────── */
+    .pa-chart-tall   { position:relative; height:300px; }
+    .pa-chart-mid    { position:relative; height:250px; }
+    .pa-chart-donut  { position:relative; height:200px; }
+
+    /* ── Project performance cards ─────────────────────────── */
+    .pa-project-item {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      background: rgba(0,0,0,.015);
+      transition: background .15s;
+    }
+    .pa-project-item:last-child { margin-bottom:0; }
+    .pa-project-item:hover { background: rgba(0,0,0,.03); }
+    .pa-project-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; }
+    .pa-project-meta   { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+    .pa-project-meta-label { font-size:12px; color:var(--muted-foreground); margin-bottom:4px; }
+    .pa-project-meta-val   { font-size:13px; font-weight:500; }
+
+    .pa-progress-bg   { height:6px; border-radius:9999px; background:var(--secondary); overflow:hidden; margin-top:8px; }
+    .pa-progress-fill { height:100%; border-radius:9999px; }
+
+    .pa-badge {
+      display:inline-flex; align-items:center;
+      padding: 3px 10px; border-radius:6px; border:1px solid;
+      font-size:11px; font-weight:500;
+    }
+    .pa-badge-green  { background:#f0fdf4; border-color:#bbf7d0; color:#15803d; }
+    .pa-badge-blue   { background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8; }
+
+    /* ── Velocity mini cards ───────────────────────────────── */
+    .pa-mini-card {
+      border: 1px solid var(--border);
+      border-radius:12px;
+      padding:16px;
+      background: rgba(0,0,0,.015);
+    }
+    .pa-mini-card-label { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted-foreground); margin-bottom:8px; }
+    .pa-mini-card-val   { font-size:20px; font-weight:500; }
+
+    /* ── Client feedback ───────────────────────────────────── */
+    .pa-feedback-item {
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:16px;
+      margin-bottom:12px;
+      background:rgba(0,0,0,.015);
+    }
+    .pa-feedback-item:last-child { margin-bottom:0; }
+    .pa-feedback-header { display:flex; align-items:flex-start; gap:12px; margin-bottom:0; }
+    .pa-avatar {
+      width:40px; height:40px; border-radius:50%;
+      background:linear-gradient(135deg,#3b82f6,#8b5cf6);
+      display:flex; align-items:center; justify-content:center;
+      color:#fff; font-size:12px; font-weight:600; flex-shrink:0;
+    }
+    .pa-feedback-stars { display:flex; gap:2px; }
+    .pa-feedback-comment { font-size:13px; line-height:1.6; margin-top:8px; color:var(--foreground); }
+    .pa-feedback-date   { font-size:11px; color:var(--muted-foreground); margin-top:6px; }
+
+    /* ── Proposal section ──────────────────────────────────── */
+    .pa-proposal-row {
+      display:flex; align-items:center; justify-content:space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(0,0,0,.05);
+    }
+    .pa-proposal-row:last-of-type { border-bottom:none; }
+    .pa-proposal-icon-label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted-foreground); }
+    .pa-proposal-val { font-size:18px; font-weight:500; }
+    .pa-proposal-divider { height:1px; background:var(--border); margin:8px 0; }
+
+    .pa-insight-box {
+      border-radius:8px;
+      background:#f0fdf4;
+      border:1px solid #bbf7d0;
+      padding:12px;
+      margin-top:20px;
+    }
+    .pa-insight-inner { display:flex; align-items:flex-start; gap:8px; }
+    .pa-insight-title { font-size:12px; font-weight:600; color:#14532d; margin-bottom:4px; }
+    .pa-insight-body  { font-size:12px; color:#15803d; }
+
+    .pa-legend { display:flex; flex-direction:column; gap:8px; margin-top:16px; }
+    .pa-legend-row { display:flex; align-items:center; justify-content:space-between; }
+    .pa-legend-dot-label { display:flex; align-items:center; gap:8px; }
+    .pa-legend-dot { width:12px; height:12px; border-radius:50%; }
+    .pa-legend-text { font-size:12px; color:var(--muted-foreground); }
+    .pa-legend-val  { font-size:12px; font-weight:500; }
+
+    /* ── Star rating ───────────────────────────────────────── */
+    .pa-stars-badge {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:4px 10px; border-radius:8px;
+      background:#fffbeb; border:1px solid #fde68a;
+    }
+    .pa-earnings-avg { text-align:right; }
+    .pa-earnings-avg-label { font-size:12px; color:var(--muted-foreground); }
+    .pa-earnings-avg-val   { font-size:20px; font-weight:500; color:#16a34a; }
+  
