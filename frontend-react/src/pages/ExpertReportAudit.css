@@ -1,0 +1,276 @@
+    /* ── Layout ── */
+    .report-layout {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 960px) { .report-layout { grid-template-columns: 1fr; } }
+
+    /* ── Shared card ── */
+    .rc {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      margin-bottom: 18px;
+    }
+    .rc:last-child { margin-bottom: 0; }
+    .rc-head {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .rc-head-icon {
+      width: 30px; height: 30px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .rc-head-title { font-size: 14px; font-weight: 600; }
+    .rc-body { padding: 20px; }
+
+    /* ── Report header banner ── */
+    .report-header {
+      background: linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #4f46e5 100%);
+      border-radius: 16px;
+      padding: 28px 32px;
+      margin-bottom: 24px;
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+    }
+    .report-header::after {
+      content: '';
+      position: absolute;
+      top: -40px; right: -40px;
+      width: 180px; height: 180px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.05);
+    }
+    .report-id-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      padding: 4px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: monospace;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+    }
+    .report-title-main {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      line-height: 1.3;
+    }
+    .report-subtitle {
+      font-size: 13px;
+      opacity: 0.75;
+      margin-bottom: 20px;
+    }
+    .report-meta-row {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .report-meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .report-meta-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      opacity: 0.6;
+    }
+    .report-meta-value { font-size: 13px; font-weight: 600; }
+
+    /* ── Decision verdict banner ── */
+    .verdict-banner {
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 20px;
+      border: 1.5px solid;
+    }
+    .verdict-approved      { background:#d1fae5; border-color:#6ee7b7; }
+    .verdict-approved-rec  { background:#d1fae5; border-color:#6ee7b7; }
+    .verdict-rejected      { background:#fee2e2; border-color:#fca5a5; }
+    .verdict-request-fix   { background:#fff7ed; border-color:#fdba74; }
+    .verdict-icon-wrap {
+      width: 44px; height: 44px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .verdict-approved .verdict-icon-wrap,
+    .verdict-approved-rec .verdict-icon-wrap { background:#10b981; }
+    .verdict-rejected .verdict-icon-wrap     { background:#ef4444; }
+    .verdict-request-fix .verdict-icon-wrap  { background:#f59e0b; }
+
+    .verdict-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 2px;
+    }
+    .verdict-approved .verdict-label,
+    .verdict-approved-rec .verdict-label { color:#065f46; }
+    .verdict-rejected .verdict-label     { color:#b91c1c; }
+    .verdict-request-fix .verdict-label  { color:#92400e; }
+
+    .verdict-text { font-size: 14px; font-weight: 600; }
+    .verdict-approved .verdict-text,
+    .verdict-approved-rec .verdict-text { color:#065f46; }
+    .verdict-rejected .verdict-text     { color:#b91c1c; }
+    .verdict-request-fix .verdict-text  { color:#92400e; }
+
+    /* ── Info grid ── */
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .info-cell { display: flex; flex-direction: column; gap: 3px; }
+    .info-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted-foreground);
+    }
+    .info-value { font-size: 14px; font-weight: 500; }
+    .info-value.mono { font-family: monospace; font-size: 13px; }
+
+    /* ── Checklist items (read-only) ── */
+    .checklist-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      margin-bottom: 4px;
+      background: var(--input-bg);
+    }
+    .checklist-icon-pass { color: #10b981; }
+    .checklist-icon-fail { color: #ef4444; }
+    .checklist-label { font-size: 13px; }
+    .checklist-label.passed { color: var(--foreground); }
+    .checklist-label.failed { color: var(--muted-foreground); text-decoration: line-through; }
+
+    /* ── Severity chip ── */
+    .sev-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 8px;
+      border-left: 3px solid;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .sev-critical   { background:#fef2f2; border-color:#ef4444; color:#b91c1c; }
+    .sev-major      { background:#fff7ed; border-color:#f59e0b; color:#92400e; }
+    .sev-minor      { background:#fffbeb; border-color:#eab308; color:#854d0e; }
+    .sev-suggestion { background:#eff6ff; border-color:#3b82f6; color:#1d4ed8; }
+
+    /* ── Finding card ── */
+    .finding-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+    }
+    .finding-card:last-child { margin-bottom: 0; }
+    .finding-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+    .finding-desc  { font-size: 13px; color: var(--muted-foreground); line-height: 1.6; }
+
+    /* ── Rating stars ── */
+    .star-row { display: flex; gap: 3px; margin-top: 4px; }
+    .star-filled { color: #f59e0b; }
+    .star-empty  { color: #d1d5db; }
+
+    /* ── File row ── */
+    .file-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(0,0,0,0.05);
+    }
+    .file-row:last-child { border-bottom: none; }
+    .file-icon-wrap {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .file-name { font-size: 13px; font-weight: 500; }
+    .file-size { font-size: 11px; color: var(--muted-foreground); margin-top: 2px; }
+
+    /* ── Expert signature card ── */
+    .expert-sig {
+      background: linear-gradient(145deg, #f5f3ff, #ede9fe);
+      border: 1.5px solid #c4b5fd;
+      border-radius: 14px;
+      padding: 20px;
+      text-align: center;
+    }
+    .expert-avatar {
+      width: 56px; height: 56px;
+      border-radius: 16px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 700; color: #fff;
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      margin: 0 auto 10px;
+    }
+    .expert-name { font-size: 15px; font-weight: 700; color: #4c1d95; margin-bottom: 2px; }
+    .expert-role { font-size: 12px; color: #6d28d9; }
+
+    /* ── Print button ── */
+    .btn-print {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s;
+      color: var(--foreground);
+    }
+    .btn-print:hover { background: var(--secondary); }
+
+    /* ── Divider ── */
+    .section-divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 20px 0;
+    }
+
+    /* ── Summary textarea display ── */
+    .summary-box {
+      background: var(--input-bg);
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 14px;
+      color: var(--foreground);
+      line-height: 1.7;
+    }
+  
