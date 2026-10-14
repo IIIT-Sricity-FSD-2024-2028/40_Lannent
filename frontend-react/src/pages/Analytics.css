@@ -1,0 +1,90 @@
+    /* ── Layout helpers ───────────────────────────────────────────── */
+    .pi-grid-4   { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+    .pi-grid-2   { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+    @media(max-width:1100px){ .pi-grid-4{ grid-template-columns:repeat(2,1fr); } }
+    @media(max-width:700px) { .pi-grid-4{ grid-template-columns:1fr; } .pi-grid-2{ grid-template-columns:1fr; } }
+
+    /* ── Stat cards ───────────────────────────────────────────────── */
+    .pi-stat {
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:20px;
+      box-shadow:0 4px 12px rgba(194,194,194,.10);
+    }
+    .pi-stat-top   { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; }
+    .pi-stat-icon  { padding:10px; border-radius:10px; display:flex; align-items:center; justify-content:center; }
+    .pi-stat-trend { display:flex; align-items:center; gap:4px; font-size:12px; font-weight:500; }
+    .pi-stat-label { font-size:12px; color:var(--muted-foreground); margin-bottom:4px; }
+    .pi-stat-val   { font-size:30px; font-weight:500; line-height:1.1; }
+
+    /* ── Section cards ────────────────────────────────────────────── */
+    .pi-card {
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:24px;
+      box-shadow:0 4px 12px rgba(194,194,194,.10);
+    }
+    .pi-card-title   { font-size:17px; font-weight:500; margin-bottom:4px; }
+    .pi-card-subtitle{ font-size:13px; color:var(--muted-foreground); margin-bottom:24px; }
+
+    /* ── Chart wrapper ────────────────────────────────────────────── */
+    .pi-chart-wrap { position:relative; height:300px; }
+
+    /* ── Worker performance table ─────────────────────────────────── */
+    .pi-table { width:100%; border-collapse:collapse; }
+    .pi-table th {
+      text-align:left; padding:12px 16px;
+      font-size:11px; font-weight:500; text-transform:uppercase;
+      letter-spacing:.06em; color:var(--muted-foreground);
+      border-bottom:1px solid var(--border);
+    }
+    .pi-table th.center, .pi-table td.center { text-align:center; }
+    .pi-table td { padding:14px 16px; border-bottom:1px solid var(--border); font-size:13px; }
+    .pi-table tr:last-child td { border-bottom:none; }
+    .pi-table tr:hover td { background:rgba(0,0,0,.02); }
+    .pi-avatar {
+      width:32px; height:32px; border-radius:50%;
+      background:linear-gradient(135deg,#3b82f6,#8b5cf6);
+      display:flex; align-items:center; justify-content:center;
+      color:#fff; font-size:11px; font-weight:600; flex-shrink:0;
+    }
+    .pi-bar-wrap { display:flex; align-items:center; justify-content:center; gap:8px; }
+    .pi-bar-bg   { width:64px; height:8px; border-radius:9999px; background:var(--secondary); overflow:hidden; }
+    .pi-bar-fill { height:100%; border-radius:9999px; background:#22c55e; }
+    .top-badge   { display:inline-flex; align-items:center; gap:4px; font-size:11px; color:#ca8a04; margin-top:2px; }
+
+    /* ── Project health cards ─────────────────────────────────────── */
+    .pi-health-item {
+      padding:16px; border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(0,0,0,.015);
+      margin-bottom:12px;
+      transition:background .15s;
+    }
+    .pi-health-item:last-child { margin-bottom:0; }
+    .pi-health-item:hover { background:rgba(0,0,0,.03); }
+    .pi-health-row { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; }
+    .pi-risk-badge {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:4px 10px; border-radius:6px; border:1px solid; font-size:11px; font-weight:500;
+    }
+    .pi-prog-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .pi-prog-label{ display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; font-size:11px; }
+    .pi-prog-label span:last-child { font-size:13px; font-weight:500; }
+    .pi-prog-bg   { height:8px; border-radius:9999px; background:var(--secondary); overflow:hidden; }
+    .pi-prog-fill { height:100%; border-radius:9999px; }
+
+    /* ── Activity timeline ────────────────────────────────────────── */
+    .pi-timeline-item { display:flex; align-items:flex-start; gap:12px; margin-bottom:16px; }
+    .pi-timeline-item:last-child { margin-bottom:0; }
+    .pi-tl-icon {
+      width:36px; height:36px; border-radius:8px;
+      display:flex; align-items:center; justify-content:center;
+      flex-shrink:0; border:1px solid rgba(0,0,0,.06);
+    }
+    .pi-tl-title { font-size:13px; font-weight:500; margin-bottom:2px; }
+    .pi-tl-desc  { font-size:12px; color:var(--muted-foreground); margin-bottom:2px; }
+    .pi-tl-time  { font-size:11px; color:var(--muted-foreground); opacity:.7; }
+  
