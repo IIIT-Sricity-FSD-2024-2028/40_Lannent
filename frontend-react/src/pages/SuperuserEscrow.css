@@ -1,4 +1,4 @@
-    .finance-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:28px; }
+    .finance-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-bottom:28px; }
     .finance-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px 22px; }
     .finance-card-label { font-size:12px; color:var(--muted-foreground); font-weight:600; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:8px; }
     .finance-card-val { font-size:28px; font-weight:600; letter-spacing:-0.02em; }

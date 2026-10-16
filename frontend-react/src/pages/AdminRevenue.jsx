@@ -14,11 +14,11 @@ import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './AdminRevenue.css?raw';
 
-const money = n => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = n => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const compact = n => {
   const v = Number(n || 0);
-  if (Math.abs(v) >= 1000) return '$' + (v / 1000).toFixed(v % 1000 === 0 ? 0 : 1) + 'k';
-  return '$' + v.toFixed(0);
+  if (Math.abs(v) >= 1000) return '₹' + (v / 1000).toFixed(v % 1000 === 0 ? 0 : 1) + 'k';
+  return '₹' + v.toFixed(0);
 };
 const prettyFee = t => ({
   'deposit-processing': 'Deposit processing',
@@ -27,6 +27,7 @@ const prettyFee = t => ({
   'worker-service': 'Worker service',
   'expert-service': 'Reviewer commission',
   'withdrawal-processing': 'Withdrawal payout',
+  'cancellation': 'Cancellation fees',
 }[t] || t);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -146,7 +147,7 @@ function FeeTypeChart({ rows }) {
   );
 }
 
-// ── Chart 3: where each escrowed dollar goes (part-to-whole) ─────────────────
+// ── Chart 3: where each escrowed rupee goes (part-to-whole) ──────────────────
 function DistributionChart({ d }) {
   const segs = d.segments.filter(s => s.amount > 0);
   const W = 660, H = 62, gapPx = 2, r = 4;
@@ -175,7 +176,7 @@ function DistributionChart({ d }) {
           V${first ? r : 0}
           ${first ? `a${r},${r} 0 0 1 ${r},-${r}` : ''} Z`;
         return (
-          <path key={i} d={path} fill={`var(--series-${(i % 5) + 1})`} className="dist-seg" data-i={i} style={{ cursor: 'pointer' }}
+          <path key={i} d={path} fill={`var(--series-${(i % 7) + 1})`} className="dist-seg" data-i={i} style={{ cursor: 'pointer' }}
                 onMouseMove={e => showTip(e, `${esc(s.label)}<br><b>${money(s.amount)}</b> · ${s.share}% of ${money(d.totalFunded)}`)}
                 onMouseLeave={hideTip} />
         );
@@ -229,6 +230,7 @@ function ProjectBreakdown({ b, onClose }) {
         <BreakdownCard title="Client paid in">
           <Line label="Into project escrow" value={money(b.clientPaid.intoProjectEscrow)} />
           <Line label="Into audit escrow" value={money(b.clientPaid.intoAuditEscrow)} />
+          <Line label="Into dispute escrow" value={money(b.clientPaid.intoDisputeEscrow || 0)} />
           <Line label="Marketplace fee" value={money(b.clientPaid.marketplaceFee)} fee />
           <Line label="Contract initiation" value={money(b.clientPaid.initiationFee)} fee />
           <Line label="Total charged" value={money(b.clientPaid.total)} total />
@@ -258,7 +260,9 @@ function ProjectBreakdown({ b, onClose }) {
         <BreakdownCard title="Still held & refunded">
           <Line label="Project escrow" value={money(b.stillHeld.project)} />
           <Line label="Audit escrow" value={money(b.stillHeld.audit)} />
+          <Line label="Dispute escrow" value={money(b.stillHeld.dispute || 0)} />
           <Line label="Refunded to client" value={money(b.refundedToClient)} />
+          {b.refunded > b.refundedToClient ? <Line label="Refunded to worker" value={money(b.refunded - b.refundedToClient)} /> : null}
           <Line label="Total held" value={money(b.stillHeld.total)} total />
         </BreakdownCard>
 
@@ -267,6 +271,7 @@ function ProjectBreakdown({ b, onClose }) {
           <Line label="Contract initiation" value={money(b.platformEarnings.initiationFee)} />
           <Line label="Worker service fees" value={money(b.platformEarnings.workerServiceFees)} />
           <Line label="Reviewer commission" value={money(b.platformEarnings.reviewerCommission)} />
+          {b.platformEarnings.cancellationFee ? <Line label="Cancellation fee" value={money(b.platformEarnings.cancellationFee)} /> : null}
           <Line label="Total earned" value={money(b.platformEarnings.total)} total good />
         </BreakdownCard>
       </div>
@@ -320,6 +325,7 @@ export default function AdminRevenue() {
     byFeeType: Store.getRevenueByFeeType(),
     distribution: Store.getRevenueDistribution(),
     byProject: Store.getRevenueByProject(),
+    byUser: Store.getRevenueByUser(),
   }));
   const [period, setPeriod] = useState('month');
   const [timeseries, setTimeseries] = useState(() => Store.getRevenueTimeseries('month'));
@@ -338,6 +344,7 @@ export default function AdminRevenue() {
   const d = data.distribution || { segments: [], totalFunded: 0 };
   const fees = data.byFeeType || [];
   const projects = data.byProject || [];
+  const people = data.byUser || [];
 
   function changePeriod(p) {
     setPeriod(p);
@@ -424,7 +431,7 @@ export default function AdminRevenue() {
             </div>
 
             <div className="viz-card">
-              <div className="viz-title">Where each escrowed dollar goes</div>
+              <div className="viz-title">Where each escrowed rupee goes</div>
               <div className="viz-sub">{`${money(d.totalFunded)} funded into escrow all-time.`}</div>
               <div className="viz-plot" id="distPlot">
                 {d && d.totalFunded
@@ -434,7 +441,7 @@ export default function AdminRevenue() {
               <div className="viz-legend" id="distLegend">
                 {d && d.totalFunded ? d.segments.filter(x => x.amount > 0).map((x, i) => (
                   <span key={i} className="viz-legend-item">
-                    <span className="viz-swatch" style={{ background: `var(--series-${(i % 5) + 1})` }}></span>
+                    <span className="viz-swatch" style={{ background: `var(--series-${(i % 7) + 1})` }}></span>
                     {`${x.label} · `}<b style={{ color: 'var(--foreground)', fontVariantNumeric: 'tabular-nums' }}>{money(x.amount)}</b>
                   </span>
                 )) : ''}
@@ -491,6 +498,42 @@ export default function AdminRevenue() {
               {breakdown && (breakdown.b
                 ? <ProjectBreakdown b={breakdown.b} onClose={() => setBreakdown(null)} />
                 : <div style={{ padding: 18, color: 'var(--muted-foreground)' }}>Could not load that project.</div>)}
+            </div>
+          </div>
+
+          <div className="viz-card">
+            <div className="viz-title">What each user received and paid</div>
+            <div className="viz-sub">Workers and reviewers: gross earned, fees the platform kept and net received. Clients: money added, put into escrow, and fees paid.</div>
+            <div className="viz-table-wrap" id="userTable">
+              {!people.length ? (
+                <div style={{ padding: 26, textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 13 }}>No user activity yet.</div>
+              ) : (
+                <table className="viz-table">
+                  <thead>
+                    <tr>
+                      <th>User</th><th>Role</th>
+                      <th className="num">Gross earned</th><th className="num">Net received</th>
+                      <th className="num">Deposited</th><th className="num">Into escrow</th><th className="num">Withdrawn</th>
+                      <th className="num">Fees paid</th><th className="num">Wallet now</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {people.map(u => (
+                      <tr key={u.userId}>
+                        <td>{u.name}</td>
+                        <td><span className="rev-role">{u.role}</span></td>
+                        <td className="num">{u.grossEarned ? money(u.grossEarned) : '—'}</td>
+                        <td className="num">{u.netReceived ? money(u.netReceived) : '—'}</td>
+                        <td className="num">{u.totalDeposited ? money(u.totalDeposited) : '—'}</td>
+                        <td className="num">{u.escrowFunded ? money(u.escrowFunded) : '—'}</td>
+                        <td className="num">{u.totalWithdrawn ? money(u.totalWithdrawn) : '—'}</td>
+                        <td className="num" style={{ fontWeight: 600, color: u.feesPaid ? '#b45309' : 'inherit' }}>{money(u.feesPaid)}</td>
+                        <td className="num">{money(u.walletBalance)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>

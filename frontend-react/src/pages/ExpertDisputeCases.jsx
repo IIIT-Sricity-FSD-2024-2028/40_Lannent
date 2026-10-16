@@ -20,11 +20,17 @@ import pageCss from './ExpertDisputeCases.css?raw';
 const SEVERITY_ICON_CLASS = { high: 'severity-icon-high', medium: 'severity-icon-medium', low: 'severity-icon-low' };
 const FILTERS = [['all', 'All'], ['Open', 'Open'], ['Under Investigation', 'Investigating'], ['Resolved', 'Resolved']];
 
+/** "Open" until the fee is funded and accepted, then "Under Investigation". */
+function statusOf(Store, d) {
+  const eng = (Store.getAuditRequests() || []).filter(a => a.disputeId === d.id && !a.replacedBy).pop();
+  return eng && eng.status === 'in-progress' ? 'Under Investigation' : 'Open';
+}
+
 /** Disputes visible to this expert, shaped for the cards. */
 function loadDisputes(Store, Auth) {
   const session = Auth.getCurrentUser();
   return Store.getDisputes()
-    .filter(d => !d.expertId || d.expertId === session.userId)
+    .filter(d => d.expertId === session.userId || d.resolvedBy === session.userId)
     .map(d => {
       const task = Store.getTaskById(d.taskId);
       const raiser = Store.getUserById(d.raisedBy);
@@ -32,9 +38,9 @@ function loadDisputes(Store, Auth) {
         id: d.id,
         project: d.project || (task ? task.title : 'Unknown Project'),
         milestone: d.milestone || 'Milestone',
-        issue: d.reason ? d.reason.substring(0, 80) + (d.reason.length > 80 ? '...' : '') : 'Dispute raised',
+        issue: [d.reason, d.details].filter(Boolean).join(' — ').slice(0, 120) + ([d.reason, d.details].filter(Boolean).join(' — ').length > 120 ? '…' : '') || 'Dispute raised',
         raisedBy: (raiser ? raiser.name : d.raisedByName || 'Unknown') + ' (' + (raiser ? raiser.role : 'user') + ')',
-        status: d.status === 'open' ? 'Open' : d.status === 'resolved' ? 'Resolved' : 'Under Investigation',
+        status: d.status === 'resolved' ? 'Resolved' : d.status === 'withdrawn' ? 'Withdrawn by client' : d.status === 'expired' ? 'Expired — no verdict' : statusOf(Store, d),
         rawStatus: d.status,
         severity: d.severity || 'medium',
         date: d.createdAt ? new Date(d.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently',
@@ -49,6 +55,10 @@ function loadDisputes(Store, Auth) {
  */
 function CardAction({ d }) {
   const Store = useStore();
+  // Withdrawn by the client, or expired without a verdict: nothing left to do.
+  if (d.rawStatus === 'withdrawn' || d.rawStatus === 'expired') {
+    return <span className="btn-resolve" style={{ opacity: 0.6, cursor: 'default' }}>{d.rawStatus === 'withdrawn' ? 'Withdrawn — fee returned to the client' : 'Expired — fee returned to the client'}</span>;
+  }
   if (d.rawStatus === 'resolved') {
     return (
       <Link to={`/expert-report-dispute?id=${d.id}`} className="btn-resolve">
@@ -57,8 +67,12 @@ function CardAction({ d }) {
       </Link>
     );
   }
-  const eng = (Store.getAuditRequests() || []).find(a => a.disputeId === d.id);
-  if (!eng || eng.status === 'in-progress') {
+  // The current engagement for this dispute (a declined one may have been replaced).
+  const eng = (Store.getAuditRequests() || []).filter(a => a.disputeId === d.id && !a.replacedBy).pop();
+  if (!eng || eng.status === 'declined' || eng.status === 'cancelled') {
+    return <span className="btn-resolve" style={{ opacity: 0.6, cursor: 'default' }}>Waiting for a new reviewer</span>;
+  }
+  if (eng.status === 'in-progress') {
     return (
       <Link to={`/resolve-dispute?id=${d.id}`} className="btn-resolve">
         <Icon name="shield" style={{ width: 15, height: 15 }} />
@@ -98,7 +112,7 @@ function DisputeCard({ d }) {
             ) : ''}
           </div>
         </div>
-        <span className={`status-badge ${d.rawStatus === 'resolved' ? 'status-resolved' : d.rawStatus === 'open' ? 'status-open' : 'status-investigating'}`}>{d.status}</span>
+        <span className={`status-badge ${d.status === 'Resolved' ? 'status-resolved' : d.status === 'Open' ? 'status-open' : 'status-investigating'}`}>{d.status}</span>
       </div>
       <CardAction d={d} />
     </div>
@@ -126,7 +140,7 @@ export default function ExpertDisputeCases() {
       <DashboardLayout role="expert" activePath="/expert-dispute-cases" pageTitle="Dispute Cases" pageSubtitle="Mediate conflicts between clients and workers with fair resolutions.">
         <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 24 }}>
           <StatCard valueId="statTotal" value={all.length} label="Total Cases" icon="scale" iconBg="#eef2ff" iconColor="#6366f1" />
-          <StatCard valueId="statOpen" value={all.filter(d => d.rawStatus === 'open').length} label="Open" icon="alert-circle" iconBg="#fee2e2" iconColor="#ef4444" />
+          <StatCard valueId="statOpen" value={all.filter(d => d.status === 'Open').length} label="Open" icon="alert-circle" iconBg="#fee2e2" iconColor="#ef4444" />
           <StatCard valueId="statInvest" value={all.filter(d => d.status === 'Under Investigation').length} label="Investigating" icon="search" iconBg="#faf5ff" iconColor="#a855f7" />
           <StatCard valueId="statResolved" value={all.filter(d => d.rawStatus === 'resolved').length} valueStyle={{ color: '#10b981' }} label="Resolved" icon="check-circle-2" iconBg="#ecfdf5" iconColor="#10b981" />
         </div>

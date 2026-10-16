@@ -12,10 +12,8 @@
 import { useState } from 'react';
 import DashboardLayout from './DashboardLayout';
 import Icon from './Icon';
-import { useAuth } from '../context/AuthContext';
 import { useStore } from '../context/StoreContext';
 import { useValidation } from '../context/ValidationContext';
-import { escapeHtml } from '../utils/helpers';
 import useRerender from '../hooks/useRerender';
 
 const AVATAR_COLORS = [
@@ -124,8 +122,8 @@ function ApplicationDetails({ app, showDocuments, onClose, onAction }) {
         <DetailField label="Country">{app.country || 'N/A'}</DetailField>
         <DetailField label="Primary Expertise">{app.expertise || 'N/A'}</DetailField>
         <DetailField label="Experience">{`${app.experience || 'N/A'} years`}</DetailField>
-        <DetailField label="LinkedIn">{app.linkedin ? <a href={app.linkedin} target="_blank">{app.linkedin}</a> : 'N/A'}</DetailField>
-        <DetailField label="GitHub">{app.github ? <a href={app.github} target="_blank">{app.github}</a> : 'N/A'}</DetailField>
+        <DetailField label="LinkedIn">{app.linkedin ? <a href={app.linkedin} target="_blank" rel="noopener noreferrer">{app.linkedin}</a> : 'N/A'}</DetailField>
+        <DetailField label="GitHub">{app.github ? <a href={app.github} target="_blank" rel="noopener noreferrer">{app.github}</a> : 'N/A'}</DetailField>
       </div>
       {showDocuments && (
         <DetailField label="Documents" style={{ marginTop: 6 }} valueStyle={{ fontWeight: 400, fontSize: 13 }}>
@@ -141,7 +139,7 @@ function ApplicationDetails({ app, showDocuments, onClose, onAction }) {
         <DetailField label="Applied On">{app.appliedAt || 'N/A'}</DetailField>
         <DetailField label="Reviewed On">{app.reviewedAt || 'Not yet reviewed'}</DetailField>
       </div>
-      {app.status === 'pending' ? (
+      {app.status === 'pending' && onAction ? (
         <div style={{ display: 'flex', gap: 10, marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
           <button className="btn-approve" style={{ flex: 1, justifyContent: 'center', height: 40, fontSize: 14 }} onClick={() => { onClose(); onAction(app.id, 'approved'); }}>
             <Icon name="check" style={{ width: 14, height: 14 }} /> Approve Application
@@ -161,10 +159,10 @@ function ApplicationDetails({ app, showDocuments, onClose, onAction }) {
  * @param {boolean} showDocuments - show the résumé / certificate rows (admin desk)
  */
 export default function ExpertApplicationsReview({ role, activePath, showDocuments }) {
+  // Only the intake desk decides; compliance reads the queue but cannot act on it.
+  const canDecide = role === 'intake-admin';
   const Store = useStore();
-  const Auth = useAuth();
   const Validate = useValidation();
-  const session = Auth.getCurrentUser();
   const rerender = useRerender();
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -194,13 +192,19 @@ export default function ExpertApplicationsReview({ role, activePath, showDocumen
   function executeAction() {
     if (!pendingAction) return;
     const { appId, status } = pendingAction;
-    Store.updateExpertApplicationStatus(appId, status, session?.userId || 'u4');
+    try {
+      Store.updateExpertApplicationStatus(appId, status);
+    } catch (e) {
+      closeConfirm();
+      Validate.toast((e.message), 'error');
+      return;
+    }
     closeConfirm();
     rerender();
     const app = Store.getExpertApplicationById(appId);
     const msg = status === 'approved'
-      ? `✓ ${escapeHtml(app?.name)}'s application approved. Expert account created.`
-      : `✗ ${escapeHtml(app?.name)}'s application rejected.`;
+      ? `✓ ${(app?.name)}'s application approved. Expert account created.`
+      : `✗ ${(app?.name)}'s application rejected.`;
     Validate.toast(msg, status === 'approved' ? 'success' : 'error');
   }
 
@@ -263,7 +267,7 @@ export default function ExpertApplicationsReview({ role, activePath, showDocumen
                 <button className="btn-details" onClick={() => showDetails(a.id)}>
                   <Icon name="eye" style={{ width: 12, height: 12 }} /> Details
                 </button>
-                {a.status === 'pending' ? (
+                {a.status === 'pending' && canDecide ? (
                   <>
                     <button className="btn-approve" onClick={() => confirmAction(a.id, 'approved')}>
                       <Icon name="check" style={{ width: 12, height: 12 }} /> Approve
@@ -300,7 +304,7 @@ export default function ExpertApplicationsReview({ role, activePath, showDocumen
       {/* Detail Modal */}
       <div className={'detail-overlay' + (detailOpen ? ' show' : '')} id="detailModal" onClick={e => { if (e.target === e.currentTarget) setDetailOpen(false); }}>
         <div className="detail-card" id="detailContent">
-          {detailApp && <ApplicationDetails app={detailApp} showDocuments={showDocuments} onClose={() => setDetailOpen(false)} onAction={confirmAction} />}
+          {detailApp && <ApplicationDetails app={detailApp} showDocuments={showDocuments} onClose={() => setDetailOpen(false)} onAction={canDecide ? confirmAction : null} />}
         </div>
       </div>
     </DashboardLayout>

@@ -3,20 +3,30 @@
  * Converted from front-end/pages/superuser-tasks.html.
  *
  * Every task on the platform, searchable and filterable by status. A task
- * can be viewed in a read-only dialog; open tasks with no worker can be
- * deleted (their escrow is refunded to the client).
+ * can be viewed in a read-only dialog; a project that never started (open,
+ * draft or cancelled, no worker hired) can be deleted — whatever it still
+ * holds in escrow goes back to the client.
  */
 import { useState } from 'react';
 import DashboardLayout from '../components/DashboardLayout';
 import PageStyle from '../components/PageStyle';
 import { useStore } from '../context/StoreContext';
 import { useValidation } from '../context/ValidationContext';
-import { escapeHtml } from '../utils/helpers';
 import useRerender from '../hooks/useRerender';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './SuperuserTasks.css?raw';
 
 const STATUS_BADGES = { 'open': 'badge-orange', 'in-progress': 'badge-blue', 'completed': 'badge-green', 'cancelled': 'badge-red', 'draft': 'badge-blue' };
+
+const DELETABLE = ['open', 'draft', 'cancelled'];
+const canDelete = t => DELETABLE.includes(t.status) && !t.workerId;
+
+/** Share of the project's milestones that are approved. */
+function progressOf(Store, t) {
+  const ms = Store.getMilestonesByTask(t.id);
+  if (!ms.length) return t.status === 'completed' ? 100 : 0;
+  return Math.round((ms.filter(m => ['completed', 'approved'].includes(m.status)).length / ms.length) * 100);
+}
 
 function StatusBadge({ status }) {
   return <span className={`badge ${STATUS_BADGES[status] || 'badge-blue'}`}>{status.replace(/-/g, ' ')}</span>;
@@ -45,9 +55,9 @@ export default function SuperuserTasks() {
   const [detailTask, setDetailTask] = useState(null);   // last task shown in the dialog
   const [detailOpen, setDetailOpen] = useState(false);
 
-  const q = search.toLowerCase();
+  const q = search.trim().toLowerCase();
   const filtered = Store.getTasks().filter(t => {
-    const matchSearch = !q || t.title.toLowerCase().includes(q) || t.category.toLowerCase().includes(q);
+    const matchSearch = !q || [t.title, t.category, Store.getUserById(t.clientId)?.name].some(v => String(v || '').toLowerCase().includes(q));
     const matchStatus = statusFilter === 'all' || t.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -62,28 +72,23 @@ export default function SuperuserTasks() {
   function deleteTask(id) {
     const task = Store.getTaskById(id);
     if (!task) return;
-    if (task.status !== 'open' || task.workerId) {
-      Validate.toast('Only open tasks with no assigned worker can be deleted.', 'error');
+    if (!canDelete(task)) {
+      Validate.toast('Only a project that never started (no worker hired) can be deleted.', 'error');
       return;
     }
     Validate.confirm(
-      `Permanently delete "${escapeHtml(task.title)}"? Escrow funds will be refunded to the client.`,
+      `Permanently delete "${task.title}"? Anything still held in its escrow is returned to the client's wallet. This cannot be undone.`,
       () => {
-        // Refund escrow to client
-        if (task.budget && task.budget > 0 && task.clientId) {
-          Store.addToWallet(task.clientId, task.budget);
-          Store.createTransaction({
-            type: 'escrow-refund',
-            amount: task.budget,
-            fromId: 'escrow',
-            toId: task.clientId,
-            taskId: task.id,
-            description: `Escrow refund — task "${escapeHtml(task.title)}" deleted by admin`,
-          });
+        // The server refunds the project's escrow (budget held since posting,
+        // and any reviewer fees) to the client before removing it.
+        try {
+          Store.deleteTask(id);
+        } catch (e) {
+          Validate.toast((e.message), 'error');
+          return;
         }
-        Store.deleteTask(id);
         rerender();
-        Validate.toast('Task deleted. Escrow refunded to client.', 'success');
+        Validate.toast('Task deleted and its escrow returned to the client.', 'success');
       }
     );
   }
@@ -98,13 +103,15 @@ export default function SuperuserTasks() {
       <PageStyle css={pageCss} />
       <DashboardLayout role="superuser" activePath="/superuser-tasks" pageTitle="Manage Tasks" pageSubtitle="View task details or delete tasks on the platform">
         <div className="su-toolbar">
-          <input className="su-search" id="taskSearch" placeholder="Search by title or category..." value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="su-search" id="taskSearch" placeholder="Search by title, category or client..." value={search} onChange={e => setSearch(e.target.value)} />
           {' '}
           <select className="su-filter" id="statusFilter" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
             <option value="all">All Statuses</option>
+            <option value="draft">Draft</option>
             <option value="open">Open</option>
             <option value="in-progress">In Progress</option>
             <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
           </select>
         </div>
 
@@ -131,6 +138,7 @@ export default function SuperuserTasks() {
               ) : filtered.map(t => {
                 const client = Store.getUserById(t.clientId);
                 const worker = t.workerId ? Store.getUserById(t.workerId) : null;
+                const progress = progressOf(Store, t);
                 return (
                   <tr key={t.id} id={`taskRow_${t.id}`}>
                     <td>
@@ -138,18 +146,17 @@ export default function SuperuserTasks() {
                       <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{t.category}</div>
                     </td>
                     <td style={{ fontSize: 13 }}>{client?.name || 'Unknown'}</td>
-                    {/* The original escaped this fallback too, so the markup shows as text. */}
-                    <td style={{ fontSize: 13 }}>{worker?.name || '<span style="color:var(--muted-foreground);">Unassigned</span>'}</td>
-                    <td style={{ fontWeight: 600 }}>{`$${t.budget.toLocaleString()}`}</td>
+                    <td style={{ fontSize: 13 }}>{worker?.name || <span style={{ color: 'var(--muted-foreground)' }}>Unassigned</span>}</td>
+                    <td style={{ fontWeight: 600 }}>{`₹${(Number(t.budget) || 0).toLocaleString('en-IN')}`}</td>
                     <td>
-                      <div className="progress-bar"><div className="progress-fill" style={{ width: `${t.progress}%` }}></div></div>
-                      <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>{`${t.progress}%`}</span>
+                      <div className="progress-bar"><div className="progress-fill" style={{ width: `${progress}%` }}></div></div>
+                      <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>{`${progress}%`}</span>
                     </td>
                     <td><StatusBadge status={t.status} /></td>
                     <td>
                       <div className="action-btns">
                         <button className="btn-edit" onClick={() => viewTaskDetails(t.id)}>View</button>
-                        {t.status === 'open' && !t.workerId ? <button className="btn-delete" onClick={() => deleteTask(t.id)}>Delete</button> : ''}
+                        {canDelete(t) ? <button className="btn-delete" onClick={() => deleteTask(t.id)}>Delete</button> : ''}
                       </div>
                     </td>
                   </tr>
@@ -170,7 +177,7 @@ export default function SuperuserTasks() {
               <DetailField label="Status" id="detailStatus" style={{ padding: '10px 14px' }}>{d ? <StatusBadge status={d.status} /> : '—'}</DetailField>
             </div>
             <div className="grid-2">
-              <DetailField label="Budget" id="detailBudget" style={{ ...FIELD_STYLE, fontWeight: 600 }}>{d ? '$' + d.budget.toLocaleString() : '—'}</DetailField>
+              <DetailField label="Budget" id="detailBudget" style={{ ...FIELD_STYLE, fontWeight: 600 }}>{d ? '₹' + (Number(d.budget) || 0).toLocaleString('en-IN') : '—'}</DetailField>
               <DetailField label="Deadline" id="detailDeadline">{d ? d.deadline || '—' : '—'}</DetailField>
             </div>
             <div className="grid-2">
@@ -178,7 +185,7 @@ export default function SuperuserTasks() {
               <DetailField label="Worker" id="detailWorker">{d ? (dWorker ? dWorker.name : 'Unassigned') : '—'}</DetailField>
             </div>
             <div className="grid-2">
-              <DetailField label="Progress" id="detailProgress">{d ? d.progress + '%' : '—'}</DetailField>
+              <DetailField label="Progress" id="detailProgress">{d ? progressOf(Store, d) + '%' : '—'}</DetailField>
               <DetailField label="Created" id="detailCreated">{d ? d.createdAt || '—' : '—'}</DetailField>
             </div>
             <DetailField label="Description" id="detailDesc" style={{ ...FIELD_STYLE, lineHeight: 1.6, maxHeight: 120, overflowY: 'auto' }}>

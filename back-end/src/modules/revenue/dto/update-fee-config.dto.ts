@@ -38,4 +38,20 @@ export class UpdateFeeConfigDto {
   @ApiPropertyOptional({ example: [0.99, 4.99, 9.99, 14.99], description: 'Contract initiation fees by budget band' })
   @IsOptional()
   contractInitiationFees?: number[];
+
+  @ApiPropertyOptional({ example: 24, description: 'Hours after going live during which cancelling is free' })
+  @IsOptional() @IsNumber() @Min(0) @Max(720)
+  cancellationFreeHours?: number;
+
+  @ApiPropertyOptional({ example: 7, description: 'Days live during which the early cancellation rate applies' })
+  @IsOptional() @IsNumber() @Min(0) @Max(365)
+  cancellationEarlyDays?: number;
+
+  @ApiPropertyOptional({ example: 2, description: 'Cancellation fee (% of budget) inside the early window' })
+  @IsOptional() @IsNumber() @Min(0) @Max(50)
+  cancellationEarlyPercent?: number;
+
+  @ApiPropertyOptional({ example: 5, description: 'Cancellation fee (% of budget) after the early window' })
+  @IsOptional() @IsNumber() @Min(0) @Max(50)
+  cancellationLatePercent?: number;
 }

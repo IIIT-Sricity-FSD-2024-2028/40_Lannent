@@ -8,13 +8,12 @@
  * Expert Reviewer to arbitrate.
  */
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import ExpertPicker from '../components/ExpertPicker';
 import PageStyle from '../components/PageStyle';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../context/StoreContext';
-import { escapeHtml } from '../utils/helpers';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './Dispute.css?raw';
 
@@ -28,14 +27,39 @@ function showToast(msg, type = 'success') {
   setTimeout(() => t.remove(), 3200);
 }
 
-/** The milestone being disputed, as saved by the previous page. */
-function readTarget() {
+/** The milestone the previous page left in localStorage (older links). */
+function readSavedTarget() {
   try {
     return JSON.parse(localStorage.getItem('disputeTargetMilestone') || 'null');
   } catch (e) {
     console.warn('Could not get disputeTargetMilestone from localStorage', e);
     return null;
   }
+}
+
+/**
+ * The milestone being disputed, loaded from the real record.
+ *
+ * The page used to work from whatever object the previous page saved. The
+ * workroom saved its display copy, which has no `taskId` — so the project
+ * was never found, the reviewer list could not be narrowed to the project's
+ * category and listed everyone, and the title and amount came from that
+ * copy rather than the milestone. The id now travels in the URL
+ * (/dispute?milestoneId=…), and everything else is read from the store.
+ */
+function loadTarget(Store, milestoneId) {
+  const id = milestoneId || readSavedTarget()?.id;
+  const ms = id ? Store.getMilestoneById(id) : null;
+  if (!ms) return null;
+  const task = Store.getTaskById(ms.taskId);
+  return {
+    id: ms.id,
+    taskId: ms.taskId,
+    task,
+    title: ms.title || 'Untitled milestone',
+    amount: '₹' + (ms.budget || 0).toLocaleString('en-IN'),
+    status: ms.status,
+  };
 }
 
 // Read-only "Milestone" / "Amount" boxes
@@ -47,21 +71,30 @@ export default function Dispute() {
   usePageTitle('Raise Dispute — Lannent');
   const navigate = useNavigate();
   const session = Auth.getCurrentUser();
+  // Only clients raise disputes (the route is client-only too).
   const userRole = session?.role || 'client';
-  const workroomURL = userRole === 'worker' ? '/worker-workroom' : '/project-workroom';
+  const workroomURL = '/project-workroom';
 
-  const [target] = useState(readTarget);
+  const [searchParams] = useSearchParams();
+  const [target] = useState(() => loadTarget(Store, searchParams.get('milestoneId')));
+  const openDispute = target ? Store.getDisputes().find(d => d.milestoneId === target.id && d.status === 'open') : null;
+  const settled = target && ['completed', 'approved'].includes(target.status);
+  // There is only something to dispute once the worker has handed work in.
+  const notSubmitted = target && !['submitted', 'review'].includes(target.status);
+  const backURL = target ? `${workroomURL}?id=${target.taskId}` : workroomURL;
+  const targetTask = target ? target.task : null;
+  // The client chooses who arbitrates — any available reviewer covering the
+  // category, the project's auditor included. Forcing the auditor meant that
+  // if they were unavailable the list was empty and no dispute could be raised.
   const [reason, setReason] = useState('');
   const [details, setDetails] = useState('');
   const [outcome, setOutcome] = useState('');
   const [expertId, setExpertId] = useState(null);
+  const [reviewerFee, setReviewerFee] = useState('');
   const [showExpertError, setShowExpertError] = useState(false);
-
-  // Offer only reviewers who cover this project's category.
-  const targetTask = target && target.taskId ? Store.getTaskById(target.taskId) : null;
+  // The client pays the reviewer, so only the client proposes a fee.
 
   function submitDispute() {
-    const target = readTarget();
     if (!target) {
       showToast('No milestone selected for dispute.', 'warn');
       return;
@@ -72,26 +105,25 @@ export default function Dispute() {
       return;
     }
 
-    const taskIdFromTarget = target.taskId || null;
-    const task = taskIdFromTarget ? Store.getTaskById(taskIdFromTarget) : Store.getMilestoneById(target.id)?.taskId ? Store.getTaskById(Store.getMilestoneById(target.id).taskId) : null;
-    const workerId = target.workerId || (task ? task.workerId : null);
-    const worker = workerId ? Store.getUserById(workerId) : null;
+    // The client raises the dispute and pays the reviewer to arbitrate it.
+    const fee = parseFloat(reviewerFee);
+    if (!(fee >= 1)) {
+      showToast('Enter the fee you will pay the reviewer (at least ₹1).', 'warn');
+      return;
+    }
 
+    // The server takes the parties from the project; it only needs the ids.
     const disputeData = {
-      taskId: task?.id || target.taskId || null,
+      taskId: target.taskId,
       milestoneId: target.id,
-      project: task ? task.title : target.project || target.title || 'Project',
-      milestone: target.title || target.milestone || 'Milestone',
-      amount: target.amount ? (typeof target.amount === 'number' ? '$' + target.amount.toLocaleString() : target.amount) : '$0',
+      project: targetTask ? targetTask.title : 'Project',
+      milestone: target.title,
+      amount: target.amount,
       reason: reason.trim(),
       details: details.trim(),
       outcome: outcome.trim(),
-      raisedBy: session?.userId || null,
-      raisedByName: session?.name || session?.email || 'Client',
       expertId,
-      againstId: worker ? worker.id : target.workerId || null,
-      againstName: worker ? worker.name : target.workerName || target.worker || 'Worker',
-      status: 'open',
+      reviewerFee: fee,
     };
 
     if (!expertId) {
@@ -102,50 +134,49 @@ export default function Dispute() {
 
     try {
       Store.createDispute(disputeData);
-
-      // Notify all expert reviewers about the new dispute
-      const experts = Store.getUsers().filter(u => u.role === 'expert' && u.status === 'active');
-      experts.forEach(expert => {
-        Store.addNotification({
-          userId: expert.id,
-          type: 'dispute',
-          text: `New dispute raised: ${escapeHtml(disputeData.project)}`,
-          subtext: `${escapeHtml(disputeData.raisedByName)} raised a dispute — ${escapeHtml(disputeData.reason)}`,
-        });
-      });
-
-      // Also notify the worker being disputed
-      if (disputeData.againstId) {
-        Store.addNotification({
-          userId: disputeData.againstId,
-          type: 'dispute',
-          text: `A dispute has been raised against you`,
-          subtext: `${escapeHtml(disputeData.project)} — ${escapeHtml(disputeData.milestone)}: ${escapeHtml(disputeData.reason)}`,
-        });
-      }
-
-      showToast('Dispute submitted successfully.', 'success');
-      const redirectTaskId = disputeData.taskId ? `?id=${disputeData.taskId}` : '';
-      setTimeout(() => { navigate(`/project-milestone-board${redirectTaskId}`); }, 1300);
     } catch (e) {
-      console.error('Dispute submit error:', e);
-      showToast('Unable to submit dispute. Please try again.', 'error');
+      // The server's reason (already disputed, already paid, …), not a
+      // generic "try again".
+      showToast(e.message || 'Unable to submit dispute. Please try again.', 'error');
+      return;
     }
+
+    // Notifications render as text, so they are not HTML-escaped here —
+    // escaping them showed "&amp;" in the dropdown.
+    showToast('Dispute raised. Agree the reviewer\'s fee and fund it under Audit & Dispute Fees.', 'success');
+    // The client pays the reviewer, so they go where the fee is agreed.
+    const next = '/audit-offers';
+    setTimeout(() => { navigate(next); }, 1300);
   }
 
   return (
     <>
       <PageStyle css={pageCss} />
-      <DashboardLayout role={userRole} activePath={userRole === 'worker' ? '/worker-my-projects' : '/client-my-projects'} pageTitle="Raise Dispute" pageSubtitle="Dispute details">
+      <DashboardLayout role={userRole} activePath="/client-my-projects" pageTitle="Raise Dispute" pageSubtitle="Dispute a milestone the worker submitted">
         <div className="dispute-form" id="disputeBody" style={{ padding: 20, margin: '0 auto', maxWidth: 800 }}>
           {!target ? (
             <div style={{ padding: 20, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, textAlign: 'center' }}>
               No dispute target found. Return to your <Link to={workroomURL}>workroom</Link>.
             </div>
+          ) : openDispute ? (
+            <div style={{ padding: 20, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, textAlign: 'center' }}>
+              There is already an open dispute on <strong>{target.title}</strong>. Follow it under <Link to="/audit-offers">Audit &amp; Dispute Fees</Link>.
+            </div>
+          ) : settled ? (
+            <div style={{ padding: 20, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, textAlign: 'center' }}>
+              <strong>{target.title}</strong> has already been settled, so it can no longer be disputed.
+            </div>
+          ) : notSubmitted ? (
+            <div style={{ padding: 20, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, textAlign: 'center' }}>
+              The worker has not submitted <strong>{target.title}</strong> yet. You can dispute a milestone once its work has been handed in.
+            </div>
           ) : (
             <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, padding: 24 }}>
               <h2 style={{ fontSize: 18, marginBottom: 10 }}>Dispute Milestone</h2>
-              <p style={{ marginBottom: 18, color: 'var(--muted-foreground)' }}>Provide details to raise a dispute for the selected milestone.</p>
+              <p style={{ marginBottom: 18, color: 'var(--muted-foreground)' }}>
+                Tell the reviewer what is wrong with the submitted work. If they rule for you, the milestone goes back to the worker&apos;s To Do list
+                with their notes and its escrow stays held; if they rule for the worker, the milestone is paid.
+              </p>
 
               <div className="field-group">
                 <label>Milestone</label>
@@ -153,7 +184,7 @@ export default function Dispute() {
               </div>
               <div className="field-group">
                 <label>Amount</label>
-                <div id="disputeAmountField" style={READONLY_FIELD_STYLE}>{target.amount || '$0'}</div>
+                <div id="disputeAmountField" style={READONLY_FIELD_STYLE}>{target.amount || '₹0'}</div>
               </div>
               <div className="field-group">
                 <label htmlFor="disputeReason">Reason</label>
@@ -173,15 +204,14 @@ export default function Dispute() {
               </div>
               <div className="field-group">
                 <label htmlFor="disputeOutcome">Desired outcome</label>
-                <input id="disputeOutcome" className="field-input" placeholder="E.g., revision, partial refund, cancellation"
+                <input id="disputeOutcome" className="field-input" placeholder="E.g., fix the checkout bug and match the agreed design"
                        value={outcome} onChange={e => setOutcome(e.target.value)} />
               </div>
 
               <div className="field-group">
                 <label>Expert Reviewer</label>
                 <div style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 10 }}>
-                  Choose who arbitrates this dispute. Only reviewers covering this project's category are shown,
-                  and only they will be able to see the case.
+                  Choose who arbitrates this dispute. Only available reviewers covering this project&apos;s category are shown, and only the one you choose will see the case.
                 </div>
                 <div id="disputeExpertList">
                   <ExpertPicker
@@ -195,9 +225,23 @@ export default function Dispute() {
                 </div>
               </div>
 
+              <div className="field-group">
+                <label htmlFor="disputeReviewerFee">Reviewer fee you will pay</label>
+                <div style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 6 }}>
+                  You pay the reviewer to arbitrate the dispute. This is your offer — the reviewer can accept it or
+                  counter, and nothing is charged until you both agree and you fund it under Audit &amp; Dispute Fees. The platform keeps
+                  {` ${Store.Fees.rates().expertService.percent}%`} of the reviewer&apos;s fee.
+                </div>
+                <div style={{ position: 'relative', maxWidth: 220 }}>
+                  <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: 'var(--muted-foreground)' }}>₹</span>
+                  <input id="disputeReviewerFee" className="field-input" type="number" min="1" step="1" placeholder="150" style={{ paddingLeft: 26 }}
+                         value={reviewerFee} onChange={e => setReviewerFee(e.target.value)} />
+                </div>
+              </div>
+
               <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
                 <button className="btn-primary btn-action" onClick={submitDispute}>Submit Dispute</button>
-                <Link to={workroomURL} className="btn-outline btn-action">Back to Workroom</Link>
+                <Link to={backURL} className="btn-outline btn-action">Back to Workroom</Link>
               </div>
             </div>
           )}

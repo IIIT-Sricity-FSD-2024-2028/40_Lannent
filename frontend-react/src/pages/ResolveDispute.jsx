@@ -14,7 +14,6 @@ import PageStyle from '../components/PageStyle';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../context/StoreContext';
 import { useValidation } from '../context/ValidationContext';
-import { escapeHtml } from '../utils/helpers';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ResolveDispute.css?raw';
 
@@ -46,11 +45,12 @@ function buildCase(Store, raw) {
     project: raw.project || (task ? task.title : 'Unknown Project'),
     milestone: raw.milestone || (disputedMilestone ? disputedMilestone.title : 'Milestone'),
     caseId: raw.id,
-    issue: raw.reason ? raw.reason.substring(0, 60) + '...' : 'Dispute',
-    description: raw.reason || 'No description provided.',
-    status: raw.status === 'open' ? 'Open' : raw.status === 'resolved' ? 'Resolved' : 'Under Investigation',
+    issue: raw.reason || 'Dispute',
+    description: raw.details || raw.reason || 'No description provided.',
+    outcome: raw.outcome || '',
+    status: raw.status === 'open' ? 'Open' : raw.status === 'resolved' ? 'Resolved' : raw.status === 'withdrawn' ? 'Withdrawn' : raw.status === 'expired' ? 'Expired' : 'Under Investigation',
     severity: raw.severity || 'medium',
-    escrow: raw.amount || '$0',
+    escrow: raw.amount || '₹0',
     raisedDate: raised || 'Recently',
     raisedBy: raiser ? raiser.role.charAt(0).toUpperCase() + raiser.role.slice(1) : 'User',
     raisedByName: raiser ? raiser.name : (raw.raisedByName || 'Unknown'),
@@ -60,13 +60,13 @@ function buildCase(Store, raw) {
     respondentName: respondent ? respondent.name : (raw.againstName || 'Unknown'),
     respondentInitials: respondent ? respondent.avatar : '?',
     respondentColor: respondent ? respondent.avatarColor : '#10b981',
+    // Built from the records themselves — every step that actually happened.
     timeline: [
-      { dot: 'blue', time: raised || 'N/A', text: 'Task posted', sub: 'Project requirements defined.' },
-      { dot: 'green', time: '—', text: 'Work submitted', sub: 'Gig worker submitted deliverable for review.' },
-      { dot: 'orange', time: raised || 'N/A', text: 'Dispute raised', sub: 'Escrow frozen. Case assigned to Expert Reviewer.' },
-    ],
+      task && task.createdAt ? { dot: 'blue', time: fmtDate(task.createdAt), text: 'Project posted', sub: `Budget ₹${Number(task.budget || 0).toLocaleString('en-IN')} held in escrow.` } : null,
+      disputedMilestone && disputedMilestone.submittedAt ? { dot: 'green', time: fmtDate(disputedMilestone.submittedAt), text: 'Work submitted', sub: `${disputedMilestone.title} was handed in for review.` } : null,
+      { dot: 'orange', time: raised || '—', text: 'Dispute raised', sub: `${raiser ? raiser.name : raw.raisedByName || 'A party'} raised it; the milestone's escrow is frozen.` },
+    ].filter(Boolean),
     // The original never filled this list, so the files card always shows "0 files".
-    files: [],
   };
 }
 
@@ -153,7 +153,7 @@ function DeliverableBody({ milestone, work }) {
           })}
         </div>
       ) : <p style={MUTED_P}>No files were attached to this submission.</p>}
-      {milestone.submittedAt ? <div style={{ marginTop: 14, fontSize: 12.5, color: 'var(--muted-foreground)' }}>{`Submitted ${milestone.submittedAt} · milestone value $${milestone.budget}`}</div> : ''}
+      {milestone.submittedAt ? <div style={{ marginTop: 14, fontSize: 12.5, color: 'var(--muted-foreground)' }}>{`Submitted ${milestone.submittedAt} · milestone value ₹${milestone.budget}`}</div> : ''}
     </>
   );
 }
@@ -168,14 +168,17 @@ export default function ResolveDispute() {
   const disputeId = searchParams.get('id') || searchParams.get('disputeId');
 
   // Load real dispute from Store
+  // Only the dispute named in the link. Falling back to "the first open
+  // dispute" showed one case while the verdict form did nothing.
   const [d] = useState(() => {
-    let raw = disputeId ? Store.getDisputeById(disputeId) : null;
-    if (!raw) {
-      const all = Store.getDisputes();
-      raw = all.find(x => x.status === 'open') || all[0] || null;
-    }
+    const raw = disputeId ? Store.getDisputeById(disputeId) : null;
     return raw ? buildCase(Store, raw) : null;
   });
+  const engagement = d ? Store.getAuditRequests().find(a => a.id === d.raw.auditRequestId) : null;
+  const session = Auth.getCurrentUser();
+  const isOpen = d && d.raw.status === 'open';
+  const isMine = d && d.raw.expertId === session.userId;
+  const ready = engagement && engagement.status === 'in-progress';
   const [selectedVerdict, setSelectedVerdict] = useState('');
   const [note, setNote] = useState('');
   const [noteBorder, setNoteBorder] = useState('');            // '' = stylesheet default
@@ -184,10 +187,11 @@ export default function ResolveDispute() {
   if (!d) {
     return (
       <EmptyState role="expert" activePath="/expert-dispute-cases" pageTitle="Resolve Dispute"
-                  message="No dispute found." linkHref="/expert-dispute-cases" linkLabel="Go to Disputes" />
+                  message={disputeId ? 'This dispute could not be found, or it is not assigned to you.' : 'No dispute was selected.'}
+                  linkHref="/expert-dispute-cases" linkLabel="Go to Dispute Cases" />
     );
   }
-  const { raw, disputedMilestone, disputedWork } = d;
+  const { disputedMilestone, disputedWork } = d;
 
   /* submit */
   const submitVerdict = () => {
@@ -212,34 +216,25 @@ export default function ResolveDispute() {
     if (!valid) return;
 
     // Map verdict to store format
-    const verdictMap = { favour_worker: 'worker-favour', favour_client: 'client-favour', partial: 'split' };
+    const verdictMap = { favour_worker: 'worker-favour', favour_client: 'client-favour' };
     const storeVerdict = verdictMap[selectedVerdict] || selectedVerdict;
 
-    // Save to store
+    let result;
     try {
-      const session = Auth.getCurrentUser();
-      if (disputeId) {
-        Store.resolveDispute(disputeId, { verdict: storeVerdict, resolution: trimmed, expertId: session?.userId || 'u3' });
+      result = Store.resolveDispute(disputeId, { verdict: storeVerdict, resolution: trimmed });
+    } catch (e) {
+      Validate.toast(e.message, 'error');
+      return;
+    }
 
-        const verdictLabel = storeVerdict === 'worker-favour' ? 'in favour of the Worker' : storeVerdict === 'client-favour' ? 'in favour of the Client' : 'with a partial resolution';
-        // Notify the client (dispute raiser) and the respondent about the resolution
-        [raw.raisedBy, raw.againstId].filter(Boolean).forEach(userId => {
-          Store.addNotification({
-            userId,
-            type: 'dispute-resolved',
-            text: `Dispute resolved: ${escapeHtml(d.project)}`,
-            subtext: `Expert verdict ${verdictLabel} — ${escapeHtml(d.milestone)}`,
-          });
-        });
-      }
-    } catch (e) { console.warn('Store save failed', e); }
-
+    const fee = result && result.reviewerPayout && result.reviewerPayout.net
+      ? ` Your fee of ₹${Number(result.reviewerPayout.net).toFixed(2)} has been paid to your wallet.` : '';
+    const workerName = d.raw.raisedBy === disputedMilestone?.workerId ? d.raisedByName : d.respondentName;
     const msgs = {
-      favour_worker: `✓ Verdict submitted. Escrow of ${d.escrow} released to ${d.respondentName}.`,
-      favour_client: `✓ Verdict submitted. Escrow returned to client. Worker notified to revise.`,
-      partial: `✓ Partial resolution submitted. Escrow split and worker notified.`,
+      favour_worker: `Verdict recorded. ${d.escrow} released to ${workerName}.`,
+      favour_client: `Verdict recorded. The milestone goes back to ${workerName}'s To Do list with your notes; its ${d.escrow} stays in escrow.`,
     };
-    Validate.toast(msgs[selectedVerdict], 'success');
+    Validate.toast(msgs[selectedVerdict] + fee, 'success');
     setTimeout(() => { navigate('/expert-dispute-cases'); }, 2800);
   };
 
@@ -256,12 +251,12 @@ export default function ResolveDispute() {
             <Icon name="info" style={{ width: 15, height: 15 }} /> What is a Dispute on Lannent?
           </div>
           <div className="explain-body">
-            A dispute is a formal conflict raised by either the <strong>Client</strong> or the <strong>Gig Worker</strong> when they cannot agree on a milestone outcome. Common triggers include:
+            A dispute is raised by the <strong>Client</strong> when they do not accept a milestone the <strong>Gig Worker</strong> has submitted — for example the deliverable misses quality standards, features are missing, or it does not match the brief. The client pays your fee.
+            Once raised, <strong>the milestone's escrow is frozen</strong> and the case comes to you. Your verdict is <strong>binding</strong>:
             <ul>
-              <li><strong>Client-raised:</strong> Deliverable does not meet quality standards, performance benchmarks not met, features are missing, or the deadline was breached.</li>
-              <li><strong>Worker-raised:</strong> Scope was expanded beyond the original agreement, an approved milestone payment was not released, or additional work was requested without compensation.</li>
+              <li><strong>In favour of the worker:</strong> the work is accepted and the milestone's escrow is paid to the worker.</li>
+              <li><strong>In favour of the client:</strong> the milestone goes back to the worker's To Do list with your notes, exactly like a revision request. Its escrow stays held until the reworked submission is approved.</li>
             </ul>
-            Once raised, <strong>escrow funds are frozen</strong> and the case is escalated to an Expert Reviewer. The Expert's verdict is <strong>binding</strong> — a resolution in favour of the Client may trigger a rework request; in favour of the Worker, funds are released immediately.
           </div>
         </div>
 
@@ -294,8 +289,12 @@ export default function ResolveDispute() {
                   <InfoCell label="Issue Type">{d.issue}</InfoCell>
                   <InfoCell label="Escrow Held" valueStyle={{ color: '#10b981', fontWeight: 700 }}>{d.escrow}</InfoCell>
                 </div>
-                <div style={{ ...SMALL_LABEL, marginBottom: 8 }}>Dispute Description</div>
+                <div style={{ ...SMALL_LABEL, marginBottom: 8 }}>What happened</div>
                 <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--foreground)' }}>{d.description}</p>
+                {d.outcome ? <>
+                  <div style={{ ...SMALL_LABEL, marginTop: 14, marginBottom: 8 }}>Outcome requested</div>
+                  <p style={{ fontSize: 14, lineHeight: 1.65 }}>{d.outcome}</p>
+                </> : null}
               </div>
             </div>
 
@@ -335,14 +334,6 @@ export default function ResolveDispute() {
               </div>
             </div>
 
-            {/* Files Submitted by Gig Worker */}
-            <div className="rc">
-              <CardHead icon="folder-open" iconBg="#faf5ff" iconColor="#a855f7" title="Files Submitted by Gig Worker">
-                {' '}
-                <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted-foreground)' }}>{`${d.files.length} files`}</span>
-              </CardHead>
-              <div className="rc-body"></div>
-            </div>
 
           </div>
 
@@ -359,7 +350,7 @@ export default function ResolveDispute() {
                   <div className="escrow-sub">Held pending Expert verdict</div>
                 </div>
                 <p style={{ fontSize: 12, color: 'var(--muted-foreground)', lineHeight: 1.55 }}>
-                  Per platform rules, funds are <strong>never released</strong> while a dispute is active. Your verdict will trigger an automatic escrow action — release to the worker or return to client.
+                  Per platform rules, funds are <strong>never released</strong> while a dispute is active. Your verdict either pays them to the worker or keeps them held while the worker reworks the milestone.
                 </p>
               </div>
             </div>
@@ -368,14 +359,22 @@ export default function ResolveDispute() {
             <div className="rc">
               <CardHead icon="gavel" iconBg="#eef2ff" iconColor="#6366f1" title="Issue Your Verdict" />
               <div className="rc-body">
-                <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 14, lineHeight: 1.5 }}>Select a resolution outcome. Your decision is <strong>binding</strong> and will be logged against this case.</p>
+                {!isOpen ? (
+                  <p style={{ fontSize: 13, lineHeight: 1.55 }}>This dispute has already been resolved. <Link to={`/expert-report-dispute?id=${d.caseId}`}>View the resolution</Link>.</p>
+                ) : !isMine ? (
+                  <p style={{ fontSize: 13, lineHeight: 1.55 }}>This dispute is assigned to another reviewer.</p>
+                ) : !ready ? (
+                  <p style={{ fontSize: 13, lineHeight: 1.55 }}>
+                    Before you give a verdict, agree your fee, have it funded and accept the engagement.{' '}
+                    {engagement ? <Link to={`/expert-audit-preview?id=${engagement.id}`}>Open the fee negotiation</Link> : null}
+                  </p>
+                ) : <>
+                <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 14, lineHeight: 1.5 }}>Select a resolution outcome. Your decision is <strong>binding</strong>, moves the milestone's escrow, and pays your fee.</p>
 
                 <VerdictOption id="v1" value="favour_worker" selected={selectedVerdict} onSelect={setSelectedVerdict}
                                title="Rule in favour of Gig Worker" desc={`Work meets requirements. Release ${d.escrow} escrow to worker immediately.`} />
                 <VerdictOption id="v2" value="favour_client" selected={selectedVerdict} onSelect={setSelectedVerdict}
-                               title="Rule in favour of Client" desc="Work does not meet requirements. Return escrow to client. Worker must revise and resubmit." />
-                <VerdictOption id="v3" value="partial" selected={selectedVerdict} onSelect={setSelectedVerdict}
-                               title="Split the milestone" desc={`Partial delivery. Half of ${d.escrow} is released to the worker and half returned to the client.`} />
+                               title="Rule in favour of Client" desc={`Work does not meet requirements. The milestone goes back to the worker's To Do list with your notes; ${d.escrow} stays in escrow.`} />
 
                 <div style={{ marginTop: 16 }}>
                   <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>Resolution Notes <span style={{ color: 'var(--muted-foreground)', fontWeight: 400 }}>(required)</span></label>
@@ -394,6 +393,7 @@ export default function ResolveDispute() {
                     <Icon name="arrow-left" style={{ width: 14, height: 14 }} /> Back to Disputes
                   </Link>
                 </div>
+                </>}
               </div>
             </div>
 

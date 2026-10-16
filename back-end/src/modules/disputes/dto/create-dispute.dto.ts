@@ -1,4 +1,5 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, MinLength, MaxLength } from 'class-validator';
+import { IsMoney } from '../../../common/validation/money';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateDisputeDto {
@@ -10,27 +11,37 @@ export class CreateDisputeDto {
   @IsOptional() @IsString()
   milestoneId?: string;
 
-  @ApiProperty({ example: 'u1' })
-  @IsString()
-  raisedBy: string;
+  /** Ignored — the caller raises the dispute. */
+  @ApiPropertyOptional({ example: 'u1' })
+  @IsOptional() @IsString()
+  raisedBy?: string;
 
   @ApiPropertyOptional({ example: 'James Client' })
   @IsOptional() @IsString()
   raisedByName?: string;
 
-  @ApiProperty({ example: 'u5' })
-  @IsString()
-  againstId: string;
+  /** Ignored — always the other party on the project. */
+  @ApiPropertyOptional({ example: 'u5' })
+  @IsOptional() @IsString()
+  againstId?: string;
 
   @ApiPropertyOptional({ example: 'Sarah Johnson' })
   @IsOptional() @IsString()
   againstName?: string;
 
-  @ApiProperty({ example: 'Backend integration incomplete' })
-  @IsString()
+  @ApiProperty({ example: 'Incomplete work' })
+  @IsString() @MinLength(1) @MaxLength(200)
   reason: string;
 
-  @ApiPropertyOptional({ example: '$500' })
+  @ApiPropertyOptional({ example: 'The payment endpoints return the wrong format.' })
+  @IsOptional() @IsString() @MaxLength(5000)
+  details?: string;
+
+  @ApiPropertyOptional({ example: 'Revision of the API responses' })
+  @IsOptional() @IsString() @MaxLength(500)
+  outcome?: string;
+
+  @ApiPropertyOptional({ example: '₹500' })
   @IsOptional() @IsString()
   amount?: string;
 
@@ -45,4 +56,8 @@ export class CreateDisputeDto {
   @ApiPropertyOptional({ example: 'u3', description: 'The Expert Reviewer the client selected to arbitrate' })
   @IsOptional() @IsString()
   expertId?: string;
+
+  @ApiProperty({ example: 150, description: "What the person raising the dispute offers to pay the reviewer" })
+  @IsMoney()
+  reviewerFee: number;
 }

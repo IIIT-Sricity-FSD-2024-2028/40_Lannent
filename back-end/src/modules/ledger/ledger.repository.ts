@@ -21,9 +21,13 @@ export interface RevenueEntry {
 export interface EscrowBalance {
   /** Held for milestone payments to the worker. */
   projectHeld: number;
-  /** Held for the expert reviewer's agreed audit fee. */
+  /** Held for the expert reviewer's agreed technical-audit fee. */
   auditHeld: number;
+  /** Held for the reviewer's agreed fee for arbitrating a dispute. */
+  disputeHeld: number;
 }
+
+export type EscrowBucket = 'project' | 'audit' | 'dispute';
 
 /**
  * LedgerRepository — in-memory store for the things the app never tracked:
@@ -51,7 +55,7 @@ export class LedgerRepository {
   // ── Escrow ────────────────────────────────────────────────────────────────
   getEscrow(taskId: string): EscrowBalance {
     if (!this.escrowByTask[taskId]) {
-      this.escrowByTask[taskId] = { projectHeld: 0, auditHeld: 0 };
+      this.escrowByTask[taskId] = { projectHeld: 0, auditHeld: 0, disputeHeld: 0 };
     }
     return this.escrowByTask[taskId];
   }
@@ -68,6 +72,24 @@ export class LedgerRepository {
     return e.auditHeld;
   }
 
+  addDisputeHeld(taskId: string, delta: number): number {
+    const e = this.getEscrow(taskId);
+    e.disputeHeld = round2(e.disputeHeld + delta);
+    return e.disputeHeld;
+  }
+
+  /** Adds to one bucket of a task's escrow. */
+  addHeld(taskId: string, bucket: EscrowBucket, delta: number): number {
+    if (bucket === 'project') return this.addProjectHeld(taskId, delta);
+    if (bucket === 'dispute') return this.addDisputeHeld(taskId, delta);
+    return this.addAuditHeld(taskId, delta);
+  }
+
+  held(taskId: string, bucket: EscrowBucket): number {
+    const e = this.getEscrow(taskId);
+    return bucket === 'project' ? e.projectHeld : bucket === 'dispute' ? e.disputeHeld : e.auditHeld;
+  }
+
   allEscrow(): Record<string, EscrowBalance> {
     return this.escrowByTask;
   }
@@ -75,7 +97,7 @@ export class LedgerRepository {
   /** Total value currently held across every task. */
   totalHeld(): number {
     return round2(
-      Object.values(this.escrowByTask).reduce((a, e) => a + e.projectHeld + e.auditHeld, 0),
+      Object.values(this.escrowByTask).reduce((a, e) => a + e.projectHeld + e.auditHeld + e.disputeHeld, 0),
     );
   }
 
@@ -158,6 +180,16 @@ export class LedgerRepository {
       } else if (tx.type === 'audit-release') {
         this.addAuditHeld(tx.taskId, -gross);
         if (tx.auditRequestId) this.markAuditPaid(tx.auditRequestId);
+      } else if (tx.type === 'dispute-escrow-lock') {
+        this.addDisputeHeld(tx.taskId, gross);
+      } else if (tx.type === 'dispute-fee-release') {
+        this.addDisputeHeld(tx.taskId, -gross);
+        if (tx.auditRequestId) this.markAuditPaid(tx.auditRequestId);
+      } else if (tx.type === 'cancellation-fee') {
+        this.addHeld(tx.taskId, 'project', -gross);
+      } else if (tx.type === 'refund') {
+        // Seed refunds name the bucket they came out of; default is project.
+        this.addHeld(tx.taskId, (tx.bucket as EscrowBucket) || 'project', -gross);
       }
 
       // Seeded rows that recorded a fee represent commission the platform
@@ -169,7 +201,7 @@ export class LedgerRepository {
           amount: tx.feeAmount,
           baseAmount: gross,
           rate: gross > 0 ? Math.round((tx.feeAmount / gross) * 1000) / 10 : 0,
-          fromUserId: tx.toId,
+          fromUserId: tx.type === 'platform-fee' ? tx.fromId : tx.toId,
           taskId: tx.taskId || null,
           milestoneId: tx.milestoneId || null,
         });

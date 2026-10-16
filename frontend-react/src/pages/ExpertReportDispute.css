@@ -1,7 +1,7 @@
     /* ── Layout ── */
     .report-layout {
       display: grid;
-      grid-template-columns: 1fr 300px;
+      grid-template-columns: minmax(0,1fr) 300px;
       gap: 20px;
       align-items: start;
     }
@@ -83,7 +83,6 @@
     }
     .verdict-worker   { background:#d1fae5; border-color:#6ee7b7; }
     .verdict-client   { background:#dbeafe; border-color:#93c5fd; }
-    .verdict-split    { background:#fff7ed; border-color:#fdba74; }
     .verdict-fix      { background:#f3f4f6; border-color:#d1d5db; }
 
     .verdict-icon-wrap {
@@ -94,7 +93,6 @@
     }
     .verdict-worker .verdict-icon-wrap { background:#10b981; }
     .verdict-client .verdict-icon-wrap { background:#3b82f6; }
-    .verdict-split .verdict-icon-wrap  { background:#f59e0b; }
     .verdict-fix .verdict-icon-wrap    { background:#6b7280; }
 
     .verdict-label {
@@ -104,13 +102,11 @@
     }
     .verdict-worker .verdict-label { color:#065f46; }
     .verdict-client .verdict-label { color:#1d4ed8; }
-    .verdict-split  .verdict-label { color:#92400e; }
     .verdict-fix    .verdict-label { color:#374151; }
 
     .verdict-text { font-size: 14px; font-weight: 600; }
     .verdict-worker .verdict-text { color:#065f46; }
     .verdict-client .verdict-text { color:#1d4ed8; }
-    .verdict-split  .verdict-text { color:#92400e; }
     .verdict-fix    .verdict-text { color:#374151; }
 
     /* ── Party cards ── */

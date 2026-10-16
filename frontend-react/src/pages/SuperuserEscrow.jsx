@@ -2,8 +2,9 @@
  * LANNENT — SuperuserEscrow (Escrow & Finance)
  * Converted from front-end/pages/superuser-escrow.html.
  *
- * Platform money overview for the super user: six finance totals and a
- * searchable, filterable ledger of every transaction.
+ * Platform money overview for the super user: finance totals read from the
+ * ledger and the transaction log, and a searchable, filterable ledger of
+ * every transaction (newest first).
  */
 import { useState } from 'react';
 import DashboardLayout from '../components/DashboardLayout';
@@ -20,11 +21,17 @@ const TYPE_CONFIG = {
   'deposit':           { bg: '#faf5ff', color: '#a855f7', icon: 'arrow-down-circle', label: 'Deposit' },
   'refund':            { bg: '#fff7ed', color: '#f97316', icon: 'rotate-ccw', label: 'Refund' },
   'withdrawal':        { bg: '#fef2f2', color: '#ef4444', icon: 'arrow-up-circle', label: 'Withdrawal' },
-  'dispute-release':   { bg: '#f5f3ff', color: '#8b5cf6', icon: 'scale', label: 'Dispute Release' },
   'audit-escrow-lock': { bg: '#eef2ff', color: '#6366f1', icon: 'lock', label: 'Audit Escrow' },
   'audit-release':     { bg: '#ecfeff', color: '#0891b2', icon: 'clipboard-check', label: 'Audit Payout' },
+  'dispute-escrow-lock': { bg: '#fffbeb', color: '#d97706', icon: 'lock', label: 'Dispute Escrow' },
+  'dispute-fee-release': { bg: '#f5f3ff', color: '#8b5cf6', icon: 'scale', label: 'Dispute Payout' },
   'platform-fee':      { bg: '#f0fdfa', color: '#0d9488', icon: 'percent', label: 'Platform Fee' },
+  'cancellation-fee':  { bg: '#fff1f2', color: '#e11d48', icon: 'x-circle', label: 'Cancellation Fee' },
 };
+
+/** "escrow" and "platform" are ledger accounts, not users. */
+const ACCOUNT_NAMES = { escrow: 'Escrow', platform: 'Platform', external: 'Bank / card' };
+const money = n => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /** One finance summary tile. */
 function FinanceCard({ label, value, color, sub }) {
@@ -44,7 +51,10 @@ function TransactionRow({ tx }) {
   const to = Store.getUserById(tx.toId);
   const task = Store.getTaskById(tx.taskId);
   const tc = TYPE_CONFIG[tx.type] || { bg: '#f1f5f9', color: '#64748b', icon: 'circle', label: tx.type };
-  const isCredit = tx.type === 'deposit' || tx.type === 'milestone-release';
+  const nameOf = (u, id) => u?.name || ACCOUNT_NAMES[id] || id || '—';
+  // Payout rows record what the recipient netted; show the gross and the fee too.
+  const grossAmt = tx.grossAmount != null ? tx.grossAmount : tx.amount;
+  const fee = tx.type !== 'platform-fee' && tx.type !== 'cancellation-fee' ? Number(tx.feeAmount || 0) : 0;
 
   return (
     <tr>
@@ -55,17 +65,18 @@ function TransactionRow({ tx }) {
           </div>
           <div>
             <div style={{ fontWeight: 500, fontSize: 13 }}>{tx.description}</div>
-            <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{tx.createdAt}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{`${tc.label} · ${tx.createdAt ? String(tx.createdAt).slice(0, 10) : ''}`}</div>
           </div>
         </div>
       </td>
-      <td style={{ fontSize: 13 }}>{from?.name || tx.fromId}</td>
-      <td style={{ fontSize: 13 }}>{to?.name || tx.toId}</td>
-      <td style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>{task?.title || '—'}</td>
-      <td className={isCredit ? 'amount-credit' : 'amount-debit'}>
-        {`${isCredit ? '+' : '-'}$${tx.amount.toLocaleString()}`}
+      <td style={{ fontSize: 13 }}>{nameOf(from, tx.fromId)}</td>
+      <td style={{ fontSize: 13 }}>{nameOf(to, tx.toId)}</td>
+      <td style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>{task?.title || (tx.taskId ? 'Deleted project' : '—')}</td>
+      <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+        {money(grossAmt)}
+        {fee > 0 ? <div style={{ fontSize: 11, fontWeight: 400, color: 'var(--muted-foreground)' }}>{`${money(fee)} fee · ${money(tx.netAmount != null ? tx.netAmount : tx.amount)} net`}</div> : null}
       </td>
-      <td><span className="badge badge-green">{tx.status}</span></td>
+      <td><span className={`badge ${tx.status === 'completed' ? 'badge-green' : 'badge-orange'}`}>{tx.status}</span></td>
     </tr>
   );
 }
@@ -86,23 +97,26 @@ export default function SuperuserEscrow() {
   const platformRevenue = ledger.totalRevenue;
 
   const gross = t => (t.grossAmount != null ? t.grossAmount : t.amount);
-  const totalReleased = allTx.filter(t => t.type === 'milestone-release').reduce((s, t) => s + gross(t), 0);
-  const totalDeposits = allTx.filter(t => t.type === 'deposit').reduce((s, t) => s + gross(t), 0);
-  const totalWithdrawn = allTx.filter(t => t.type === 'withdrawal').reduce((s, t) => s + gross(t), 0);
-  // platform-fee rows restate fees already counted inside other rows.
-  const totalVolume = allTx.filter(t => t.type !== 'platform-fee').reduce((s, t) => s + gross(t), 0);
+  const sumOf = (...types) => allTx.filter(t => types.includes(t.type)).reduce((s, t) => s + gross(t), 0);
+  const totalReleased = sumOf('milestone-release');
+  const reviewerPaid = sumOf('audit-release', 'dispute-fee-release');
+  const totalRefunded = sumOf('refund');
+  const totalDeposits = sumOf('deposit');
+  const totalWithdrawn = sumOf('withdrawal');
+  // The old "Total Volume" added every row together, so each escrowed dollar
+  // was counted twice (once locked, once released) — not a real figure.
 
   // Search + type filter
   const q = search.toLowerCase();
-  const filtered = allTx.filter(tx => {
+  const filtered = [...allTx].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).filter(tx => {
     const from = Store.getUserById(tx.fromId);
     const to = Store.getUserById(tx.toId);
     const task = Store.getTaskById(tx.taskId);
     const matchSearch = !q ||
-      (from?.name || tx.fromId).toLowerCase().includes(q) ||
-      (to?.name || tx.toId).toLowerCase().includes(q) ||
+      String(from?.name || tx.fromId || '').toLowerCase().includes(q) ||
+      String(to?.name || tx.toId || '').toLowerCase().includes(q) ||
       (task?.title || '').toLowerCase().includes(q) ||
-      tx.description.toLowerCase().includes(q);
+      (tx.description || '').toLowerCase().includes(q);
     const matchType = typeFilter === 'all' || tx.type === typeFilter;
     return matchSearch && matchType;
   });
@@ -112,12 +126,13 @@ export default function SuperuserEscrow() {
       <PageStyle css={pageCss} />
       <DashboardLayout role="superuser" activePath="/superuser-escrow" pageTitle="Escrow & Finance" pageSubtitle="Monitor all platform transactions and escrow activity">
         <div className="finance-grid">
-          <FinanceCard label="Escrow Balance" value={`$${escrowBalance.toLocaleString()}`} color="#6366f1" sub="Currently locked in escrow" />
-          <FinanceCard label="Total Released" value={`$${totalReleased.toLocaleString()}`} color="#10b981" sub="Paid to workers" />
-          <FinanceCard label="Total Deposits" value={`$${totalDeposits.toLocaleString()}`} color="#a855f7" sub="Client top-ups" />
-          <FinanceCard label="Total Withdrawn" value={`$${totalWithdrawn.toLocaleString()}`} color="#ef4444" sub="Paid out to users" />
-          <FinanceCard label="Platform Revenue" value={`$${platformRevenue.toLocaleString()}`} color="#0d9488" sub="Fees earned all-time" />
-          <FinanceCard label="Total Volume" value={`$${totalVolume.toLocaleString()}`} sub="All-time transaction value" />
+          <FinanceCard label="Held in Escrow" value={money(escrowBalance)} color="#6366f1" sub="Project, audit and dispute escrow right now" />
+          <FinanceCard label="Paid to Workers" value={money(totalReleased)} color="#10b981" sub="Milestone payouts (gross)" />
+          <FinanceCard label="Paid to Reviewers" value={money(reviewerPaid)} color="#8b5cf6" sub="Audit and dispute fees (gross)" />
+          <FinanceCard label="Refunded to Clients" value={money(totalRefunded)} color="#f97316" sub="Cancellations, unused budget, declined reviews" />
+          <FinanceCard label="Client Deposits" value={money(totalDeposits)} color="#a855f7" sub="Wallet top-ups" />
+          <FinanceCard label="Withdrawn" value={money(totalWithdrawn)} color="#ef4444" sub="Paid out to users' banks" />
+          <FinanceCard label="Platform Revenue" value={money(platformRevenue)} color="#0d9488" sub="All fees earned, incl. cancellation fees" />
         </div>
 
         <div className="su-toolbar">
@@ -125,9 +140,7 @@ export default function SuperuserEscrow() {
           {' '}
           <select className="su-filter" id="txTypeFilter" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
             <option value="all">All Types</option>
-            <option value="escrow-lock">Escrow Lock</option>
-            <option value="milestone-release">Milestone Release</option>
-            <option value="deposit">Deposit</option>
+            {Object.entries(TYPE_CONFIG).map(([value, c]) => <option key={value} value={value}>{c.label}</option>)}
           </select>
         </div>
 

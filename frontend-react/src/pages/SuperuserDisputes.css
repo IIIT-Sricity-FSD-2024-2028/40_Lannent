@@ -9,8 +9,6 @@
     .btn-worker:hover { background:#bbf7d0; }
     .btn-client { padding:8px 16px; border-radius:10px; background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; font-size:13px; font-weight:500; cursor:pointer; }
     .btn-client:hover { background:#bfdbfe; }
-    .btn-split { padding:8px 16px; border-radius:10px; background:#faf5ff; border:1px solid #e9d5ff; color:#6b21a8; font-size:13px; font-weight:500; cursor:pointer; }
-    .btn-split:hover { background:#e9d5ff; }
     .resolution-box { margin-top:12px; padding:12px 16px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; font-size:13px; color:#166534; line-height:1.5; }
     .su-toolbar { display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
     .su-filter { padding:10px 14px; border:1px solid var(--border); border-radius:12px; background:var(--background); font-size:14px; font-family:inherit; cursor:pointer; }
