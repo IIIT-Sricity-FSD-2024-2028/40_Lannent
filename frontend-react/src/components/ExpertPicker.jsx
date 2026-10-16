@@ -15,24 +15,37 @@ import { useStore } from '../context/StoreContext';
 
 /** Active experts who review the given category (all of them when no category). */
 export function matchingExperts(Store, category) {
-  const experts = (Store.getExperts && Store.getExperts()) || [];
+  // A reviewer who has marked themselves unavailable is not offered for new cases.
+  const experts = ((Store.getExperts && Store.getExperts()) || [])
+    .filter(e => !(e.availability && typeof e.availability === 'object' && e.availability.status === 'Unavailable'));
   if (!category) return experts;
   return experts.filter(e => Array.isArray(e.domains) && e.domains.includes(category));
 }
 
-export default function ExpertPicker({ category, selectedId, onChange }) {
+/**
+ * `lockedId` shows only that reviewer, pre-selected and not changeable — for
+ * a dispute on a project whose client already chose its reviewer.
+ */
+export default function ExpertPicker({ category, selectedId, onChange, lockedId, excludeIds = [] }) {
   const Store = useStore();
   const [profileId, setProfileId] = useState(null);       // last profile shown (the modal stays in the DOM once opened)
   const [profileOpen, setProfileOpen] = useState(false);
 
-  const list = matchingExperts(Store, category);
+  const list = lockedId
+    ? matchingExperts(Store, null).filter(e => e.id === lockedId)
+    : matchingExperts(Store, category).filter(e => !excludeIds.includes(e.id));
 
   // A reviewer selected for a different category is no longer valid.
   useEffect(() => {
-    if (selectedId && !list.some(e => e.id === selectedId)) onChange(null);
+    if (lockedId) {
+      if (selectedId !== lockedId && list.length) onChange(lockedId);
+    } else if (selectedId && !list.some(e => e.id === selectedId)) {
+      onChange(null);
+    }
   });
 
   function select(id) {
+    if (lockedId) return;
     onChange(selectedId === id ? null : id);
   }
 
@@ -112,7 +125,7 @@ function ExpertProfileModal({ expert: e, open, onClose, onSelect }) {
             <div className="xp-stat-k">Reviews completed</div>
           </div>
           <div>
-            <div className="xp-stat-v">{e.hourlyRate ? '$' + e.hourlyRate : '—'}</div>
+            <div className="xp-stat-v">{e.hourlyRate ? '₹' + e.hourlyRate : '—'}</div>
             <div className="xp-stat-k">Hourly rate</div>
           </div>
           <div>

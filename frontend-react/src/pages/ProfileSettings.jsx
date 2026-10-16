@@ -17,6 +17,9 @@ import { useValidation } from '../context/ValidationContext';
 import useFieldErrors from '../hooks/useFieldErrors';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ProfileSettings.css?raw';
+import AvatarColorPicker from '../components/AvatarColorPicker';
+import ChangePasswordCard from '../components/ChangePasswordCard';
+import { syncSessionFromUser, splitPhone } from '../utils/helpers';
 
 const INDUSTRIES = ['Technology', 'Finance', 'Healthcare', 'Education', 'E-commerce', 'Other'];
 const COMPANY_SIZES = ['1–10 employees', '11–50 employees', '50–200 employees', '200–500 employees', '500+ employees'];
@@ -40,24 +43,7 @@ function IconField({ icon, children }) {
   );
 }
 
-/** Avatar / logo row with the camera button and an upload button. */
-function AvatarRow({ avatar, title, hint, uploadLabel }) {
-  return (
-    <div className="avatar-row">
-      <div className="avatar-wrap">
-        {avatar}
-        <button className="avatar-cam-btn"><Icon name="camera" /></button>
-      </div>
-      <div className="avatar-meta">
-        <p>{title}</p>
-        <small>{hint}</small>
-        <button className="btn-outline-sm" style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, fontSize: 13 }}>
-          <Icon name="upload" style={{ width: 14, height: 14 }} /> {uploadLabel}
-        </button>
-      </div>
-    </div>
-  );
-}
+
 
 export default function ProfileSettings() {
   const Store = useStore();
@@ -78,14 +64,16 @@ export default function ProfileSettings() {
     avatarColor: user.avatarColor || 'linear-gradient(135deg, #6366f1, #4f46e5)',
   } : null;
   const company = (user && user.companyDetails) || {
-    name: '', industry: 'Technology', website: '', size: '50-200 employees', location: '',
+    name: user?.company || '', industry: 'Technology', website: '', size: COMPANY_SIZES[0], location: user?.location || '',
   };
 
   const [activeTab, setActiveTab] = useState('profile');
-  const [initials, setInitials] = useState(() => ((profile?.name.substring(0, 2) || 'AM').toUpperCase()));
+  const [initials, setInitials] = useState(() => (user?.avatar || '?'));
+  const [avatarColor, setAvatarColor] = useState(() => profile?.avatarColor);
   const [bioLength, setBioLength] = useState(() => (profile ? profile.bio.length : 0));
-  const [countryCode, setCountryCode] = useState('+91');
-  const [phone, setPhone] = useState(() => (profile ? profile.phone : ''));
+  const [countryCode, setCountryCode] = useState(() => splitPhone(user?.phone, user?.phoneCountryCode).code);
+  const [phone, setPhone] = useState(() => splitPhone(user?.phone, user?.phoneCountryCode).digits);
+  const [saving, setSaving] = useState(false);
   const [phoneSaveError, setPhoneSaveError] = useState('');
   const { errors, clearError, validateForm, errorStyle } = useFieldErrors();
   const formRef = useRef(null);
@@ -149,19 +137,19 @@ export default function ProfileSettings() {
     // Combine country code + phone for storage
     const fullPhone = phoneVal ? (countryCode + phoneVal) : '';
 
-    // Save to store
+    setSaving(true);
+    let saved;
     try {
-      const current = Auth.getCurrentUser();
-      if (current) {
-        Store.updateUser(current.userId, { name, email, phone: fullPhone, phoneCountryCode: countryCode, location, bio });
-        // Update session
-        const updated = { ...current, name, email };
-        localStorage.setItem('lannent_session', JSON.stringify(updated));
-      }
-    } catch (e) { console.warn('Store update failed', e); }
-
-    Validate.toast('Profile saved successfully!', 'success');
-    setInitials((name.substring(0, 2) || 'AM').toUpperCase());
+      saved = Store.updateUser(user.id, { name, email, phone: fullPhone, phoneCountryCode: phoneVal ? countryCode : '', location, bio, avatarColor });
+    } catch (e) {
+      setSaving(false);
+      Validate.toast(e.message, 'error');
+      return;
+    }
+    setSaving(false);
+    syncSessionFromUser(saved);
+    setInitials(saved.avatar);
+    Validate.toast('Profile saved.', 'success');
   }
 
   function saveCompanyChanges() {
@@ -171,14 +159,17 @@ export default function ProfileSettings() {
     const size = field('c-size')?.value || '';
     const location = field('c-location')?.value.trim() || '';
 
+    if (website && !/^https?:\/\/\S+\.\S+/i.test(website)) {
+      Validate.toast('Enter the website as a full address, e.g. https://example.com', 'error');
+      return;
+    }
     try {
-      const current = Auth.getCurrentUser();
-      if (current) {
-        Store.updateUser(current.userId, { companyDetails: { name, industry, website, size, location } });
-      }
-    } catch (e) { console.warn('Store update failed', e); }
-
-    Validate.toast('Company details saved successfully!', 'success');
+      Store.updateUser(user.id, { companyDetails: { name, industry, website, size, location } });
+    } catch (e) {
+      Validate.toast(e.message, 'error');
+      return;
+    }
+    Validate.toast('Company details saved.', 'success');
   }
 
   const tabClass = tab => (activeTab === tab ? ' active' : '');
@@ -197,6 +188,9 @@ export default function ProfileSettings() {
             <button className={'snav-btn' + tabClass('company')} data-tab="company" onClick={() => setActiveTab('company')}>
               <Icon name="building-2" /> Company Details
             </button>
+            <button className={'snav-btn' + tabClass('security')} data-tab="security" onClick={() => setActiveTab('security')}>
+              <Icon name="lock" /> Password &amp; Security
+            </button>
           </nav>
 
           {/* ══ Right Content ══ */}
@@ -208,8 +202,7 @@ export default function ProfileSettings() {
               <div className="settings-sub">Update your personal information and profile photo</div>
 
               {/* Avatar */}
-              <AvatarRow avatar={<div className="avatar-circle" style={{ background: profile.avatarColor }}>{initials}</div>}
-                         title="Profile Photo" hint="JPG, PNG or GIF. Max size 2MB." uploadLabel="Upload Photo" />
+              <AvatarColorPicker initials={initials} value={avatarColor} onChange={setAvatarColor} />
               <hr className="section-divider" />
 
               {/* Fields */}
@@ -257,13 +250,13 @@ export default function ProfileSettings() {
               </div>
               <div className="field-group" style={{ marginBottom: 4 }}>
                 <label>Bio</label>
-                <textarea className="field-input" rows="4" id="p-bio" defaultValue={profile.bio} onInput={e => setBioLength(e.target.value.length)}></textarea>
+                <textarea className="field-input" rows="4" id="p-bio" maxLength={500} defaultValue={profile.bio} onInput={e => setBioLength(e.target.value.length)}></textarea>
               </div>
               <div className="char-count" id="bioCharCount">{`${bioLength}/500 characters`}</div>
 
               <div className="save-row">
-                <button className="btn-save" id="p-save-btn" disabled={!!phoneError} onClick={saveProfileChanges}>
-                  <Icon name="save" /> Save Changes
+                <button className="btn-save" id="p-save-btn" disabled={!!phoneError || saving} onClick={saveProfileChanges}>
+                  <Icon name="save" /> {saving ? 'Saving…' : 'Save Changes'}
                 </button>
               </div>
             </div>
@@ -273,9 +266,6 @@ export default function ProfileSettings() {
               <div className="settings-title">Company Details</div>
               <div className="settings-sub">Update your company information and branding</div>
 
-              <AvatarRow avatar={<div className="avatar-square"><Icon name="building-2" style={{ width: 32, height: 32 }} /></div>}
-                         title="Company Logo" hint="Recommended size: 400×400px. Max size 2MB." uploadLabel="Upload Logo" />
-              <hr className="section-divider" />
 
               <div className="form-grid-2">
                 <div className="field-group">
@@ -316,11 +306,15 @@ export default function ProfileSettings() {
               </div>
             </div>
 
+            {/* ── Security Tab ── */}
+            <div className={'tab-content' + tabClass('security')} id="tab-security">
+              <div className="settings-title">Password &amp; Security</div>
+              <div className="settings-sub">Change the password you sign in with</div>
+              <ChangePasswordCard />
+            </div>
+
           </div>
         </div>
-
-        {/* ══ Toast ══ */}
-        <div className="toast" id="toast">✓ Settings saved successfully</div>
       </DashboardLayout>
     </>
   );

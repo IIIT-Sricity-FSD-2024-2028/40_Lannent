@@ -11,6 +11,7 @@ import { ExpertApplicationsService } from '../expert-applications/expert-applica
 import { NotificationsService } from '../notifications/notifications.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { FilesService } from '../files/files.service';
+import { MessagesService } from '../messages/messages.service';
 
 @Injectable()
 export class SeedService {
@@ -27,6 +28,7 @@ export class SeedService {
     @Inject(forwardRef(() => NotificationsService)) private notificationsService: NotificationsService,
     @Inject(forwardRef(() => LedgerService)) private ledgerService: LedgerService,
     @Inject(forwardRef(() => FilesService)) private filesService: FilesService,
+    @Inject(forwardRef(() => MessagesService)) private messagesService: MessagesService,
   ) {}
 
   resetAll() {
@@ -40,6 +42,7 @@ export class SeedService {
     this.transactionsService.resetToSeed();
     this.expertApplicationsService.resetToSeed();
     this.notificationsService.resetToSeed();
+    this.messagesService.resetToSeed();
     // Last: rebuilds escrow and billings from the freshly reset transaction ledger.
     this.ledgerService.resetToSeed();
     // Clears the metadata and deletes the bytes those records pointed at.

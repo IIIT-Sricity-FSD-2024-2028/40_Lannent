@@ -35,7 +35,8 @@ const VERDICTS = {
 };
 
 const CARD_STYLE = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, padding: 24, marginBottom: 20 };
-const NOTES_STYLE = { background: 'var(--input-bg)', borderRadius: 12, padding: 16, fontSize: 14, color: '#374151', lineHeight: 1.7 };
+// Worker text keeps its line breaks, and long links wrap instead of widening the page.
+const NOTES_STYLE = { background: 'var(--input-bg)', borderRadius: 12, padding: 16, fontSize: 14, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' };
 const BUTTON_ICON_STYLE = { width: 16, height: 16, display: 'inline', verticalAlign: 'middle', marginRight: 6 };
 
 /** Finds the milestone to review: from the URL, the workroom's selection, or the first submitted one. */
@@ -87,7 +88,7 @@ function AuditPanel({ engagement, report, reviewer }) {
       <div style={CARD_STYLE}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginBottom: 14, flexWrap: 'wrap' }}>
           <h3 style={{ fontSize: 15, fontWeight: 600 }}>Expert Reviewer's verdict</h3>
-          <Link to={`/expert-report-audit?id=${engagement.id}`} style={{ fontSize: 12.5, color: 'var(--muted-foreground)', textDecoration: 'underline', textUnderlineOffset: 2 }}>Read the full report</Link>
+          <Link to={`/expert-report-audit?id=${engagement.id}&milestoneId=${report.milestoneId || ''}`} style={{ fontSize: 12.5, color: 'var(--muted-foreground)', textDecoration: 'underline', textUnderlineOffset: 2 }}>Read the full report</Link>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 12, background: v.bg, border: `1px solid ${v.border}`, marginBottom: 16 }}>
           <Icon name={v.icon} style={{ width: 22, height: 22, color: v.text, flex: 'none' }} />
@@ -109,7 +110,7 @@ function AuditPanel({ engagement, report, reviewer }) {
         {report.findings ? (
           <>
             <div style={{ fontSize: 11, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--muted-foreground)', marginBottom: 6 }}>Findings</div>
-            <div style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--muted-foreground)' }}>{report.findings}</div>
+            <div style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--muted-foreground)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{report.findings}</div>
           </>
         ) : ''}
       </div>
@@ -177,11 +178,17 @@ export default function ReviewDeliverable() {
   const [searchParams] = useSearchParams();
   const session = Auth.getCurrentUser();
   const milestoneId = searchParams.get('milestoneId') || searchParams.get('id');
-  const role = searchParams.get('role') || 'client';
+  // The layout follows who is signed in. It came from `?role=`, defaulting
+  // to client, so a link without the parameter (the worker sidebar's "Reports")
+  // drew another role's sidebar — whose Settings link then bounced the user
+  // to their dashboard.
+  const role = session?.role || searchParams.get('role') || 'client';
 
   const [checked, setChecked] = useState([]);           // ids of ticked checklist items
   const [comments, setComments] = useState('');
   const [commentsError, setCommentsError] = useState('');
+  // When the page was opened — the reference for "is the reviewer's report overdue".
+  const [openedAt] = useState(() => Date.now());
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const milestone = findMilestone(Store, milestoneId, session.userId);
@@ -204,9 +211,13 @@ export default function ReviewDeliverable() {
   // Match this milestone specifically, or a project-wide audit not yet
   // pointed at one. Falling back to any engagement on the task showed
   // another milestone's verdict on this page.
-  const engagements = (Store.getAuditRequests() || []).filter(a => a.taskId === milestone.taskId && a.kind !== 'dispute-audit');
-  const engagement = engagements.find(a => a.milestoneId === milestone.id) || engagements.find(a => !a.milestoneId) || null;
-  const auditReport = engagement ? Store.getAuditReportByRequest(engagement.id) : null;
+  const engagements = (Store.getAuditRequests() || []).filter(a => a.taskId === milestone.taskId && a.kind !== 'dispute-audit'
+    && !['declined', 'cancelled'].includes(a.status));
+  const engagement = engagements.find(a => a.expertId) || engagements[0] || null;
+  const reviewable = ['submitted', 'review'].includes(milestone.status);
+  // The report for THIS milestone — the engagement covers the whole project,
+  // and its first report is usually about a different milestone.
+  const auditReport = engagement ? Store.getAuditReportByRequest(engagement.id, milestone.id) : null;
   const reviewer = engagement && engagement.expertId ? Store.getUserById(engagement.expertId) : null;
 
   const deliverable = {
@@ -215,13 +226,26 @@ export default function ReviewDeliverable() {
     worker: worker ? worker.name : 'Gig Worker',
     workerAvatar: worker ? worker.avatar : 'GW',
     workerColor: worker ? worker.avatarColor : 'linear-gradient(135deg,#6366f1,#4f46e5)',
-    workerId: milestone.workerId || 'u2',
+    workerId: milestone.workerId,
     submittedDate: milestone.submittedAt ? new Date(milestone.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Recently submitted',
     budget: milestone.budget || 0,
     id: milestone.id,
     deliverable: milestone.deliverable || null,
   };
   const allChecked = checked.length === CHECKLIST.length;
+
+  // The client's clock: an untouched submission is paid automatically.
+  const autoApproveOn = milestone.reviewDueAt ? new Date(milestone.reviewDueAt) : null;
+  const fmtDate = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  // "Request changes" can be used three times per milestone.
+  const revisionsLeft = Math.max(0, 3 - (Number(milestone.revisionCount) || 0));
+  // The reviewer's share for this milestone: approving inside their 5-day
+  // window pays them even without a report; after it, with no report, their
+  // share comes back to you.
+  const auditOn = engagement && engagement.status === 'in-progress' && !auditReport
+    && !((engagement.milestonePayouts || {})[milestone.id]);
+  const reportDue = auditOn && milestone.submittedAt ? new Date(new Date(milestone.submittedAt).getTime() + 5 * 86_400_000) : null;
+  const reportOverdue = reportDue && reportDue.getTime() <= openedAt;
   const backTo = role === 'expert' ? '/expert-audit-requests' : '/client-my-projects';
 
   function toggleCheck(id) {
@@ -229,25 +253,42 @@ export default function ReviewDeliverable() {
   }
 
   function handleApprove() {
+    if (!reviewable) { Validate.toast('This milestone is not waiting for your review.', 'error'); return; }
     if (!allChecked) { Validate.toast('Please complete the checklist before approving.', 'error'); return; }
     setConfirmOpen(true);
   }
 
   function confirmRelease() {
     setConfirmOpen(false);
+    let result;
     try {
-      Store.approveDeliverable(milestone.id);
-      Store.addNotification({ userId: deliverable.workerId, type: 'payment', text: `$${deliverable.budget.toLocaleString()} released from escrow`, subtext: deliverable.milestone + ' approved · just now', read: false });
-    } catch (e) { console.warn('Store error:', e); }
-    Validate.toast('✓ $' + deliverable.budget.toLocaleString() + ' released to ' + deliverable.worker, 'success');
+      result = Store.approveDeliverable(milestone.id);
+    } catch (e) {
+      // e.g. escrow cannot cover it, or the milestone is under dispute. This
+      // used to be logged and then reported as "released".
+      Validate.toast((e.message), 'error');
+      return;
+    }
+    const net = result && result.release && result.release.net != null ? result.release.net : null;
+    Validate.toast(`✓ ₹${deliverable.budget.toLocaleString('en-IN')} released to ${deliverable.worker}${net != null ? ` (₹${net.toLocaleString('en-IN')} after the service fee)` : ''}.`, 'success');
     setTimeout(() => navigate('/client-my-projects'), 2000);
   }
 
   function handleRequestChanges() {
-    if (!comments.trim()) { setCommentsError('Please add revision comments before requesting changes.'); return; }
+    if (comments.trim().length < 10) { setCommentsError('Tell the worker what to change (at least 10 characters).'); return; }
+    if (revisionsLeft <= 0) { Validate.toast('You have asked for changes 3 times on this milestone. Approve it, or raise a dispute and let a reviewer decide.', 'error'); return; }
     setCommentsError('');
-    try { Store.updateMilestone(milestone.id, { status: 'todo' }); } catch (e) { /* ignore */ }
-    Validate.toast('Revision request sent to ' + deliverable.worker, 'success');
+    // 'revision-needed' is the status the board and the server understand;
+    // 'todo' was not one of them.
+    if (!reviewable) { Validate.toast('This milestone is not waiting for your review.', 'error'); return; }
+    try {
+      // The comments go with the request — they are what the worker revises against.
+      Store.updateMilestone(milestone.id, { status: 'revision-needed', revisionNote: comments.trim() });
+    } catch (e) {
+      Validate.toast((e.message), 'error');
+      return;
+    }
+    Validate.toast('Revision request sent to ' + (deliverable.worker), 'success');
     setTimeout(() => navigate('/client-my-projects'), 1800);
   }
 
@@ -266,7 +307,7 @@ export default function ReviewDeliverable() {
     } catch (e) {
       console.warn('Could not set disputeTargetMilestone in localStorage', e);
     }
-    navigate('/dispute');
+    navigate('/dispute?milestoneId=' + encodeURIComponent(milestone.id));
   }
 
   return (
@@ -284,17 +325,19 @@ export default function ReviewDeliverable() {
         <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, padding: '20px 24px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{ width: 48, height: 48, borderRadius: '50%', background: deliverable.workerColor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 14, fontWeight: 700 }}>{deliverable.workerAvatar}</div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: 16 }}>{deliverable.worker}</div>
               <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>{`Submitted ${deliverable.submittedDate}`}</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <div style={{ textAlign: 'center', padding: '12px 20px', borderRadius: 12, background: '#ecfdf5' }}>
-              <div style={{ fontWeight: 700, color: '#10b981', fontSize: 18 }}>{`$${deliverable.budget.toLocaleString()}`}</div>
+              <div style={{ fontWeight: 700, color: '#10b981', fontSize: 18 }}>{`₹${deliverable.budget.toLocaleString('en-IN')}`}</div>
               <div style={{ fontSize: 11, color: '#065f46' }}>Milestone Value</div>
             </div>
-            <span className="badge badge-orange" style={{ fontSize: 13, padding: '8px 16px' }}>Pending Review</span>
+            <span className={`badge ${reviewable ? 'badge-orange' : 'badge-blue'}`} style={{ fontSize: 13, padding: '8px 16px' }}>
+              {reviewable ? 'Pending Review' : milestone.status.replace(/-/g, ' ')}
+            </span>
           </div>
         </div>
 
@@ -305,7 +348,24 @@ export default function ReviewDeliverable() {
             <div style={CARD_STYLE}>
               <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Submitted Files</h3>
               <div style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 16 }}>{`${deliverable.project} · ${deliverable.milestone}`}</div>
-              <SubmittedFiles files={deliverable.deliverable && deliverable.deliverable.files} />
+              {deliverable.deliverable && !(deliverable.deliverable.files || []).length && deliverable.deliverable.link ? null
+                : <SubmittedFiles files={deliverable.deliverable && deliverable.deliverable.files} />}
+              {/* The link (a repository, a drive folder) and branch the worker handed in. They were sent with the
+                  submission but never shown here, so a link-only submission looked empty. */}
+              {deliverable.deliverable && deliverable.deliverable.link ? (
+                <div className="file-row">
+                  <div className="file-icon-wrap" style={{ background: '#ecfdf5' }}>
+                    <Icon name="link" style={{ width: 18, height: 18, color: '#059669' }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <a href={deliverable.deliverable.link} target="_blank" rel="noopener noreferrer"
+                       style={{ fontWeight: 500, fontSize: 14, color: '#4f46e5', overflowWrap: 'anywhere' }}>{deliverable.deliverable.link}</a>
+                    <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
+                      {deliverable.deliverable.branch ? `Branch: ${deliverable.deliverable.branch}` : 'Link to the work'}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div style={CARD_STYLE}>
@@ -322,7 +382,16 @@ export default function ReviewDeliverable() {
               )}
             </div>
 
-            {role === 'client' ? (
+            {role === 'client' && !reviewable ? (
+              <div style={CARD_STYLE}>
+                <div style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>
+                  {milestone.status === 'revision-needed' ? 'You requested changes. The worker will resubmit.'
+                    : milestone.status === 'disputed' ? 'This milestone is under dispute. The reviewer\'s verdict will settle it.'
+                    : ['completed', 'approved'].includes(milestone.status) ? 'This milestone has been approved and paid.'
+                    : 'The worker has not submitted this milestone yet.'}
+                </div>
+              </div>
+            ) : role === 'client' ? (
               <>
                 <div style={CARD_STYLE}>
                   <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Your Review Comments</h3>
@@ -351,7 +420,7 @@ export default function ReviewDeliverable() {
               <div style={CARD_STYLE}>
                 <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Expert Action</h3>
                 <p style={{ fontSize: 14, color: 'var(--muted-foreground)', marginBottom: 20 }}>After reviewing the checklist and files, submit your final audit report.</p>
-                <button onClick={() => navigate(`/expert-report-audit?id=${searchParams.get('auditId')}`)} className="btn-primary" style={{ padding: '12px 24px', borderRadius: 12, width: '100%' }}>
+                <button onClick={() => navigate(`/expert-report-audit?id=${engagement ? engagement.id : ''}&milestoneId=${milestone.id}`)} disabled={!engagement} className="btn-primary" style={{ padding: '12px 24px', borderRadius: 12, width: '100%' }}>
                   <Icon name="clipboard-check" style={BUTTON_ICON_STYLE} />
                   Submit Audit Report
                 </button>
@@ -384,9 +453,17 @@ export default function ReviewDeliverable() {
               <h3 style={{ fontSize: 14, fontWeight: 600, color: '#c2410c', marginBottom: 12 }}>⚠ Before Approving</h3>
               <p style={{ fontSize: 13, color: '#7c2d12', lineHeight: 1.6 }}>
                 {role === 'expert'
-                  ? 'Submitting the report will finalize this audit and append the results back to the associated project escrow automatically.'
-                  : <>Approving will release <strong>{`$${deliverable.budget.toLocaleString()}`}</strong>{` from escrow to ${deliverable.worker}. This action cannot be undone.`}</>}
+                  ? 'Filing the report pays your share of the audit fee for this milestone. A report filed more than 5 days after submission can be overtaken by the client approving the work without it.'
+                  : <>Approving will release <strong>{`₹${deliverable.budget.toLocaleString('en-IN')}`}</strong>{` from escrow to ${deliverable.worker}. This action cannot be undone.`}</>}
               </p>
+              {role !== 'expert' && reviewable && (
+                <ul style={{ fontSize: 12.5, color: '#7c2d12', lineHeight: 1.6, margin: '10px 0 0', paddingLeft: 18 }}>
+                  {autoApproveOn && <li>{`If you do nothing, this is approved and paid automatically on ${fmtDate(autoApproveOn)}.`}</li>}
+                  <li>{revisionsLeft > 0 ? `You can ask for changes ${revisionsLeft} more time${revisionsLeft === 1 ? '' : 's'}.` : 'You have used all 3 change requests — approve it or raise a dispute.'}</li>
+                  {auditOn && reportDue && !reportOverdue && <li>{`The reviewer's report is due by ${fmtDate(reportDue)}. Approving before then still pays them for this milestone.`}</li>}
+                  {auditOn && reportOverdue && <li>The reviewer has not reported within 5 days. Approving now returns their share of the audit fee for this milestone to you.</li>}
+                </ul>
+              )}
             </div>
           </div>
         </div>
@@ -397,7 +474,7 @@ export default function ReviewDeliverable() {
             <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg,#10b981,#059669)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: 28 }}>✓</div>
             <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Confirm Release</h2>
             <p style={{ fontSize: 14, color: 'var(--muted-foreground)', marginBottom: 20 }}>
-              Release <strong>{`$${deliverable.budget.toLocaleString()}`}</strong> from escrow to <strong>{deliverable.worker}</strong>? This cannot be undone.
+              Release <strong>{`₹${deliverable.budget.toLocaleString('en-IN')}`}</strong> from escrow to <strong>{deliverable.worker}</strong>? This cannot be undone.
             </p>
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={() => setConfirmOpen(false)} className="btn-outline" style={{ flex: 1, padding: 12, borderRadius: 12 }}>Cancel</button>

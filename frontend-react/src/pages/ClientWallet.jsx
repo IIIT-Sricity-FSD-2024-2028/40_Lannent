@@ -18,32 +18,17 @@ import { useValidation } from '../context/ValidationContext';
 import useRerender from '../hooks/useRerender';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ClientWallet.css?raw';
+import { newestFirst } from '../utils/helpers';
+import { describeTx, TONE_STYLE, money } from '../utils/transactions';
 
-const TX_TYPE_MAP = {
-  'deposit':           { label: 'Wallet Top-up',      icon: 'arrow-down-circle', color: '#10b981', bg: '#ecfdf5', positive: true },
-  'escrow-lock':       { label: 'Escrow Funded',      icon: 'lock',              color: '#6366f1', bg: '#eef2ff', positive: false },
-  'milestone-release': { label: 'Milestone Released', icon: 'unlock',            color: '#f59e0b', bg: '#fffbeb', positive: false },
-  'withdrawal':        { label: 'Withdrawal',         icon: 'arrow-up-circle',   color: '#ef4444', bg: '#fef2f2', positive: false },
-  'refund':            { label: 'Partial Refund',     icon: 'rotate-ccw',        color: '#a855f7', bg: '#faf5ff', positive: true },
-};
-
-const LOCKED_STATUSES = ['pending', 'submitted', 'todo', 'not-started', 'in-progress', 'review', 'audit-requested', 'audit-passed', 'disputed'];
-const RELEASED_STATUSES = ['completed', 'approved', 'done', 'paid'];
-
-const ADD_AMOUNTS = ['$500', '$1,000', '$2,000', '$5,000', '$10,000', 'Custom'];
-const WITHDRAW_AMOUNTS = ['$100', '$500', '$1000', '$2500'];
+const ADD_AMOUNTS = ['₹500', '₹1,000', '₹2,000', '₹5,000', '₹10,000', 'Custom'];
+const WITHDRAW_AMOUNTS = ['₹100', '₹500', '₹1000', '₹2500'];
+// Every deposit carries the same card-processing fee on the server, whatever
+// the method, so the methods differ only in how they are described.
 const PAYMENT_METHODS = [
-  { id: 'bank', name: 'Bank Transfer (ACH)', desc: 'Free • 1-2 business days', icon: 'building-2', color: '#10b981', bg: '#ecfdf5' },
-  { id: 'card', name: 'Credit/Debit Card', desc: 'Instant • 2.9% fee', icon: 'credit-card', color: '#f59e0b', bg: '#fffbeb' },
-  { id: 'wire', name: 'Wire Transfer', desc: 'Instant • $25 fee', icon: 'zap', color: '#a855f7', bg: '#faf5ff' },
+  { id: 'card', name: 'Credit/Debit Card', icon: 'credit-card', color: '#f59e0b', bg: '#fffbeb' },
+  { id: 'bank', name: 'Bank Transfer', icon: 'building-2', color: '#10b981', bg: '#ecfdf5' },
 ];
-const PROCESSING_TIME = {
-  bank: '1-2 business days • Free',
-  card: 'Instant • 2.9% processing fee',
-  wire: 'Instant • $25 flat fee',
-};
-
-const money = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // ── Shared dialog styles ──
 const OVERLAY_STYLE = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, alignItems: 'flex-start', justifyContent: 'center', backdropFilter: 'blur(4px)', overflowY: 'auto' };
@@ -64,55 +49,73 @@ const cancelHover = {
 /** Balances, escrow per project and the transaction list for a client. */
 function computeWalletData(Store, userId) {
   const user = Store.getUserById(userId);
-  const userTxs = Store.getTransactionsByUser(userId);
   const allTxs = Store.getTransactions();
   const clientTasks = Store.getTasksByClient(userId);
   const clientTaskIds = new Set(clientTasks.map(t => t.id));
+  const sum = (rows, pick) => rows.reduce((s, t) => s + (pick(t) || 0), 0);
 
   const walletBalance = user?.walletBalance || 0;
-  const deposits = userTxs.filter(t => t.type === 'deposit' && t.toId === userId).reduce((s, t) => s + t.amount, 0);
-  const spent = userTxs.filter(t => t.type === 'escrow-lock' && t.fromId === userId).reduce((s, t) => s + t.amount, 0);
+  const mineOut = t => t.fromId === userId;
+  const deposits = sum(allTxs.filter(t => t.type === 'deposit' && t.toId === userId), t => t.netAmount ?? t.amount);
+  // Marketplace/contract fees, plus any cancellation fee kept from escrow.
+  const fees = sum(allTxs.filter(t => ['platform-fee', 'cancellation-fee'].includes(t.type) && mineOut(t)), t => t.amount);
+  // Paid out to workers and reviewers from this client's escrow.
+  const released = sum(
+    allTxs.filter(t => clientTaskIds.has(t.taskId) && (
+      // Only clients pay reviewers, so every audit and dispute fee on their projects is theirs.
+      ['milestone-release', 'audit-release', 'dispute-fee-release'].includes(t.type)
+    )),
+    t => t.grossAmount ?? t.amount,
+  );
+  const refunded = sum(allTxs.filter(t => t.type === 'refund' && t.toId === userId), t => t.amount);
 
-  // Total released = milestone-release transactions for this client's tasks (from ALL transactions, not just user's)
-  const releaseTxs = allTxs.filter(t => t.type === 'milestone-release' && clientTaskIds.has(t.taskId));
-  const released = releaseTxs.reduce((s, t) => s + t.amount, 0);
-
-  // Active escrow = sum of milestone budgets that are NOT yet released
-  let activeEscrowAmount = 0;
-  let activeEscrowCount = 0;
-  const escrowProjects = [];
-
-  clientTasks.filter(t => t.status === 'in-progress' || t.status === 'open').forEach(t => {
-    const msList = Store.getMilestonesByTask(t.id);
-    const releasedVal = msList.filter(m => RELEASED_STATUSES.includes(m.status)).reduce((s, m) => s + (m.budget || 0), 0);
-    const lockedVal = msList.filter(m => LOCKED_STATUSES.includes(m.status)).reduce((s, m) => s + (m.budget || 0), 0);
-    const total = msList.reduce((s, m) => s + (m.budget || 0), 0) || t.budget;
-    const pct = total ? Math.round((releasedVal / total) * 100) : 0;
-
-    if (lockedVal > 0) activeEscrowCount++;
-    activeEscrowAmount += lockedVal;
-
-    escrowProjects.push({
-      id: t.id,
-      name: t.title,
-      worker: Store.getUserById(t.workerId)?.name || 'TBD',
-      locked: '$' + lockedVal.toLocaleString(),
-      released: '$' + releasedVal.toLocaleString(),
-      total: '$' + total.toLocaleString(),
-      progress: pct,
+  // What is actually held right now — read from the server's escrow, bucket
+  // by bucket. It used to be estimated from milestone budgets, which missed
+  // the audit and dispute fees entirely.
+  const escrow = Store.getMyEscrow();
+  const escrowProjects = escrow.projects
+    .filter(p => clientTaskIds.has(p.taskId))
+    .map(p => {
+      const t = clientTasks.find(x => x.id === p.taskId);
+      const paidOut = sum(allTxs.filter(x => x.type === 'milestone-release' && x.taskId === p.taskId), x => x.grossAmount ?? x.amount);
+      const lastActivity = allTxs
+        .filter(tx => tx.taskId === p.taskId && tx.createdAt)
+        .reduce((latest, tx) => (tx.createdAt > latest ? tx.createdAt : latest), t?.createdAt || '');
+      return {
+        ...p,
+        lastActivity,
+        name: p.title,
+        worker: (t && Store.getUserById(t.workerId)?.name) || 'Not hired yet',
+        paidOut,
+        progress: t && t.budget ? Math.min(100, Math.round((paidOut / t.budget) * 100)) : 0,
+      };
     });
+
+  // Your own money movements, plus what was paid out of your projects' escrow.
+  const rows = newestFirst(allTxs.filter(t => t.toId === userId || t.fromId === userId
+    || (clientTaskIds.has(t.taskId) && ['milestone-release', 'audit-release', 'dispute-fee-release'].includes(t.type))));
+  const transactions = rows.map(tx => {
+    const d = describeTx(tx, userId);
+    const tone = TONE_STYLE[d.tone] || TONE_STYLE.other;
+    const task = tx.taskId ? Store.getTaskById(tx.taskId) : null;
+    return {
+      id: tx.id,
+      label: d.label,
+      sub: [(task?.title || (tx.taskId ? 'Project' : 'Wallet')), String(tx.createdAt || '').slice(0, 10)].join(' • '),
+      amount: `${d.sign < 0 ? '−' : d.sign > 0 ? '+' : ''}${money(d.amount)}`,
+      positive: d.sign > 0,
+      neutral: d.sign === 0,
+      icon: tone.icon, color: tone.color, bg: `${tone.color}1a`,
+    };
   });
 
-  // Build combined transaction list: user's own txs + milestone-releases for their tasks
-  const userTxIds = new Set(userTxs.map(t => t.id));
-  const combinedTxs = [...userTxs, ...releaseTxs.filter(t => !userTxIds.has(t.id))];
-  const transactions = combinedTxs.map(tx => {
-    const cfg = TX_TYPE_MAP[tx.type] || { label: tx.type, icon: 'circle', color: '#64748b', bg: '#f1f5f9', positive: false };
-    const task = Store.getTaskById(tx.taskId);
-    return { id: tx.id, type: tx.type, label: cfg.label, sub: (task?.title || 'Platform') + ' • ' + (tx.createdAt || new Date().toISOString().slice(0, 10)), amount: (cfg.positive ? '+' : '-') + '$' + tx.amount.toLocaleString(), positive: cfg.positive, icon: cfg.icon, color: cfg.color, bg: cfg.bg };
-  });
-
-  return { walletBalance, deposits, spent, released, activeEscrowAmount, activeEscrowCount, escrowProjects, transactions };
+  return {
+    walletBalance, deposits, fees, released, refunded,
+    escrowTotals: escrow.totals,
+    activeEscrowCount: escrowProjects.length,
+    escrowProjects: newestFirst(escrowProjects, p => p.lastActivity),
+    transactions,
+  };
 }
 
 /** Bottom-right notice used by the withdraw dialog (this page's own variant). */
@@ -162,7 +165,7 @@ function TxRow({ t }) {
         <div style={{ fontWeight: 600, fontSize: 14 }}>{t.label}</div>
         <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{t.sub}</div>
       </div>
-      <span className={t.positive ? 'tx-amount-pos' : 'tx-amount-neg'}>{t.amount}</span>
+      <span className={t.positive ? 'tx-amount-pos' : t.neutral ? '' : 'tx-amount-neg'} style={t.neutral ? { color: 'var(--muted-foreground)', fontWeight: 600 } : undefined}>{t.amount}</span>
     </div>
   );
 }
@@ -173,15 +176,17 @@ function EscrowProject({ p }) {
     <div className="escrow-project">
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#6366f1' }}>{p.total}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#6366f1' }}>{money(p.total)}</span>
       </div>
       <div style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 10 }}>{`Worker: ${p.worker}`}</div>
       <div style={{ height: 6, borderRadius: 9999, background: 'var(--muted)', overflow: 'hidden', marginBottom: 8 }}>
         <div style={{ height: '100%', borderRadius: 9999, background: 'linear-gradient(90deg,#10b981,#34d399)', width: `${p.progress}%` }}></div>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-        <span style={{ color: '#10b981', fontWeight: 500 }}>{`Released: ${p.released}`}</span>
-        <span style={{ color: '#6366f1', fontWeight: 500 }}>{`Locked: ${p.locked}`}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, flexWrap: 'wrap', gap: 6 }}>
+        <span style={{ color: '#10b981', fontWeight: 500 }}>{`Paid to worker: ${money(p.paidOut)}`}</span>
+        <span style={{ color: '#6366f1', fontWeight: 500 }}>{`Project: ${money(p.projectHeld)}`}</span>
+        {p.auditHeld > 0 && <span style={{ color: '#7c3aed', fontWeight: 500 }}>{`Audit fee: ${money(p.auditHeld)}`}</span>}
+        {p.disputeHeld > 0 && <span style={{ color: '#f59e0b', fontWeight: 500 }}>{`Dispute fee: ${money(p.disputeHeld)}`}</span>}
       </div>
     </div>
   );
@@ -197,28 +202,13 @@ function PreviewRow({ label, labelStyle, valueStyle, id, value, marginBottom }) 
   );
 }
 
-/** A small icon + two lines of text in the Add Funds "Security & Info" box. */
-function InfoLine({ icon, gradient, title, text, textId, style }) {
-  return (
-    <div style={style}>
-      <div style={{ width: 32, height: 32, borderRadius: 8, background: gradient, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Icon name={icon} style={{ width: 16, height: 16, color: 'white' }} />
-      </div>
-      <div>
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{title}</div>
-        <div style={{ fontSize: 12, color: '#6b7280' }} id={textId}>{text}</div>
-      </div>
-    </div>
-  );
-}
-
 export default function ClientWallet() {
   const Store = useStore();
   const Auth = useAuth();
   const Validate = useValidation();
   usePageTitle('Wallet & Escrow — Lannent');
   const [session] = useState(() => Auth.getCurrentUser());
-  const walletUserId = session?.userId || 'u1';
+  const walletUserId = session.userId;
   const refreshWallet = useRerender();
 
   const d = computeWalletData(Store, walletUserId);
@@ -226,16 +216,16 @@ export default function ClientWallet() {
 
   // ── Add Funds dialog ──
   const [addOpen, setAddOpen] = useState(false);
-  const [currentBalanceText, setCurrentBalanceText] = useState('$4,875');  // filled in when the dialog opens
+  const [currentBalanceText, setCurrentBalanceText] = useState('₹4,875');  // filled in when the dialog opens
   const [selectedAmount, setSelectedAmount] = useState(null);
   const [customAmount, setCustomAmount] = useState('');
   const [selectedMethod, setSelectedMethod] = useState(null);
-  const [processingTime, setProcessingTime] = useState('Select a payment method to see processing time');
+
   const customInputRef = useRef(null);
 
   // ── Withdraw dialog ──
   const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const [withdrawBalanceText, setWithdrawBalanceText] = useState('$4,875'); // filled in when the dialog opens
+  const [withdrawBalanceText, setWithdrawBalanceText] = useState('₹4,875'); // filled in when the dialog opens
   const [withdrawAmount, setWithdrawAmountValue] = useState('');
 
   // ── All Transactions dialog (list captured when it opens) ──
@@ -245,7 +235,7 @@ export default function ClientWallet() {
   // Amount chosen in the Add Funds dialog
   const addAmount = selectedAmount === null ? 0
     : selectedAmount === 'Custom' ? (parseFloat(customAmount) || 0)
-    : (parseFloat(selectedAmount.replace(/[$,]/g, '')) || 0);
+    : (parseFloat(selectedAmount.replace(/[₹,]/g, '')) || 0);
   // Matches the server: one processing fee, and the wallet is credited the net.
   const depositQuote = Store.Fees.deposit(addAmount);
 
@@ -260,7 +250,6 @@ export default function ClientWallet() {
     setSelectedAmount(null);
     setSelectedMethod(null);
     setCustomAmount('');
-    setProcessingTime('Select payment method for time/fee');
   }
 
   function selectAmount(amt, el) {
@@ -278,12 +267,15 @@ export default function ClientWallet() {
 
   function selectPaymentMethod(methodId) {
     setSelectedMethod(methodId);
-    setProcessingTime(PROCESSING_TIME[methodId]);
   }
 
   function processAddFunds() {
     if (addAmount <= 0) {
       Validate.toast('Please select or enter a valid amount greater than 0.', 'error');
+      return;
+    }
+    if (depositQuote.fee >= addAmount) {
+      Validate.toast(`The amount must be more than the ${money(depositQuote.fee)} processing fee.`, 'error');
       return;
     }
     if (!selectedMethod) {
@@ -293,22 +285,24 @@ export default function ClientWallet() {
 
     // One call: the server charges card processing, credits the net and writes
     // the ledger row together.
-    const deposit = Store.addToWallet(walletUserId, addAmount);
-    if (!deposit) {
-      Validate.toast('Deposit failed. Please check your connection and try again.', 'error');
+    let deposit;
+    try {
+      deposit = Store.addToWallet(walletUserId, addAmount);
+    } catch (e) {
+      Validate.toast((e.message), 'error');
       return;
     }
 
     // Close modal and refresh all wallet data
     setAddOpen(false);
     refreshWallet();
-    Validate.toast('✓ $' + deposit.net.toFixed(2) + ' credited to your wallet ($'
+    Validate.toast('✓ ₹' + deposit.net.toFixed(2) + ' credited to your wallet (₹'
       + deposit.fee.toFixed(2) + ' processing fee).', 'success');
   }
 
   // ── All transactions ──
   function showAllTransactions() {
-    setAllTx(computeWalletData(Store, walletUserId).transactions.slice().reverse());
+    setAllTx(computeWalletData(Store, walletUserId).transactions);
     setAllOpen(true);
   }
 
@@ -320,35 +314,37 @@ export default function ClientWallet() {
   }
 
   function setWithdrawAmount(amt) {
-    const amount = parseFloat(amt.replace('$', ''));
+    const amount = parseFloat(amt.replace(/[₹,]/g, ''));
     if (amount <= availableBalance) setWithdrawAmountValue(String(amount));
   }
 
   function processWithdraw() {
     const amount = withdrawValue;
     if (amount <= 0) { showNotification('Please enter a valid amount', 'error'); return; }
-    if (amount < 50) { showNotification('Minimum withdrawal amount is $50', 'error'); return; }
+    if (amount < 50) { showNotification('Minimum withdrawal amount is ₹50', 'error'); return; }
     if (amount > availableBalance) { showNotification('Insufficient balance for this withdrawal', 'error'); return; }
 
     // One call: the server debits the gross, keeps the payout fee and writes
     // the ledger row together.
-    const result = Store.withdrawFromWallet(walletUserId, amount);
-    if (!result) {
-      showNotification('Withdrawal failed. Your balance may have changed — reopen and try again.', 'error');
+    let result;
+    try {
+      result = Store.withdrawFromWallet(walletUserId, amount);
+    } catch (e) {
+      showNotification(e.message, 'error');
       return;
     }
 
     // Close modal and refresh all wallet data
     setWithdrawOpen(false);
     refreshWallet();
-    showNotification('✓ Withdrawal of $' + amount.toFixed(2) + ' processed successfully! Funds will arrive in 1-2 business days.', 'success');
+    showNotification(`✓ Withdrew ${money(result.gross)} — ${money(result.net)} paid out after a ${money(result.fee)} payout fee.`, 'success');
   }
 
   const stats = [
-    { label: 'Total Deposited', val: '$' + d.deposits.toLocaleString(), color: '#6366f1', icon: 'arrow-down-circle' },
-    { label: 'Total Spent', val: '$' + d.spent.toLocaleString(), color: '#f97316', icon: 'trending-up' },
-    { label: 'Total Released', val: '$' + d.released.toLocaleString(), color: '#10b981', icon: 'unlock' },
-    { label: 'Active Escrows', val: d.activeEscrowCount.toString(), color: '#a855f7', icon: 'lock' },
+    { label: 'Total Deposited', val: money(d.deposits), color: '#6366f1', icon: 'arrow-down-circle' },
+    { label: 'Paid to workers & reviewers', val: money(d.released), color: '#10b981', icon: 'unlock' },
+    { label: 'Platform fees', val: money(d.fees), color: '#f97316', icon: 'percent' },
+    { label: 'Refunded to you', val: money(d.refunded), color: '#0ea5e9', icon: 'rotate-ccw' },
   ];
 
   return (
@@ -360,7 +356,7 @@ export default function ClientWallet() {
             <div className="wallet-card" style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)' }}>
               <div style={{ position: 'relative', zIndex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 500, opacity: 0.8, marginBottom: 8 }}>Available Balance</div>
-                <div style={{ fontSize: 36, fontWeight: 900, letterSpacing: '-0.03em', marginBottom: 20 }} id="availableBalanceDisplay">{`$${d.walletBalance.toLocaleString()}`}</div>
+                <div style={{ fontSize: 36, fontWeight: 900, letterSpacing: '-0.03em', marginBottom: 20 }} id="availableBalanceDisplay">{money(d.walletBalance)}</div>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <button onClick={showAddFunds} style={{ padding: '8px 20px', borderRadius: 10, background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s' }}
                           onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.3)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; }}>+ Add Funds</button>
@@ -372,8 +368,11 @@ export default function ClientWallet() {
             <div className="wallet-card" style={{ background: 'linear-gradient(135deg,#10b981,#059669)' }}>
               <div style={{ position: 'relative', zIndex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 500, opacity: 0.8, marginBottom: 8 }}>Total in Escrow</div>
-                <div style={{ fontSize: 36, fontWeight: 900, letterSpacing: '-0.03em', marginBottom: 8 }}>{`$${d.activeEscrowAmount.toLocaleString()}`}</div>
-                <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 16 }}>{`Across ${d.activeEscrowCount} active project${d.activeEscrowCount !== 1 ? 's' : ''}`}</div>
+                <div style={{ fontSize: 36, fontWeight: 900, letterSpacing: '-0.03em', marginBottom: 8 }}>{money(d.escrowTotals.total)}</div>
+                <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 16, lineHeight: 1.6 }}>
+                  {`Projects ${money(d.escrowTotals.project)} · Audit fees ${money(d.escrowTotals.audit)} · Dispute fees ${money(d.escrowTotals.dispute)}`}
+                  <br />{`Across ${d.activeEscrowCount} project${d.activeEscrowCount !== 1 ? 's' : ''}`}
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, opacity: 0.9 }}>
                   <Icon name="shield-check" style={{ width: 14, height: 14 }} /> Secured & Protected
                 </div>
@@ -381,7 +380,7 @@ export default function ClientWallet() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16, marginBottom: 24 }}>
             {stats.map(s => (
               <div className="stat-card" key={s.label}>
                 <div><div className="stat-val" style={{ color: s.color }}>{s.val}</div><div className="stat-label">{s.label}</div></div>
@@ -397,7 +396,7 @@ export default function ClientWallet() {
               <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 20 }}>Escrow by Project</h3>
               {d.escrowProjects.length
                 ? d.escrowProjects.map(p => <EscrowProject key={p.id} p={p} />)
-                : <div style={{ padding: 20, textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 13 }}>No active projects with escrow funded.</div>}
+                : <div style={{ padding: 20, textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 13 }}>Nothing is held in escrow right now.</div>}
             </div>
             <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, padding: '20px 24px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -408,9 +407,9 @@ export default function ClientWallet() {
                 <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--muted-foreground)' }}>
                   <Icon name="wallet" style={{ width: 40, height: 40, opacity: 0.3, margin: '0 auto 12px', display: 'block' }} />
                   <div style={{ fontWeight: 600, marginBottom: 4 }}>No transactions yet</div>
-                  <div style={{ fontSize: 13 }}>Transactions will appear here once you fund a project.</div>
+                  <div style={{ fontSize: 13 }}>Transactions will appear here once you add funds or post a project.</div>
                 </div>
-              ) : d.transactions.slice(-10).reverse().map(t => <TxRow key={t.id} t={t} />)}
+              ) : d.transactions.slice(0, 10).map(t => <TxRow key={t.id} t={t} />)}
             </div>
           </div>
         </div>
@@ -460,7 +459,7 @@ export default function ClientWallet() {
               {/* Custom Amount Input */}
               <div id="customAmountSection" style={{ display: selectedAmount === 'Custom' ? 'block' : 'none', marginTop: 16 }}>
                 <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 18, fontWeight: 600, color: '#6366f1' }}>$</span>
+                  <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 18, fontWeight: 600, color: '#6366f1' }}>₹</span>
                   {' '}
                   <input ref={customInputRef} type="number" id="customAmountInput" placeholder="Enter custom amount" style={MONEY_INPUT_STYLE}
                          value={customAmount} onChange={e => setCustomAmount(e.target.value)} {...purpleFocus} />
@@ -483,7 +482,7 @@ export default function ClientWallet() {
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>{method.name}</div>
-                        <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{method.desc}</div>
+                        <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{`Processing fee ${Store.Fees.rates().deposit.percent}% + ₹${Store.Fees.rates().deposit.fixed}`}</div>
                       </div>
                       <div style={{ width: 20, height: 20, border: '2px solid #d1d5db', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} className="method-radio">
                         <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#6366f1', opacity: selectedMethod === method.id ? 1 : 0, transition: 'opacity 0.2s' }} className="method-radio-dot"></div>
@@ -497,17 +496,9 @@ export default function ClientWallet() {
             {/* Amount Preview */}
             <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 16, padding: 20, margin: '0 32px', marginBottom: 24 }}>
               <PreviewRow label="You pay" labelStyle={{ fontSize: 14, color: '#6b7280' }} valueStyle={{ fontWeight: 700, color: '#111827', fontSize: 15 }} id="previewAddAmount" value={money(depositQuote.gross)} marginBottom={12} />
-              <PreviewRow label="Processing fee (2.9% + $0.30)" labelStyle={{ fontSize: 14, color: '#6b7280' }} valueStyle={{ fontWeight: 600, color: '#ef4444', fontSize: 14 }} id="previewFee" value={addAmount > 0 ? money(depositQuote.fee) : '$0.00'} marginBottom={12} />
+              <PreviewRow label={`Processing fee (${Store.Fees.rates().deposit.percent}% + ₹${Store.Fees.rates().deposit.fixed})`} labelStyle={{ fontSize: 14, color: '#6b7280' }} valueStyle={{ fontWeight: 600, color: '#ef4444', fontSize: 14 }} id="previewFee" value={addAmount > 0 ? money(depositQuote.fee) : '₹0.00'} marginBottom={12} />
               <div style={{ height: 1, background: '#e5e7eb', margin: '12px 0' }}></div>
-              <PreviewRow label="Total You'll Pay" labelStyle={{ fontSize: 16, fontWeight: 700, color: '#111827' }} valueStyle={{ fontSize: 20, fontWeight: 900, background: 'linear-gradient(135deg,#6366f1,#a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }} id="previewTotal" value={addAmount > 0 ? money(depositQuote.net) : '$0.00'} />
-            </div>
-
-            {/* Security & Info */}
-            <div style={{ background: 'linear-gradient(135deg,#f8fafc,#f1f5f9)', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16, margin: '0 32px', marginBottom: 24 }}>
-              <InfoLine icon="shield-check" gradient="linear-gradient(135deg,#10b981,#059669)" title="Secure & Protected" text="256-bit SSL encryption • PCI DSS compliant"
-                        style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }} />
-              <InfoLine icon="clock" gradient="linear-gradient(135deg,#f59e0b,#d97706)" title="Processing Time" text={processingTime} textId="processingTime"
-                        style={{ display: 'flex', alignItems: 'center', gap: 12 }} />
+              <PreviewRow label="Credited to your wallet" labelStyle={{ fontSize: 16, fontWeight: 700, color: '#111827' }} valueStyle={{ fontSize: 20, fontWeight: 900, background: 'linear-gradient(135deg,#6366f1,#a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }} id="previewTotal" value={addAmount > 0 ? money(depositQuote.net) : '₹0.00'} />
             </div>
 
             {/* Action Buttons */}
@@ -546,12 +537,12 @@ export default function ClientWallet() {
             <div className="form-group" style={{ marginBottom: 24 }}>
               <label className="form-label" style={{ fontWeight: 600, marginBottom: 12 }}>How much would you like to withdraw?</label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <span style={{ position: 'absolute', left: 16, fontSize: 18, fontWeight: 600, color: '#7c3aed' }}>$</span>
+                <span style={{ position: 'absolute', left: 16, fontSize: 18, fontWeight: 600, color: '#7c3aed' }}>₹</span>
                 <input type="number" id="withdrawAmount" placeholder="0.00" style={MONEY_INPUT_STYLE}
                        value={withdrawAmount} onChange={e => setWithdrawAmountValue(e.target.value)} {...purpleFocus} />
               </div>
               <div style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>
-                Minimum: <strong>$50</strong> | Maximum: <strong id="maxWithdrawAmt">{withdrawBalanceText}</strong>
+                Minimum: <strong>₹50</strong> | Maximum: <strong id="maxWithdrawAmt">{withdrawBalanceText}</strong>
               </div>
             </div>
 
@@ -571,20 +562,9 @@ export default function ClientWallet() {
             {/* Withdrawal Preview */}
             <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 14, padding: 18, marginBottom: 24 }}>
               <PreviewRow label="Amount to Withdraw" labelStyle={{ fontSize: 13, color: '#6b7280' }} valueStyle={{ fontWeight: 600, color: '#111827', fontSize: 13 }} id="previewAmount" value={money(withdrawValue)} marginBottom={10} />
-              <PreviewRow label="Payout fee (0.25% + $0.25)" labelStyle={{ fontSize: 13, color: '#6b7280' }} valueStyle={{ fontWeight: 600, color: '#ef4444', fontSize: 13 }} id="withdrawPreviewFee" value={withdrawValue > 0 ? money(withdrawQuote.fee) : '$0.00'} marginBottom={10} />
+              <PreviewRow label={`Payout fee (${Store.Fees.rates().withdrawal.percent}% + ₹${Store.Fees.rates().withdrawal.fixed})`} labelStyle={{ fontSize: 13, color: '#6b7280' }} valueStyle={{ fontWeight: 600, color: '#ef4444', fontSize: 13 }} id="withdrawPreviewFee" value={withdrawValue > 0 ? money(withdrawQuote.fee) : '₹0.00'} marginBottom={10} />
               <div style={{ height: 1, background: '#e5e7eb', margin: '10px 0' }}></div>
-              <PreviewRow label="You'll Receive" labelStyle={{ fontSize: 14, fontWeight: 700, color: '#111827' }} valueStyle={{ fontSize: 18, fontWeight: 900, background: 'linear-gradient(135deg,#10b981,#059669)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }} id="previewReceive" value={withdrawValue > 0 ? money(withdrawQuote.net) : '$0.00'} />
-            </div>
-
-            {/* Bank Account Selection */}
-            <div className="form-group" style={{ marginBottom: 24 }}>
-              <label className="form-label" style={{ fontWeight: 600, marginBottom: 10 }}>Withdraw to</label>
-              {' '}
-              <select id="withdrawAccount" style={{ width: '100%', padding: '12px 14px', border: '2px solid #ddd6fe', borderRadius: 12, fontSize: 14, fontFamily: 'system-ui,-apple-system,sans-serif', color: '#111827', background: 'white', cursor: 'pointer', outline: 'none', transition: 'all 0.2s' }} {...purpleFocus}>
-                <option>💳 Chase Bank ••••5241</option>
-                <option>🏦 Bank of America ••••3892</option>
-                <option>+ Add New Bank Account</option>
-              </select>
+              <PreviewRow label="You'll Receive" labelStyle={{ fontSize: 14, fontWeight: 700, color: '#111827' }} valueStyle={{ fontSize: 18, fontWeight: 900, background: 'linear-gradient(135deg,#10b981,#059669)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }} id="previewReceive" value={withdrawValue > 0 ? money(withdrawQuote.net) : '₹0.00'} />
             </div>
 
             {/* Action Buttons */}
@@ -627,7 +607,7 @@ export default function ClientWallet() {
                       <div style={{ fontWeight: 600, fontSize: 14, color: '#111827' }}>{t.label}</div>
                       <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{t.sub}</div>
                     </div>
-                    <span className={t.positive ? 'tx-amount-pos' : 'tx-amount-neg'} style={{ fontSize: 16, fontWeight: 700 }}>{t.amount}</span>
+                    <span className={t.positive ? 'tx-amount-pos' : t.neutral ? '' : 'tx-amount-neg'} style={{ fontSize: 16, fontWeight: 700, ...(t.neutral ? { color: 'var(--muted-foreground)' } : {}) }}>{t.amount}</span>
                   </div>
                 ))}
             </div>

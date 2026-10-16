@@ -1,4 +1,6 @@
-    .review-layout { display:grid; grid-template-columns:1fr 320px; gap:20px; }
+    /* minmax(0,1fr): a plain 1fr column cannot shrink below its widest unbreakable
+       content, so one long link in the notes pushed the whole page sideways. */
+    .review-layout { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:20px; }
     .file-row { display:flex; align-items:center; gap:14px; padding:14px 0; border-bottom:1px solid rgba(0,0,0,0.05); }
     .file-row:last-child { border-bottom:none; }
     .file-icon-wrap { width:40px; height:40px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }

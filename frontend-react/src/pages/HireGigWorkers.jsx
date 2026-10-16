@@ -3,7 +3,7 @@
  * Converted from front-end/pages/hire-gig-workers.html.
  *
  * Browse available freelancers with filters (experience, hourly rate,
- * rating, skills, availability) and a search box. Open a full profile, or
+ * skills, availability) and a search box. Open a full profile, or
  * invite a worker to one of your open projects.
  */
 import { useState } from 'react';
@@ -18,7 +18,7 @@ import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './HireGigWorkers.css?raw';
 
 const SKILL_FILTERS = ['React', 'TypeScript', 'Node.js', 'Python', 'Django', 'AWS', 'Docker', 'Kubernetes', 'Figma', 'UI Design', 'PostgreSQL', 'MongoDB', 'React Native', 'Swift', 'Machine Learning'];
-const AVAILABILITY_FILTERS = ['Available', 'Busy', 'Not Available'];
+const AVAILABILITY_FILTERS = ['Full-time', 'Part-time', 'Contract', 'Not Available'];
 const CHECKBOX_LABEL_STYLE = { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '6px 8px', borderRadius: 8 };
 const SECTION_TITLE_STYLE = { fontWeight: 700, fontSize: 13, color: '#111827', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 };
 const sectionIconStyle = bg => ({ width: 20, height: 20, background: bg, borderRadius: 5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 11 });
@@ -32,18 +32,19 @@ function loadWorkersFromStore(Store) {
       name: u.name,
       avatar: u.avatar || u.name.split(' ').map(n => n[0]).join('').toUpperCase(),
       avatarColor: u.avatarColor || 'linear-gradient(135deg,#6366f1,#4f46e5)',
-      specialization: u.specialization || (u.skills && u.skills[0]) || 'Freelancer',
-      rating: u.rating || 4.5,
-      reviewCount: u.reviewCount || u.completedProjects || 0,
+      // Real profile figures only — a missing one shows as missing.
+      specialization: u.jobTitle || (u.skills && u.skills[0]) || 'Freelancer',
+      // Project counts are worked out by the server from real projects;
+      // nobody can type them in.
       skills: u.skills || [],
       projectsCompleted: u.completedProjects || 0,
-      successRate: u.successRate || 95,
-      hourlyRate: u.hourlyRate || 50,
-      location: u.location || 'Remote',
-      availability: u.availability || 'Available',
-      experience: u.experience || 'Intermediate',
-      bio: u.bio || 'Experienced freelancer ready to help with your project.',
-      portfolio: u.portfolio || [],
+      activeProjects: u.activeProjects || 0,
+      hourlyRate: u.hourlyRate || 0,
+      location: u.location || '',
+      availability: typeof u.availability === 'string' && u.availability ? u.availability : 'Not set',
+      experience: u.experienceLevel || 'Not set',
+      bio: u.bio || '',
+      portfolio: u.portfolioProjects || [],
     }));
 }
 
@@ -59,9 +60,10 @@ function CardStat({ value, label, color }) {
 
 /** One freelancer card. */
 function WorkerCard({ w, onProfile, onInvite }) {
-  const availBg = w.availability === 'Available' ? '#22c55e' : (w.availability === 'Busy' ? '#f59e0b' : '#ef4444');
-  const badgeBg = w.availability === 'Available' ? '#ecfdf5' : '#fffbeb';
-  const badgeColor = w.availability === 'Available' ? '#059669' : '#d97706';
+  const free = ['Full-time', 'Part-time', 'Contract'].includes(w.availability);
+  const availBg = free ? '#22c55e' : (w.availability === 'Not set' ? '#94a3b8' : '#ef4444');
+  const badgeBg = free ? '#ecfdf5' : '#f1f5f9';
+  const badgeColor = free ? '#059669' : '#64748b';
   return (
     <div className="worker-card" onClick={() => onProfile(w.id)}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -81,13 +83,13 @@ function WorkerCard({ w, onProfile, onInvite }) {
         {w.skills.map(s => <span key={s} className="skill-tag" style={{ fontSize: 11, padding: '2px 8px' }}>{s}</span>)}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
-        <CardStat value={`${w.rating}★`} label={`${w.reviewCount} reviews`} color="#f59e0b" />
-        <CardStat value={`${w.successRate}%`} label="Success" color="#10b981" />
-        <CardStat value={`$${w.hourlyRate}/h`} label="Rate" />
+        <CardStat value={w.projectsCompleted} label="Completed" color="#10b981" />
+        <CardStat value={w.activeProjects} label="In progress" color="#f59e0b" />
+        <CardStat value={w.hourlyRate ? `₹${w.hourlyRate}/h` : '—'} label="Stated rate" />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
         <Icon name="map-pin" style={{ width: 14, height: 14, color: 'var(--muted-foreground)' }} />
-        <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{w.location}</span>
+        <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{w.location || 'Location not set'}</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <button onClick={e => { e.stopPropagation(); onProfile(w.id); }} className="btn-outline">View Profile</button>
@@ -109,10 +111,11 @@ function ProfileStat({ value, label, bg, border, valueColor, labelColor, valueSi
 
 /** The contents of the worker profile panel. */
 function WorkerProfile({ worker, onClose, onInvite }) {
-  const availBg = worker.availability === 'Available' ? '#ecfdf5' : (worker.availability === 'Busy' ? '#fffbeb' : '#fef2f2');
-  const availColor = worker.availability === 'Available' ? '#059669' : (worker.availability === 'Busy' ? '#d97706' : '#dc2626');
-  const expBg = worker.experience === 'Expert' ? '#eef2ff' : (worker.experience === 'Intermediate' ? '#faf5ff' : '#f0fdf4');
-  const expColor = worker.experience === 'Expert' ? '#4f46e5' : (worker.experience === 'Intermediate' ? '#7c3aed' : '#16a34a');
+  const free = ['Full-time', 'Part-time', 'Contract'].includes(worker.availability);
+  const availBg = free ? '#ecfdf5' : '#f1f5f9';
+  const availColor = free ? '#059669' : '#64748b';
+  const expBg = ['Senior', 'Expert'].includes(worker.experience) ? '#eef2ff' : '#faf5ff';
+  const expColor = ['Senior', 'Expert'].includes(worker.experience) ? '#4f46e5' : '#7c3aed';
 
   return (
     <>
@@ -128,9 +131,9 @@ function WorkerProfile({ worker, onClose, onInvite }) {
               <div style={{ fontWeight: 700, fontSize: 20, color: '#111827' }}>{worker.name}</div>
               <div style={{ fontSize: 14, color: '#4f46e5', fontWeight: 500, marginTop: 2 }}>{worker.specialization}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 12, color: '#6b7280' }}>{'📍 ' + worker.location}</span>
-                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 9999, background: availBg, color: availColor }}>{worker.availability}</span>
-                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 9999, background: expBg, color: expColor }}>{worker.experience}</span>
+                <span style={{ fontSize: 12, color: '#6b7280' }}>{'📍 ' + (worker.location || 'Location not set')}</span>
+                {worker.availability !== 'Not set' && <span title="Availability the worker set on their profile" style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 9999, background: availBg, color: availColor }}>{worker.availability}</span>}
+                {worker.experience !== 'Not set' && <span title="Experience level the worker set on their profile" style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 9999, background: expBg, color: expColor }}>{worker.experience}</span>}
               </div>
             </div>
           </div>
@@ -146,15 +149,14 @@ function WorkerProfile({ worker, onClose, onInvite }) {
             <span style={sectionIconStyle('#6366f1')}>👤</span>
             About
           </div>
-          <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, margin: 0, padding: '12px 14px', background: '#f8fafc', borderRadius: 10, borderLeft: '3px solid #6366f1' }}>{worker.bio}</p>
+          <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, margin: 0, padding: '12px 14px', background: '#f8fafc', borderRadius: 10, borderLeft: '3px solid #6366f1' }}>{worker.bio || 'This worker has not written a bio yet.'}</p>
         </div>
 
         {/* Stats row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 20 }}>
-          <ProfileStat value={<>{worker.rating}<span style={{ fontSize: 13 }}>★</span></>} label={`${worker.reviewCount} reviews`} bg="#fffbeb" border="#fde68a" valueColor="#d97706" labelColor="#92400e" />
-          <ProfileStat value={`${worker.successRate}%`} label="Success" bg="#ecfdf5" border="#a7f3d0" valueColor="#059669" labelColor="#065f46" />
-          <ProfileStat value={worker.projectsCompleted} label="Projects" bg="#eef2ff" border="#c7d2fe" valueColor="#4f46e5" labelColor="#3730a3" />
-          <ProfileStat value={<>{`$${worker.hourlyRate}`}<span style={{ fontSize: 10 }}>/hr</span></>} label="Hourly Rate" bg="#faf5ff" border="#ddd6fe" valueColor="#7c3aed" labelColor="#5b21b6" valueSize={15} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 20 }}>
+          <ProfileStat value={worker.projectsCompleted} label="Completed on Lannent" bg="#ecfdf5" border="#a7f3d0" valueColor="#059669" labelColor="#065f46" />
+          <ProfileStat value={worker.activeProjects} label="In progress now" bg="#eef2ff" border="#c7d2fe" valueColor="#4f46e5" labelColor="#3730a3" />
+          <ProfileStat value={worker.hourlyRate ? <>{`₹${worker.hourlyRate}`}<span style={{ fontSize: 10 }}>/hr</span></> : '—'} label="Stated hourly rate" bg="#faf5ff" border="#ddd6fe" valueColor="#7c3aed" labelColor="#5b21b6" valueSize={15} />
         </div>
 
         {/* Skills */}
@@ -186,27 +188,6 @@ function WorkerProfile({ worker, onClose, onInvite }) {
           </div>
         ) : ''}
 
-        {/* Reviews */}
-        {worker.reviews && worker.reviews.length ? (
-          <div style={{ marginBottom: 22 }}>
-            <div style={SECTION_TITLE_STYLE}>
-              <span style={{ ...sectionIconStyle('#f59e0b'), color: undefined }}>★</span>
-              Client Reviews
-            </div>
-            {worker.reviews.map((rev, i) => (
-              <div key={i} style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #fde68a', background: '#fffbeb', marginBottom: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
-                  <span style={{ fontWeight: 600, fontSize: 12, color: '#111827' }}>{rev.client}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {[0, 1, 2, 3, 4].map(s => <span key={s} style={{ color: s < rev.rating ? '#f59e0b' : '#d1d5db', fontSize: 12 }}>★</span>)}
-                    <span style={{ fontSize: 11, color: '#9ca3af' }}>{rev.date}</span>
-                  </div>
-                </div>
-                <p style={{ fontSize: 12, color: '#374151', margin: 0, lineHeight: 1.5 }}>{rev.comment}</p>
-              </div>
-            ))}
-          </div>
-        ) : ''}
 
         {/* Work History */}
         {worker.workHistory && worker.workHistory.length ? (
@@ -237,7 +218,9 @@ function WorkerProfile({ worker, onClose, onInvite }) {
   );
 }
 
-const DEFAULT_FILTERS = { search: '', experience: '', minRating: '0', maxRate: '200', skills: [], availability: [] };
+// The rate slider's top end means "any rate", so nobody is hidden by default.
+const MAX_RATE = 500;
+const DEFAULT_FILTERS = { search: '', experience: '', maxRate: String(MAX_RATE), skills: [], availability: [] };
 
 export default function HireGigWorkers() {
   const Store = useStore();
@@ -262,18 +245,16 @@ export default function HireGigWorkers() {
   const toggleIn = (key, value) => setFilters(f => ({ ...f, [key]: f[key].includes(value) ? f[key].filter(v => v !== value) : [...f[key], value] }));
 
   const q = filters.search.toLowerCase();
-  const minRating = parseFloat(filters.minRating);
   const maxRate = Number(filters.maxRate);
   const filtered = workers.filter(w => {
     const matchSearch = !q || w.name.toLowerCase().indexOf(q) !== -1
       || w.specialization.toLowerCase().indexOf(q) !== -1
       || w.skills.some(s => s.toLowerCase().indexOf(q) !== -1);
     const matchExp = !filters.experience || w.experience === filters.experience;
-    const matchRating = w.rating >= minRating;
-    const matchRate = w.hourlyRate <= maxRate;
+    const matchRate = maxRate >= MAX_RATE || w.hourlyRate <= maxRate;
     const matchSkills = filters.skills.length === 0 || filters.skills.some(sk => w.skills.indexOf(sk) !== -1);
     const matchAvail = filters.availability.length === 0 || filters.availability.indexOf(w.availability) !== -1;
-    return matchSearch && matchExp && matchRating && matchRate && matchSkills && matchAvail;
+    return matchSearch && matchExp && matchRate && matchSkills && matchAvail;
   });
 
   function openProfile(id) {
@@ -304,27 +285,14 @@ export default function HireGigWorkers() {
       Validate.toast('This project is no longer open — cannot send invitations.', 'error');
       return;
     }
-    // Save proposal/invitation to Store
+    // The invitation is at the project's posted budget; the worker accepts or declines it.
     if (selectedWorker) {
       try {
-        Store.createProposal({
-          taskId: projectId,
-          workerId: selectedWorker.id,
-          workerName: selectedWorker.name,
-          avatar: selectedWorker.avatar,
-          avatarColor: selectedWorker.avatarColor,
-          bidPrice: '$' + selectedWorker.hourlyRate + '/hr',
-          timeline: 'To be agreed',
-          coverLetter: inviteMessage,
-          skills: selectedWorker.skills || [],
-          status: 'pending',
-          type: 'invitation',
-          createdAt: new Date().toISOString().slice(0, 10),
-        });
-        // Notify worker
-        const projectTitle = (openTasks || []).find(t => t.id === projectId)?.title || 'Project';
-        Store.addNotification({ userId: selectedWorker.id, type: 'invitation', text: 'You have been invited to a project', subtext: projectTitle + ' · just now', read: false });
-      } catch (e) { console.warn('Store invite failed:', e); }
+        Store.sendInvitation({ taskId: projectId, workerId: selectedWorker.id, message: inviteMessage });
+      } catch (e) {
+        Validate.toast((e.message), 'error');
+        return;
+      }
     }
     setInviteOpen(false);
     const toast = document.createElement('div');
@@ -349,26 +317,18 @@ export default function HireGigWorkers() {
                 <label className="form-label" style={{ fontSize: 12 }}>Experience</label>
                 <select id="filterExp" className="form-input" value={filters.experience} onChange={e => setFilter('experience', e.target.value)}>
                   <option value="">All Levels</option>
-                  <option value="Entry">Entry</option>
-                  <option value="Intermediate">Intermediate</option>
+                  <option value="Junior">Junior</option>
+                  <option value="Mid-Level">Mid-Level</option>
+                  <option value="Senior">Senior</option>
                   <option value="Expert">Expert</option>
                 </select>
               </div>
               <div className="form-group">
                 <label className="form-label" style={{ fontSize: 12 }}>Hourly Rate (max)</label>
-                <input id="rateRange" type="range" min="0" max="200" step="5" value={filters.maxRate} onChange={e => setFilter('maxRate', e.target.value)} style={{ width: '100%' }} />
+                <input id="rateRange" type="range" min="0" max={MAX_RATE} step="5" value={filters.maxRate} onChange={e => setFilter('maxRate', e.target.value)} style={{ width: '100%' }} />
                 <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 4 }}>
-                  Up to $<span id="rateValue">{filters.maxRate}</span>/hr
+                  {Number(filters.maxRate) >= MAX_RATE ? 'Any rate' : <>Up to ₹<span id="rateValue">{filters.maxRate}</span>/hr</>}
                 </p>
-              </div>
-              <div className="form-group">
-                <label className="form-label" style={{ fontSize: 12 }}>Minimum Rating</label>
-                <select id="filterRating" className="form-input" value={filters.minRating} onChange={e => setFilter('minRating', e.target.value)}>
-                  <option value="0">Any</option>
-                  <option value="4">4.0+</option>
-                  <option value="4.5">4.5+</option>
-                  <option value="4.8">4.8+</option>
-                </select>
               </div>
               <div className="form-group">
                 <label className="form-label" style={{ fontSize: 12 }}>Skills</label>
@@ -441,6 +401,11 @@ export default function HireGigWorkers() {
                     : !openTasks.length ? <option value="">No open projects — only open projects accept invitations</option>
                     : openTasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
                 </select>
+                {(openTasks || []).some(t => t.id === projectId) && (
+                  <div style={{ fontSize: 12, marginTop: 6, color: 'var(--muted-foreground)', lineHeight: 1.5 }}>
+                    {`The offer is the project's budget, ₹${Number(openTasks.find(t => t.id === projectId).budget).toLocaleString('en-IN')}. If the worker accepts, they are hired at that price and the project starts straight away.`}
+                  </div>
+                )}
               </div>
               <div className="form-group">
                 <label className="form-label">Personal Message</label>

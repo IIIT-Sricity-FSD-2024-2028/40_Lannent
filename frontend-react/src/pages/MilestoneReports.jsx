@@ -12,8 +12,10 @@ import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
 import { useStore } from '../context/StoreContext';
+import { useAuth } from '../context/AuthContext';
 import { escapeHtml } from '../utils/helpers';
 import usePageTitle from '../hooks/usePageTitle';
+import { downloadPdf } from '../utils/pdf';
 import pageCss from './MilestoneReports.css?raw';
 
 const NBSP_DOT = ' ·  ';   // "&nbsp;·&nbsp; " separator
@@ -27,8 +29,7 @@ const VERDICTS = {
   'fail':          { bg: '#fef2f2', border: '#fecaca', text: '#b91c1c', label: 'Failed audit' },
   'conditional':   { bg: '#fffbeb', border: '#fde68a', text: '#b45309', label: 'Passed with conditions' },
   'worker-favour': { bg: '#ecfdf5', border: '#a7f3d0', text: '#047857', label: 'Resolved for the worker' },
-  'client-favour': { bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8', label: 'Resolved for the client' },
-  'split':         { bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9', label: 'Split decision' },
+  'client-favour': { bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8', label: 'Resolved for the client — sent back to the worker' },
 };
 
 /** Audit reports + disputes (optionally only those belonging to one task). */
@@ -51,7 +52,8 @@ function getReports(Store, taskId) {
       findings: r.findings,
       project: r.projectTitle,
       workerName: r.workerName,
-      viewUrl: '/expert-report-audit?id=' + r.auditRequestId,
+      viewUrl: `/expert-report-audit?id=${r.auditRequestId}&milestoneId=${r.milestoneId || ''}`,
+      raw: r,
     }));
 
   let storeDisputes = Store.getDisputes().map(d => ({
@@ -64,12 +66,13 @@ function getReports(Store, taskId) {
     reviewerInitials: reviewerOf(d.expertId)?.avatar || 'ER',
     reviewerColor: 'linear-gradient(135deg,#f59e0b,#d97706)',
     date: d.createdAt,
-    status: d.status === 'resolved' ? 'completed' : d.status === 'open' ? 'in-progress' : 'pending',
+    status: d.status === 'resolved' ? 'completed' : d.status === 'open' ? 'in-progress' : ['withdrawn', 'expired'].includes(d.status) ? 'closed' : 'pending',
     verdict: d.verdict,
     findings: d.resolution,
     project: d.project,
     workerName: d.againstName,
     viewUrl: '/expert-report-dispute?id=' + d.id,
+    raw: d,
   }));
 
   // ── PROJECT-LEVEL FILTERING ──
@@ -108,6 +111,7 @@ function statusConfig(status) {
     case 'in-progress': return { bg: '#eff6ff', border: '#bae6fd', text: '#0284c7', dot: '#38bdf8', label: 'In Progress' };
     case 'failed': return { bg: '#fef2f2', border: '#fecaca', text: '#b91c1c', dot: '#ef4444', label: 'Failed' };
     case 'pending': return { bg: '#fffbeb', border: '#fde68a', text: '#b45309', dot: '#f59e0b', label: 'Pending' };
+    case 'closed': return { bg: '#f9fafb', border: '#e5e7eb', text: '#6b7280', dot: '#9ca3af', label: 'Closed — no verdict' };
     default: return { bg: '#f9fafb', border: '#e5e7eb', text: '#6b7280', dot: '#9ca3af', label: status };
   }
 }
@@ -130,14 +134,49 @@ function VerdictChip({ r }) {
   return <div className="report-verdict" style={{ background: v.bg, borderColor: v.border, color: v.text }}>{v.label}</div>;
 }
 
-/** Small toast in the bottom-right corner (this page's own variant). */
-function showToast(msg, type = 'success') {
-  const t = document.createElement('div');
-  const bg = type === 'success' ? '#10b981' : type === 'info' ? '#6366f1' : '#ef4444';
-  t.style.cssText = `position:fixed;bottom:24px;right:24px;background:${bg};color:white;padding:14px 20px;border-radius:12px;font-size:14px;font-weight:500;z-index:300;box-shadow:0 8px 24px rgba(0,0,0,0.15);animation:fadeUp 0.4s ease;`;
-  t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => t.remove(), 3000);
+const VERDICT_TEXT = {
+  pass: 'Pass', fail: 'Fail', conditional: 'Pass with conditions',
+  'worker-favour': 'In favour of the worker — milestone paid',
+  'client-favour': 'In favour of the client — milestone sent back to the worker',
+};
+
+/** Builds and saves the PDF for one report card. */
+function downloadReportPdf(r) {
+  const x = r.raw || {};
+  if (r.type === 'technical-audit') {
+    downloadPdf(`audit-report-${r.id}.pdf`, {
+      title: 'Technical Audit Report',
+      subtitle: `${r.project || 'Project'} — ${r.milestoneName}`,
+      meta: `Report ${r.id} · filed ${fmtDate(r.date)}`,
+      sections: [
+        { heading: 'Verdict', rows: [['Verdict', VERDICT_TEXT[x.verdict] || 'Pending'], ['Reviewer', r.reviewer], ['Worker', r.workerName || '-']] },
+        { heading: 'Quality scores', rows: [
+          ['Code quality', `${x.codequality || 0} / 5`], ['Security', `${x.security || 0} / 5`],
+          ['Performance', `${x.performance || 0} / 5`], ['Documentation', `${x.documentation || 0} / 5`],
+        ] },
+        { heading: 'Technical findings', text: x.findings || 'No findings recorded.' },
+      ],
+    });
+  } else {
+    downloadPdf(`dispute-report-${r.id}.pdf`, {
+      title: 'Dispute Resolution Report',
+      subtitle: `${r.project || 'Project'} — ${r.milestoneName}`,
+      meta: `Case ${r.id} · raised ${fmtDate(x.createdAt)}${x.resolvedAt ? ' · resolved ' + fmtDate(x.resolvedAt) : ''}`,
+      sections: [
+        { heading: 'Case', rows: [
+          ['Status', { resolved: 'Resolved', open: 'Open', withdrawn: 'Withdrawn by the client', expired: 'Expired without a verdict' }[x.status] || x.status],
+          ['Decision', VERDICT_TEXT[x.verdict] || 'Pending'],
+          ['Amount in question', x.amount || '-'],
+          ['Raised by', x.raisedByName || '-'],
+          ['Against', x.againstName || '-'],
+          ['Expert Reviewer', r.reviewer],
+        ] },
+        { heading: 'Dispute', text: [x.reason, x.details].filter(Boolean).join(' — ') || 'No details recorded.' },
+        ...(x.outcome ? [{ heading: 'Outcome requested', text: x.outcome }] : []),
+        { heading: 'Resolution', text: x.resolution || 'The reviewer has not given a verdict yet.' },
+      ],
+    });
+  }
 }
 
 /** One report card. */
@@ -184,7 +223,7 @@ function ReportCard({ r, index, role }) {
           <Icon name="eye" style={{ width: 14, height: 14 }} />
           View Report
         </Link>
-        <button className="btn-download" onClick={() => showToast('Downloading PDF…', 'info')}>
+        <button className="btn-download" onClick={() => downloadReportPdf(r)}>
           <Icon name="download" style={{ width: 14, height: 14 }} />
           Download PDF
         </button>
@@ -210,10 +249,15 @@ function SummaryCard({ id, icon, iconBg, iconColor, value, valueColor, label }) 
 
 export default function MilestoneReports() {
   const Store = useStore();
+  const Auth = useAuth();
   usePageTitle('Milestone Reports — Lannent');
   const [searchParams] = useSearchParams();
   const taskId = searchParams.get('taskId') || null;
-  const role = searchParams.get('role') || 'client';
+  // The layout follows who is signed in. It came from `?role=`, defaulting
+  // to client, so a link without the parameter (the worker sidebar's "Reports")
+  // drew another role's sidebar — whose Settings link then bounced the user
+  // to their dashboard.
+  const role = Auth.getCurrentUser()?.role || searchParams.get('role') || 'client';
 
   const [reports] = useState(() => getReports(Store, taskId));
   const [typeFilter, setTypeFilter] = useState('all');
@@ -225,7 +269,8 @@ export default function MilestoneReports() {
     const task = Store.getTaskById(taskId);
     if (task) projectName = task.title;
   }
-  const backUrl = (role === 'worker' ? '/worker-milestone-board' : '/project-milestone-board') + (taskId ? '?id=' + taskId : '');
+  const backUrl = role === 'expert' ? '/expert-reports'
+    : (role === 'worker' ? '/worker-milestone-board' : '/project-milestone-board') + (taskId ? '?id=' + taskId : '');
   const milestoneNames = [...new Set(reports.map(r => r.milestoneName))];
 
   const list = reports.filter(r => {
@@ -237,7 +282,7 @@ export default function MilestoneReports() {
   return (
     <>
       <PageStyle css={pageCss} />
-      <DashboardLayout role={role} activePath={role === 'worker' ? '/worker-milestone-board' : '/client-my-projects'} pageTitle="Milestone Reports" pageSubtitle={projectName}>
+      <DashboardLayout role={role} activePath={role === 'expert' ? '/expert-reports' : '/milestone-reports'} pageTitle="Milestone Reports" pageSubtitle={projectName}>
         {/* Back + Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
           <Link to={backUrl} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, color: 'var(--muted-foreground)', transition: 'color 0.15s', textDecoration: 'none' }}

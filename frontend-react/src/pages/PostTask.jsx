@@ -22,12 +22,15 @@ import pageCss from './PostTask.css?raw';
 
 const skillSuggestions = ['React','TypeScript','Node.js','Web Design','JavaScript','Vue.js','Angular','Python','Django','FastAPI','Express.js','MongoDB','PostgreSQL','MySQL','AWS','Google Cloud','Azure','Docker','Kubernetes','Jenkins','CI/CD','Figma','Sketch','Adobe XD','UI Design','UX Design','Responsive Design','CSS','HTML','SASS','Tailwind','Bootstrap','Flutter','Dart','Swift','Kotlin','Java','C#','PHP','Laravel','Symfony','Ruby','Rails','GraphQL','REST API','OAuth','JWT','Authentication','Database Design','System Design','Machine Learning','TensorFlow','PyTorch','NLP','Computer Vision','Data Analysis','Pandas','NumPy','Matplotlib','Tableau','Power BI','Analytics','Git','GitHub','GitLab','Bitbucket','SVN','Linux','Unix','Windows','MacOS','Bash','Shell','PowerShell','Python Scripting','Automation','Testing','Jest','Mocha','Pytest','Selenium','QA','Manual Testing','Load Testing','Performance Testing','Security','Penetration Testing','Cybersecurity','SSL/TLS','Encryption','OWASP','API Security','Web Security','SEO','SEM','PPC','Content Marketing','Email Marketing','Social Media','Facebook Ads','Google Ads','Analytics','Google Analytics','Mixpanel','Amplitude','Product Management','Agile','Scrum','Kanban','Project Management','JIRA','Asana','Monday.com','Notion','Slack','Communication','Leadership','Team Management','Training','Documentation','Technical Writing','Copywriting','Content Strategy','Brand Strategy','User Research','Usability Testing','A/B Testing','Conversion Rate Optimization','Customer Support','Customer Success','Sales','Negotiation','Contract Negotiation','Legal','Compliance','GDPR','HIPAA','SOC 2','ISO','Quality Assurance','Code Review','Refactoring','Optimization','Performance Tuning','Caching','CDN','Load Balancing','Microservices','Serverless','Lambda','Cloud Functions','Firebase','Supabase','Sanity','Contentful','Headless CMS','Static Site Generation','Next.js','Gatsby','Hugo','Jekyll','WordPress','Shopify','WooCommerce','Magento','BigCommerce','E-commerce','Payment Processing','Stripe','PayPal','Square','Blockchain','Crypto','Web3','Smart Contracts','Solidity','Ethereum','Bitcoin','NFT','Virtual Reality','Augmented Reality','3D Modeling','Blender','Unity','Unreal Engine','Game Development','Level Design','Game Art','Sound Design','Music Production','Video Production','Video Editing','Adobe Creative Suite','Premiere','After Effects','Lighting','Photography','Motion Graphics','Animation','2D Animation','3D Animation','Rigging','Modeling','Texturing','Rendering','Visualization','Data Visualization','Infographics','Illustration','Vector Art','Iconography','Logo Design','Branding','Package Design','Print Design','Layout Design','Typography','Color Theory','Design Systems','Component Libraries','Accessibility','WCAG','Inclusive Design','Mobile First','Progressive Web Apps','Service Workers','Offline Support','Caching Strategies','State Management','Redux','MobX','Vuex','Context API','Hooks','Composition API','Async/Await','Promises','Callbacks','Error Handling','Logging','Monitoring','Sentry','Datadog','New Relic','APM','Observability','Telemetry','Event Tracking','User Tracking','Privacy','Analytics Privacy','GDPR Compliance','Data Privacy','Security Audit','Vulnerability Assessment','Bug Bounty','Incident Response','Disaster Recovery','Backup Strategy','Data Recovery','Version Control','Branching Strategies','Code Owners','Pull Requests','Code Reviews','Pair Programming','Mob Programming','Test-Driven Development','Behavior-Driven Development','Acceptance Testing','Integration Testing','Unit Testing','End-to-End Testing','Contract Testing','Snapshot Testing','Visual Regression Testing','Performance Testing','Load Testing','Stress Testing','Chaos Engineering','Infrastructure as Code','Terraform','Ansible','Puppet','Chef','Containers','Docker Compose','Orchestration','Kubernetes','OpenShift','AWS ECS','Cloud Deployment','CI/CD Pipeline','GitHub Actions','GitLab CI','CircleCI','Travis CI','Jenkins','Monitoring','Alerting','Logging','Log Aggregation','ELK Stack','Splunk','Cloudwatch','Metrics','Prometheus','Grafana','Cost Optimization','Resource Management','Scaling','Horizontal Scaling','Vertical Scaling','Caching Strategies','Database Optimization','Query Optimization','Index Optimization','Sharding','Partitioning','Replication','Backup','Disaster Recovery','Business Continuity','Incident Management','Change Management','Release Management','Deployment Strategy','Blue-Green Deployment','Canary Deployment','Rolling Deployment','Feature Flags','A/B Testing'];
 
-const CATEGORIES = ['Web Development', 'Mobile Development', 'Backend / API', 'UI/UX Design', 'AI / Machine Learning', 'DevOps / Cloud'];
+import { CATEGORIES } from '../utils/categories';
 const EMPTY_MILESTONE = { title: '', description: '', budget: '', deadline: '' };
+/** Today as YYYY-MM-DD, the earliest date a deadline may take. */
+const TODAY = () => new Date().toISOString().slice(0, 10);
 const NO_ERRORS = { msTitleErr: '', msDescErr: '', msBudgetErr: '', msDeadlineErr: '' };
 
 // ── Inline SVG paths used by the original markup ──
-const PATH_DOLLAR = 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z';
+// Indian rupee sign (lucide's indian-rupee outline).
+const PATH_RUPEE = 'M6 3h12M6 8h12M6 13l8.5 8M6 13h3M9 13c6.667 0 6.667-10 0-10';
 const PATH_CHECK_CIRCLE = 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z';
 const PATH_SHIELD_CHECK = 'M9 12l2 2 4-4m7 0a9 9 0 11-18 0 9 9 0 0118 0z';
 const PATH_CALENDAR = 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z';
@@ -77,7 +80,8 @@ export default function PostTask() {
   const [category, setCategory] = useState('Web Development');
   const [deadline, setDeadline] = useState('');
   const [budget, setBudget] = useState(0);
-  const [currency, setCurrency] = useState('USD');
+  // Every wallet and escrow is in rupees, so every project is too.
+  const currency = 'INR';
   const [skills, setSkills] = useState([]);
   const [skillInput, setSkillInput] = useState('');
   const [suggestions, setSuggestions] = useState({ active: false, items: [], gen: 0 });
@@ -99,7 +103,7 @@ export default function PostTask() {
    * stayed until the next rebuild. `msView` is that snapshot; its `key`
    * remounts the form so its inputs start from the stored values again.
    */
-  const [msView, setMsView] = useState({ key: 0, remaining: 0, currency: 'USD', count: 0 });
+  const [msView, setMsView] = useState({ key: 0, remaining: 0, currency: '₹', count: 0 });
 
   // ── Budget helpers ──
   const milestoneTotal = milestones.reduce((sum, m) => sum + (parseFloat(m.budget) || 0), 0);
@@ -118,7 +122,7 @@ export default function PostTask() {
   function renderMilestones(list, editIdx) {
     const total = list.reduce((sum, m) => sum + (parseFloat(m.budget) || 0), 0);
     const remaining = totalBudget - total + (editIdx !== null ? parseFloat(list[editIdx]?.budget || 0) : 0);
-    setMsView(v => ({ key: v.key + 1, remaining, currency, count: list.length }));
+    setMsView(v => ({ key: v.key + 1, remaining, currency: '₹', count: list.length }));
     setMsErrors(NO_ERRORS);
   }
 
@@ -198,6 +202,7 @@ export default function PostTask() {
     if (!nm.budget || budgetMsg) errs.msBudgetErr = budgetMsg || 'Budget is required';
 
     if (!nm.deadline) errs.msDeadlineErr = 'Deadline is required';
+    else if (nm.deadline < TODAY()) errs.msDeadlineErr = 'The date is in the past';
     else if (deadline && nm.deadline > deadline) errs.msDeadlineErr = `Must be on or before project deadline (${deadline})`;
 
     if (Object.values(errs).some(Boolean)) { setMsErrors(errs); return; }
@@ -213,9 +218,24 @@ export default function PostTask() {
   }
 
   function handleRemoveMilestone(idx) {
-    const next = milestones.filter((_, i) => i !== idx);
-    setMilestones(next);
-    renderMilestones(next, editingIndex);
+    const title = milestones[idx]?.title || `Milestone ${idx + 1}`;
+    Validate.confirm(`Delete "${(title)}"? Its budget is returned to the unallocated total.`, () => {
+      const next = milestones.filter((_, i) => i !== idx);
+      // Keep an open edit pointed at the same milestone. Deleting an earlier
+      // one shifted the indexes, so "Update" overwrote the wrong card;
+      // deleting the one being edited closes the form.
+      let nextEdit = editingIndex;
+      if (editingIndex === idx) {
+        nextEdit = null;
+        setShowMilestoneForm(false);
+        setNewMilestone(EMPTY_MILESTONE);
+      } else if (editingIndex !== null && idx < editingIndex) {
+        nextEdit = editingIndex - 1;
+      }
+      setEditingIndex(nextEdit);
+      setMilestones(next);
+      renderMilestones(next, nextEdit);
+    });
   }
 
   function handleEditMilestone(idx) {
@@ -253,18 +273,21 @@ export default function PostTask() {
   let auditSummary = 'Disabled';
   if (auditEnabled) {
     const rev = auditExpertId ? Store.getUserById(auditExpertId) : null;
-    auditSummary = rev ? `${rev.name.split(' ')[0]} · ${currency} ${(auditFee || 0).toLocaleString()}` : 'Select a reviewer';
+    auditSummary = rev ? `${rev.name.split(' ')[0]} · ₹${(auditFee || 0).toLocaleString('en-IN')}` : 'Select a reviewer';
   }
 
-  const walletUser = Store.getUserById(session?.userId || 'u1');
+  const walletUser = Store.getUserById(session.userId);
   const walletBalance = walletUser?.walletBalance || 0;
+  // Posting moves the budget into escrow; the contract fees come at hire.
   const insufficient = totalBudget > walletBalance;
+  const hireFees = totalBudget > 0 ? Store.Fees.projectFunding(totalBudget) : null;
 
   // Enable/disable Publish in real time. An audited project cannot be
   // published without a named reviewer.
   const auditReady = !auditEnabled || !!auditExpertId;
+  const auditFeeOk = !auditEnabled || auditFee >= 1;
   const ready = title.trim().length >= 5 && description.trim().length >= 5 && totalBudget > 0 &&
-                milestones.length > 0 && validateTotalMatch().valid && auditReady;
+                milestones.length > 0 && validateTotalMatch().valid && auditReady && auditFeeOk && !insufficient;
 
   // ── Publish ──
   function validateTaskForm() {
@@ -277,6 +300,8 @@ export default function PostTask() {
     else clearError('taskTitleInput');
 
     if (!desc || desc.length < 5) { Validate.toast('Description is required.', 'error'); valid = false; }
+    if (deadline && deadline < TODAY()) { Validate.toast('The project deadline is in the past.', 'error'); valid = false; }
+    if (budget && !/^\d+(\.\d{1,2})?$/.test(String(budget).trim())) { Validate.toast('Enter the budget in rupees and paise (e.g. 1500 or 1500.50).', 'error'); valid = false; }
     if (!budget || parseFloat(budget) <= 0) { Validate.toast('Please enter a valid budget greater than 0.', 'error'); valid = false; }
     if (milestones.length === 0) { Validate.toast('Please add at least one milestone before publishing.', 'error'); valid = false; }
 
@@ -293,57 +318,45 @@ export default function PostTask() {
   function publishTask() {
     if (!validateTaskForm()) return;
 
-    const clientId = session?.userId || 'u1';
     const amount = parseFloat(budget);
-
-    // Check wallet balance
-    const user = Store.getUserById(clientId);
-    if (!user) { Validate.toast('User not found. Please log in again.', 'error'); return; }
-    if (user.walletBalance < amount) {
-      Validate.toast(`Insufficient balance! You have $${user.walletBalance.toLocaleString()} but need $${amount.toLocaleString()}.`, 'error');
+    if (walletBalance < amount) {
+      Validate.toast(`Your wallet holds ₹${walletBalance.toLocaleString('en-IN')}, but this project's budget is ₹${amount.toLocaleString('en-IN')}. Add funds first.`, 'error');
+      return;
+    }
+    if (auditEnabled && !(auditFee >= 1)) {
+      Validate.toast('Enter an opening offer of at least ₹1 for the audit.', 'error');
       return;
     }
 
-    // Create task
-    const task = Store.createTask({
-      title: title,
-      category,
-      description: description.trim(),
-      skills,
-      deadline,
-      budget: amount,
-      currency,
-      auditEnabled,
-      auditFee: auditEnabled ? (auditFee || undefined) : undefined,
-      auditDomain: auditEnabled ? category : undefined,
-      auditExpertId: auditEnabled ? auditExpertId : undefined,
-      clientId,
-      status: 'open',
-    });
-
-    // Create milestones
-    milestones.forEach(m => {
-      // workerId stays null: nobody is hired yet. Setting it to the client
-      // made the milestone payable to the client, so approving a deliverable
-      // released escrow back to them instead of to the hired worker. The
-      // worker is backfilled onto these milestones when they are hired.
-      Store.createMilestone({ taskId: task.id, title: m.title, description: m.description, budget: parseFloat(m.budget), deadline: m.deadline, workerId: null });
-    });
-
-    // No money moves here. Project escrow is funded when a worker is hired,
-    // and the audit fee is funded once you and the reviewer agree a price.
-    if (auditEnabled) {
-      Validate.toast('Project saved as a draft. It goes live once a reviewer accepts your audit.', 'success');
-      setTimeout(() => { navigate('/client-audit-offers'); }, 1400);
-    } else {
-      Validate.toast('Task published successfully.', 'success');
-      setTimeout(() => { navigate('/client-my-projects'); }, 1200);
+    // The project and its milestones are created together: if a milestone is
+    // refused, the project is removed again and its budget returned.
+    try {
+      Store.createTaskWithMilestones({
+        title: title.trim(),
+        category,
+        description: description.trim(),
+        skills,
+        deadline: deadline || undefined,
+        budget: amount,
+        currency,
+        auditEnabled,
+        auditFee: auditEnabled ? auditFee : undefined,
+        auditExpertId: auditEnabled ? auditExpertId : undefined,
+      }, milestones.map(m => ({ title: m.title, description: m.description, budget: parseFloat(m.budget), dueDate: m.deadline || undefined })));
+    } catch (e) {
+      Validate.toast(e.message, 'error');
+      return;
     }
-  }
 
-  function saveDraft() {
-    if (!title.trim()) { showError('taskTitleInput', 'Task title is required to save draft.'); return; }
-    Validate.toast('Draft saved successfully.', 'info');
+    // The budget is now held in escrow. The audit fee is funded once you and
+    // the reviewer agree a price; the contract fees are charged at hire.
+    if (auditEnabled) {
+      Validate.toast(`Saved as a draft — ₹${amount.toLocaleString('en-IN')} is held in escrow. It goes live once your reviewer accepts the audit.`, 'success');
+      setTimeout(() => { navigate('/audit-offers'); }, 1600);
+    } else {
+      Validate.toast(`Project published — ₹${amount.toLocaleString('en-IN')} is held in escrow until milestones are approved.`, 'success');
+      setTimeout(() => { navigate('/client-my-projects'); }, 1400);
+    }
   }
 
   // ── Budget check box ──
@@ -358,9 +371,9 @@ export default function PostTask() {
     if (matched) {
       icon = '✅'; message = 'Budget perfectly allocated across all milestones.';
     } else if (exceeded) {
-      icon = '🔴'; message = `Total milestone budget exceeds total budget by ${currency} ${diff.toLocaleString()}. Remove or reduce milestones.`;
+      icon = '🔴'; message = `Total milestone budget exceeds total budget by ₹${diff.toLocaleString('en-IN')}. Remove or reduce milestones.`;
     } else {
-      icon = '⚠️'; message = `Total milestone budget must equal total budget. ${currency} ${diff.toLocaleString()} remaining to allocate.`;
+      icon = '⚠️'; message = `Total milestone budget must equal total budget. ₹${diff.toLocaleString('en-IN')} remaining to allocate.`;
     }
     budgetCheck = (
       <div className={`budget-check ${boxClass}`}>
@@ -368,17 +381,17 @@ export default function PostTask() {
         <div className="budget-check-item">
           <span>Milestone total:</span>
           {' '}
-          <strong>{`${currency} ${milestoneTotal.toLocaleString()}`}</strong>
+          <strong>{`₹${milestoneTotal.toLocaleString('en-IN')}`}</strong>
         </div>
         <div className="budget-check-item">
           <span>Project Budget:</span>
           {' '}
-          <strong>{`${currency} ${totalBudget.toLocaleString()}`}</strong>
+          <strong>{`₹${totalBudget.toLocaleString('en-IN')}`}</strong>
         </div>
         <div className="budget-check-item budget-check-divider">
           <span>{matched ? '✓ Fully allocated' : exceeded ? '✗ Over budget' : 'Remaining'}</span>
           {' '}
-          <strong>{`${currency} ${Math.abs(diff).toLocaleString()}`}</strong>
+          <strong>{`₹${Math.abs(diff).toLocaleString('en-IN')}`}</strong>
         </div>
         <div className="budget-check-warning">
           <span style={{ flexShrink: 0 }}>{icon}</span>
@@ -429,7 +442,7 @@ export default function PostTask() {
               </div>
               <div className="form-group">
                 <label className="form-label">Deadline</label>
-                <input type="date" className="form-input" onChange={e => setDeadline(e.target.value)} />
+                <input type="date" className="form-input" min={TODAY()} onChange={e => setDeadline(e.target.value)} />
               </div>
               <div className="form-group">
                 <label className="form-label">Required Skills</label>
@@ -461,17 +474,16 @@ export default function PostTask() {
                 <div className="form-group">
                   <RequiredLabel>Total Budget</RequiredLabel>
                   <div style={{ position: 'relative' }}>
-                    <Icon name="dollar-sign" className="input-icon" />
+                    <Icon name="indian-rupee" className="input-icon" />
                     <input type="number" className="form-input with-icon" defaultValue="" placeholder="5000" onInput={e => setBudget(e.target.value)} />
                   </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Currency</label>
-                  <select className="form-select" value={currency} onChange={e => setCurrency(e.target.value)}>
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                    <option value="GBP">GBP</option>
-                  </select>
+                  {/* Fixed: wallets and escrow are held in rupees, so there is nothing to choose. */}
+                  <div className="form-input" style={{ background: 'var(--secondary)', fontWeight: 600, cursor: 'default' }} aria-readonly="true">
+                    ₹ INR — Indian Rupee
+                  </div>
                 </div>
               </div>
               <div className="audit-toggle">
@@ -480,7 +492,7 @@ export default function PostTask() {
                     <Svg d={PATH_SHIELD_CHECK} size="16" />
                     Technical Audit
                   </div>
-                  <div className="audit-desc">Hire an Expert Reviewer to audit this project. Your project stays a draft until a reviewer accepts.</div>
+                  <div className="audit-desc">Hire an Expert Reviewer to audit every milestone. Your project stays a draft until a reviewer accepts; their fee is agreed and funded separately.</div>
                 </div>
                 <button className={'toggle-switch ' + (auditEnabled ? 'on' : 'off')} type="button" onClick={toggleAudit}>
                   <div className="toggle-switch-thumb"></div>
@@ -489,7 +501,7 @@ export default function PostTask() {
               <div id="auditPanel" style={{ display: auditEnabled ? 'block' : 'none', marginTop: 16, padding: 18, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--secondary)' }}>
                 <label className="form-label" htmlFor="auditFeeInput" style={{ display: 'block', marginBottom: 6 }}>Your opening offer for the audit</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontWeight: 700, color: 'var(--muted-foreground)' }}>$</span>
+                  <span style={{ fontWeight: 700, color: 'var(--muted-foreground)' }}>₹</span>
                   <input id="auditFeeInput" className="form-input" type="number" min="1" step="1" style={{ maxWidth: 180 }} placeholder="300"
                          defaultValue="300" onInput={e => setAuditFee(parseFloat(e.target.value) || 0)} />
                 </div>
@@ -522,7 +534,7 @@ export default function PostTask() {
                   <div className="milestone-form" key={msView.key}>
                     <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
                       {`${editing ? '✏️ Edit' : '➕ Add'} Milestone`}
-                      {remaining > 0 ? <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 400, color: 'var(--muted-foreground)' }}>Remaining: <strong style={{ color: '#16a34a' }}>{msView.currency + ' ' + remaining.toLocaleString()}</strong></span> : ''}
+                      {remaining > 0 ? <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 400, color: 'var(--muted-foreground)' }}>Remaining: <strong style={{ color: '#16a34a' }}>{msView.currency + remaining.toLocaleString('en-IN')}</strong></span> : ''}
                     </div>
                     <div className="form-group">
                       <RequiredLabel>Milestone Title</RequiredLabel>
@@ -540,7 +552,7 @@ export default function PostTask() {
                       </div>
                       <div className="form-group">
                         <RequiredLabel>Deadline</RequiredLabel>
-                        {msField('msDeadlineErr', <input type="date" className={errClass('msDeadlineErr')} id="newMilestoneDeadline" defaultValue={newMilestone.deadline} onInput={updateNew('deadline', 'msDeadlineErr')} />)}
+                        {msField('msDeadlineErr', <input type="date" className={errClass('msDeadlineErr')} id="newMilestoneDeadline" min={TODAY()} max={deadline || undefined} defaultValue={newMilestone.deadline} onInput={updateNew('deadline', 'msDeadlineErr')} />)}
                       </div>
                     </div>
                     <div className="milestone-form-actions">
@@ -561,8 +573,8 @@ export default function PostTask() {
                       <div className="milestone-desc">{m.description}</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginLeft: 32 }}>
                         <div className="milestone-budget">
-                          <Svg d={PATH_DOLLAR} />
-                          {`${msView.currency} ${parseFloat(m.budget).toLocaleString()}`}
+                          <Svg d={PATH_RUPEE} />
+                          {`${msView.currency}${parseFloat(m.budget).toLocaleString('en-IN')}`}
                         </div>
                         {m.deadline ? <span style={{ fontSize: 12, color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center', gap: 4 }}>{`📅 ${m.deadline}`}</span> : ''}
                       </div>
@@ -571,8 +583,10 @@ export default function PostTask() {
                       <button className="milestone-delete" type="button" title="Edit" onClick={() => handleEditMilestone(idx)}>
                         <Svg d={PATH_EDIT} style={{ width: 14, height: 14 }} />
                       </button>
-                      <button className="milestone-delete" type="button" title="Remove" onClick={() => handleRemoveMilestone(idx)}>
-                        <Svg d={PATH_X} />
+                      {/* The icon had no size, so it collapsed to nothing and the
+                          button was invisible — users could not delete a milestone. */}
+                      <button className="milestone-delete" type="button" title="Delete milestone" aria-label={`Delete milestone ${idx + 1}`} onClick={() => handleRemoveMilestone(idx)}>
+                        <Svg d={PATH_X} style={{ width: 16, height: 16 }} />
                       </button>
                     </div>
                   </div>
@@ -586,8 +600,6 @@ export default function PostTask() {
             </div>
 
             <div className="action-buttons">
-              <button type="button" className="save-draft" onClick={saveDraft}>Save Draft</button>
-              {' '}
               <button type="button" className="publish" id="publishBtn" disabled={!ready} onClick={publishTask}>Publish Task</button>
             </div>
           </div>
@@ -596,7 +608,7 @@ export default function PostTask() {
             <div className="sidebar-card">
               <h3>Project Summary</h3>
 
-              <SummaryItem kind="budget" path={PATH_DOLLAR} label="Budget" id="summarySummaryBudget" value={`${currency} ${isNaN(summaryBudget) ? 0 : summaryBudget.toLocaleString()}`} />
+              <SummaryItem kind="budget" path={PATH_RUPEE} label="Budget" id="summarySummaryBudget" value={`₹${isNaN(summaryBudget) ? 0 : summaryBudget.toLocaleString('en-IN')}`} />
               <SummaryItem kind="milestones" path={PATH_CHECK_CIRCLE} label="Milestones" id="summaryMilestones" value={`${milestones.length}`} />
               <SummaryItem kind="deadline" path={PATH_CALENDAR} label="Deadline" id="summaryDeadline" value={deadline ? `${days} day${days === 1 ? '' : 's'}` : 'Not set'} />
               {/* The "enabled" class was only decided when the page first rendered (audit off), so it never appears */}
@@ -606,11 +618,15 @@ export default function PostTask() {
               <div id="walletCheckSummary">
                 <div className={`summary-item ${walletKind}`} style={{ marginTop: 12 }}>
                   <div className={`summary-label ${walletKind}`}>
-                    <Svg d={PATH_DOLLAR} size="16" />
+                    <Svg d={PATH_RUPEE} size="16" />
                     Wallet Balance
                   </div>
-                  <div className={`summary-value ${walletKind}`} style={{ color: insufficient ? '#dc2626' : '#10b981', fontSize: 16 }}>{`${currency} ${walletBalance.toLocaleString()}`}</div>
-                  {insufficient ? <div style={{ fontSize: 11, marginTop: 6, color: '#991b1b' }}>Insufficient balance. Add funds to proceed.</div> : ''}
+                  <div className={`summary-value ${walletKind}`} style={{ color: insufficient ? '#dc2626' : '#10b981', fontSize: 16 }}>{`₹${walletBalance.toLocaleString('en-IN')}`}</div>
+                  {insufficient
+                    ? <div style={{ fontSize: 11, marginTop: 6, color: '#991b1b' }}>Not enough to hold this budget in escrow. Add funds in your wallet first.</div>
+                    : totalBudget > 0 ? <div style={{ fontSize: 11, marginTop: 6, color: 'var(--muted-foreground)', lineHeight: 1.5 }}>
+                        {`₹${totalBudget.toLocaleString('en-IN')} moves into escrow when you publish. When you hire, a ₹${hireFees.fees.toLocaleString('en-IN')} marketplace and contract fee is charged.`}
+                      </div> : ''}
                 </div>
               </div>
             </div>

@@ -1,4 +1,4 @@
-    .post-container { display:grid; grid-template-columns:1fr 320px; gap:18px; width:100%; max-width:none; margin:0; align-items:start; }
+    .post-container { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:18px; width:100%; max-width:none; margin:0; align-items:start; }
     .section-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px 20px 24px; margin-bottom:20px; box-shadow:0 8px 30px rgba(0,0,0,0.06); }
     .post-sidebar { position:sticky; top:20px; }
     .section-card h2 { font-size:17px; font-weight:500; letter-spacing:-0.02em; margin-bottom:16px; }

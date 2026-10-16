@@ -1,72 +1,21 @@
-import { IsString, IsOptional, IsNumber, IsArray } from 'class-validator';
+import { IsString, IsOptional, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+/**
+ * A worker applying to an open project, or a client inviting a worker to
+ * theirs. There is no price: it is always the project's posted budget.
+ */
 export class CreateProposalDto {
   @ApiProperty({ example: 't3' })
   @IsString()
   taskId: string;
 
-  @ApiProperty({ example: 'u5' })
-  @IsString()
-  workerId: string;
-
-  @ApiPropertyOptional({ example: 'Sarah Johnson' })
+  /** The worker being invited. Ignored when a worker applies — they apply as themselves. */
+  @ApiPropertyOptional({ example: 'u5', description: 'The worker being invited (clients only)' })
   @IsOptional() @IsString()
-  workerName?: string;
+  workerId?: string;
 
-  @ApiPropertyOptional({ example: 'SJ' })
-  @IsOptional() @IsString()
-  avatar?: string;
-
-  @ApiPropertyOptional({ example: 'linear-gradient(135deg,#6366f1,#4f46e5)' })
-  @IsOptional() @IsString()
-  avatarColor?: string;
-
-  @ApiPropertyOptional({ example: 4.9 })
-  @IsOptional() @IsNumber()
-  rating?: number;
-
-  @ApiPropertyOptional({ example: 127 })
-  @IsOptional() @IsNumber()
-  reviewCount?: number;
-
-  @ApiPropertyOptional({ example: 'San Francisco, CA' })
-  @IsOptional() @IsString()
-  location?: string;
-
-  @ApiPropertyOptional({ example: '$1,100' })
-  @IsOptional() @IsString()
-  bidPrice?: string;
-
-  @ApiPropertyOptional({ example: '1 week' })
-  @IsOptional() @IsString()
-  timeline?: string;
-
-  @ApiPropertyOptional({ example: 'I can deliver clean code...' })
-  @IsOptional() @IsString()
-  coverLetter?: string;
-
-  @ApiPropertyOptional({ example: ['Node.js', 'REST API'] })
-  @IsOptional() @IsArray()
-  skills?: string[];
-
-  @ApiPropertyOptional({ example: 89 })
-  @IsOptional() @IsNumber()
-  completedProjects?: number;
-
-  @ApiPropertyOptional({ example: 98 })
-  @IsOptional() @IsNumber()
-  successRate?: number;
-
-  @ApiPropertyOptional({ example: '$85/hr' })
-  @IsOptional() @IsString()
-  hourlyRate?: string;
-
-  @ApiPropertyOptional({ example: 'Within 2 hours' })
-  @IsOptional() @IsString()
-  responseTime?: string;
-
-  @ApiPropertyOptional({ example: 'proposal', enum: ['proposal', 'invitation'] })
-  @IsOptional() @IsString()
-  type?: string;
+  @ApiPropertyOptional({ example: 'Your Stripe work looked like a great fit for this.' })
+  @IsOptional() @IsString() @MaxLength(2000)
+  message?: string;
 }

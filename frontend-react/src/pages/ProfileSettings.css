@@ -23,6 +23,7 @@
     /* ─── Right Content Panel ────────────────────────── */
     .settings-panel {
       flex: 1;
+      min-width: 0; /* a flex item otherwise refuses to shrink below its content */
       background: var(--card); border: 1px solid var(--border);
       border-radius: 16px; padding: 32px;
       box-shadow: 0 10px 40px 5px rgba(194,194,194,0.12);

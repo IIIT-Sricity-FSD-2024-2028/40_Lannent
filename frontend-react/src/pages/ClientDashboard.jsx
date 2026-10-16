@@ -56,7 +56,7 @@ function ProjectRow({ task: t }) {
       <td>
         <span className={`badge ${badgeClass}`} style={{ textTransform: 'capitalize' }}>{(t.status || 'unknown').replace(/-/g, ' ')}</span>
       </td>
-      <td style={{ fontWeight: 600 }}>{`$${(t.budget || 0).toLocaleString()}`}</td>
+      <td style={{ fontWeight: 600 }}>{`₹${(t.budget || 0).toLocaleString('en-IN')}`}</td>
       <td>
         <Link to={`/project-workroom?id=${t.id}`} className="btn-sm">View</Link>
       </td>
@@ -71,22 +71,22 @@ export default function ClientDashboard() {
 
   // Live stats from store
   const session = Auth.getCurrentUser();
-  const userId = session?.userId || 'u1';
+  const userId = session.userId;
   const myTasks = Store.getTasksByClient(userId);
   const activeTasks = myTasks.filter(t => t.status === 'in-progress').length;
-  const pendingApps = Store.getProposals().filter(p => myTasks.find(t => t.id === p.taskId) && p.status === 'pending' && p.type !== 'invitation').length;
+  const pendingApps = Store.getProposals().filter(p => p.type === 'application' && p.status === 'pending' && myTasks.some(t => t.id === p.taskId)).length;
   const user = Store.getUserById(userId);
   const walletBal = user?.walletBalance || 0;
   const completedTasks = myTasks.filter(t => t.status === 'completed').length;
-  const openProjects = myTasks.filter(t => t.status !== 'completed').slice(0, 4);
+  const openProjects = myTasks.filter(t => !['completed', 'cancelled'].includes(t.status)).slice(0, 4);
 
   return (
     <DashboardLayout role="client" activePath="/client-dashboard" pageTitle="Client Dashboard" pageSubtitle="Manage your projects and track progress">
       {/* Stats */}
       <div className="stats-grid">
         <StatCard value={activeTasks} label="Active Projects" change={`${myTasks.length} total`} icon="folder-kanban" iconBg="#eff6ff" iconColor="#3b82f6" />
-        <StatCard value={pendingApps} label="Pending Applications" change={`${pendingApps} new`} icon="users" iconBg="#faf5ff" iconColor="#a855f7" />
-        <StatCard value={`$${walletBal.toLocaleString()}`} label="Wallet Balance" change="Available" icon="wallet" iconBg="#ecfdf5" iconColor="#10b981" />
+        <StatCard value={pendingApps} label="Pending Applications" change="waiting for you" icon="users" iconBg="#faf5ff" iconColor="#a855f7" />
+        <StatCard value={`₹${walletBal.toLocaleString('en-IN')}`} label="Wallet Balance" change="Available" icon="wallet" iconBg="#ecfdf5" iconColor="#10b981" />
         <StatCard value={completedTasks} label="Completed Tasks" change="all time" icon="check-circle" iconBg="#fff7ed" iconColor="#f97316" />
       </div>
 
@@ -120,7 +120,7 @@ export default function ClientDashboard() {
             </div>
             <div className="qa-v2-content">
               <div className="qa-v2-title">View Applications</div>
-              <div className="qa-v2-desc">Review proposals from gig workers</div>
+              <div className="qa-v2-desc">Hire from workers who applied</div>
             </div>
           </Link>
           {' '}

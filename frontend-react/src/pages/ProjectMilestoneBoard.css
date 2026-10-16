@@ -1,4 +1,4 @@
-    .kanban-board { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; align-items:start; }
+    .kanban-board { display:grid; grid-template-columns:repeat(5,1fr); gap:16px; align-items:start; }
     .kanban-col { border-radius:16px; background:var(--input-bg); padding:16px; min-height:400px; }
     .kanban-col-header { display:flex; align-items:center; gap:8px; margin-bottom:16px; }
     .kanban-col-title { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; }
@@ -10,6 +10,7 @@
     .card-meta { font-size:12px; color:var(--muted-foreground); display:flex; align-items:center; gap:6px; margin-bottom:8px; }
     .card-amount { font-size:13px; font-weight:700; color:#10b981; }
     .card-footer { display:flex; align-items:center; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid rgba(0,0,0,0.05); }
+    @media(max-width:1280px){ .kanban-board{ grid-template-columns:repeat(3,1fr); } }
     @media(max-width:1024px){ .kanban-board{ grid-template-columns:repeat(2,1fr); } }
     @media(max-width:640px){ .kanban-board{ grid-template-columns:1fr; } }
   

@@ -1,4 +1,4 @@
-    .apps-layout { display:grid; grid-template-columns:340px 1fr; gap:20px; }
+    .apps-layout { display:grid; grid-template-columns:340px minmax(0,1fr); gap:20px; }
     .proposal-list { display:flex; flex-direction:column; gap:0; background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
     .proposal-item { padding:16px 20px; border-bottom:1px solid rgba(0,0,0,0.05); cursor:pointer; transition:background 0.15s; }
     .proposal-item:last-child { border-bottom:none; }

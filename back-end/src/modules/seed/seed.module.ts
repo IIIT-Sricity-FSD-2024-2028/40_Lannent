@@ -13,6 +13,7 @@ import { ExpertApplicationsModule } from '../expert-applications/expert-applicat
 import { NotificationsModule } from '../notifications/notifications.module';
 import { LedgerModule } from '../ledger/ledger.module';
 import { FilesModule } from '../files/files.module';
+import { MessagesModule } from '../messages/messages.module';
 
 import { RequireAuthMiddleware } from '../../common/middleware/require-auth.middleware';
 import { AdminAuditMiddleware } from '../../common/middleware/admin-audit.middleware';
@@ -32,6 +33,7 @@ import { SeedGuardMiddleware } from '../../common/middleware/seed-guard.middlewa
     forwardRef(() => NotificationsModule),
     forwardRef(() => LedgerModule),
     forwardRef(() => FilesModule),
+    forwardRef(() => MessagesModule),
   ],
   controllers: [SeedController],
   providers: [SeedService],
