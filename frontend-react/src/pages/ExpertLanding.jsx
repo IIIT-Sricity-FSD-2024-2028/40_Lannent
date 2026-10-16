@@ -10,12 +10,15 @@ import { Link } from 'react-router-dom';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
 import usePageTitle from '../hooks/usePageTitle';
+import usePublicStats, { compactMoney } from '../hooks/usePublicStats';
 import useScrollReveal from '../hooks/useScrollReveal';
 import useSmoothScroll from '../hooks/useSmoothScroll';
 import pageCss from './ExpertLanding.css?raw';
 
 export default function ExpertLanding() {
-  usePageTitle('Expert Reviewer — GigBoard');
+  usePageTitle('Expert Reviewer — Lannent');
+  // Live figures — the page used to advertise invented ones.
+  const stats = usePublicStats();
   useScrollReveal();   // shared reveal from main.js
   useSmoothScroll();   // smooth "#section" links + navbar shadow
 
@@ -76,16 +79,12 @@ export default function ExpertLanding() {
               <button className="btn-light" style={{ width: '100%' }}>Login</button>
             </Link>
           </div>
-          <div className="hero-stars">
-            <div style={{ display: 'flex', gap: 2 }}>
-              <Icon name="star" style={{ width: 14, height: 14, fill: '#facc15', color: '#facc15' }} />
-              <Icon name="star" style={{ width: 14, height: 14, fill: '#facc15', color: '#facc15' }} />
-              <Icon name="star" style={{ width: 14, height: 14, fill: '#facc15', color: '#facc15' }} />
-              <Icon name="star" style={{ width: 14, height: 14, fill: '#facc15', color: '#facc15' }} />
-              <Icon name="star" style={{ width: 14, height: 14, fill: '#facc15', color: '#facc15' }} />
+          {stats && stats.experts > 0 ? (
+            <div className="hero-stars">
+              <Icon name="shield-check" style={{ width: 16, height: 16, color: '#7c3aed' }} />
+              <span>{`${stats.experts} Expert Reviewer${stats.experts === 1 ? '' : 's'} on Lannent · ${stats.disputesResolved + stats.auditsCompleted} cases completed`}</span>
             </div>
-            <span>Trusted by 500+ Expert Reviewers</span>
-          </div>
+          ) : null}
         </div>
       </section>
       {/* ══════════════════ ROLE OVERVIEW ══════════════════ */}
@@ -357,12 +356,11 @@ export default function ExpertLanding() {
                 <div className="dash-url">
                   <div className="dash-url-inner">
                     <div className="dash-url-dot"></div>
-                    gigboard.app/reviewer/dashboard
+                    lannent.app/reviewer/dashboard
                   </div>
                 </div>
-                <div className="dash-live">
-                  <div className="dash-live-dot"></div>
-                  Live
+                <div className="dash-live" title="An illustration with sample data">
+                  Example
                 </div>
               </div>
               {/* Dashboard body */}
@@ -382,7 +380,7 @@ export default function ExpertLanding() {
                   </div>
                   <div className="dash-stat">
                     <div className="dash-stat-label">Total Earnings</div>
-                    <div className="dash-stat-val" style={{ color: '#8b5cf6' }}>$3,200</div>
+                    <div className="dash-stat-val" style={{ color: '#8b5cf6' }}>₹3,200</div>
                   </div>
                 </div>
                 <div className="dash-audits">
@@ -458,11 +456,11 @@ export default function ExpertLanding() {
               <div className="benefits-list">
                 <div className="benefit-item">
                   <div className="benefit-ico" style={{ background: 'rgba(168,85,247,.12)', border: '1.5px solid rgba(168,85,247,.25)' }}>
-                    <Icon name="dollar-sign" style={{ width: 18, height: 18, color: '#a855f7' }} />
+                    <Icon name="indian-rupee" style={{ width: 18, height: 18, color: '#a855f7' }} />
                   </div>
                   <div>
-                    <div className="benefit-title">Earn $80–$150 per audit</div>
-                    <div className="benefit-desc">Competitive fees paid immediately upon review completion</div>
+                    <div className="benefit-title">Set your own fee for every case</div>
+                    <div className="benefit-desc">You agree the price with the client up front; it is held in escrow and paid to your wallet when the review is done</div>
                   </div>
                 </div>
                 <div className="benefit-item">
@@ -471,7 +469,7 @@ export default function ExpertLanding() {
                   </div>
                   <div>
                     <div className="benefit-title">Build verified reputation</div>
-                    <div className="benefit-desc">Your reviews are publicly attributed, building your expert brand</div>
+                    <div className="benefit-desc">Every completed audit and dispute counts towards the record clients see when they choose a reviewer</div>
                   </div>
                 </div>
                 <div className="benefit-item">
@@ -492,13 +490,12 @@ export default function ExpertLanding() {
                 <div className="earnings-card">
                   <div className="earnings-header">
                     <div className="earnings-ico">
-                      <Icon name="dollar-sign" style={{ width: 22, height: 22, color: 'white' }} />
+                      <Icon name="indian-rupee" style={{ width: 22, height: 22, color: 'white' }} />
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>Earnings Summary</div>
-                      <div style={{ fontSize: 12, color: '#94a3b8' }}>Last 30 Days</div>
+                      <div style={{ fontSize: 12, color: '#94a3b8' }}>Example month · sample figures</div>
                     </div>
-                    <div className="earnings-badge">↑ +18%</div>
                   </div>
                   <div className="earnings-rows">
                     <div className="earnings-row" style={{ background: '#eef2ff', border: '1px solid rgba(99,102,241,.15)' }}>
@@ -507,7 +504,7 @@ export default function ExpertLanding() {
                           <div className="earnings-row-label">Technical Audits</div>
                           <div className="earnings-row-count">18 reviews</div>
                         </div>
-                        <div className="earnings-row-amount" style={{ color: '#6366f1' }}>$2,340</div>
+                        <div className="earnings-row-amount" style={{ color: '#6366f1' }}>₹2,340</div>
                       </div>
                       <div className="earnings-bar-bg" style={{ background: 'rgba(99,102,241,.15)' }}>
                         <div className="earnings-bar-fill" style={{ width: '75%', background: 'linear-gradient(90deg,#6366f1,#818cf8)', boxShadow: '0 0 8px rgba(99,102,241,.5)' }}></div>
@@ -519,7 +516,7 @@ export default function ExpertLanding() {
                           <div className="earnings-row-label">Dispute Resolutions</div>
                           <div className="earnings-row-count">6 reviews</div>
                         </div>
-                        <div className="earnings-row-amount" style={{ color: '#a855f7' }}>$860</div>
+                        <div className="earnings-row-amount" style={{ color: '#a855f7' }}>₹860</div>
                       </div>
                       <div className="earnings-bar-bg" style={{ background: 'rgba(168,85,247,.15)' }}>
                         <div className="earnings-bar-fill" style={{ width: '28%', background: 'linear-gradient(90deg,#a855f7,#c084fc)', boxShadow: '0 0 8px rgba(168,85,247,.5)' }}></div>
@@ -531,7 +528,7 @@ export default function ExpertLanding() {
                           <div className="earnings-row-label">Quality Verifications</div>
                           <div className="earnings-row-count">12 reviews</div>
                         </div>
-                        <div className="earnings-row-amount" style={{ color: '#10b981' }}>$720</div>
+                        <div className="earnings-row-amount" style={{ color: '#10b981' }}>₹720</div>
                       </div>
                       <div className="earnings-bar-bg" style={{ background: 'rgba(16,185,129,.15)' }}>
                         <div className="earnings-bar-fill" style={{ width: '23%', background: 'linear-gradient(90deg,#10b981,#34d399)', boxShadow: '0 0 8px rgba(16,185,129,.5)' }}></div>
@@ -541,82 +538,8 @@ export default function ExpertLanding() {
                   <div className="earnings-total">
                     <span className="earnings-total-label">Total Earned</span>
                     {' '}
-                    <span className="earnings-total-val">$3,920</span>
+                    <span className="earnings-total-val">₹3,920</span>
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-      {/* ══════════════════ TESTIMONIALS ══════════════════ */}
-      <section className="testi-section reveal">
-        <div style={{ pointerEvents: 'none', position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle,rgba(251,191,36,.07) 1px,transparent 1px)', backgroundSize: '28px 28px' }}></div>
-        <div className="mx">
-          <div className="sh reveal">
-            <span className="pill pill-amber">★ Testimonials</span>
-            <h2>
-              Loved by <span className="gt-am">Expert Reviewers</span>
-            </h2>
-          </div>
-          <div className="testi-grid">
-            <div className="testi-card reveal">
-              <div className="testi-quote-bg">"</div>
-              <div className="testi-stars">
-                <Icon name="star" style={{ width: 15, height: 15 }} />
-                <Icon name="star" style={{ width: 15, height: 15 }} />
-                <Icon name="star" style={{ width: 15, height: 15 }} />
-                <Icon name="star" style={{ width: 15, height: 15 }} />
-                <Icon name="star" style={{ width: 15, height: 15 }} />
-              </div>
-              <p className="testi-text">
-                "Being an expert reviewer lets me leverage my expertise while helping maintain quality standards. The pay is competitive and the work is intellectually stimulating."
-              </p>
-              <div className="testi-author">
-                <div className="testi-avatar" style={{ background: 'linear-gradient(135deg,#f43f5e,#db2777)' }}></div>
-                <div>
-                  <div className="testi-name">Dr. Emily Rodriguez</div>
-                  <div className="testi-role">Senior Security Auditor</div>
-                </div>
-              </div>
-            </div>
-            <div className="testi-card reveal reveal-delay-1">
-              <div className="testi-quote-bg">"</div>
-              <div className="testi-stars">
-                <Icon name="star" style={{ width: 15, height: 15 }} />
-                <Icon name="star" style={{ width: 15, height: 15 }} />
-                <Icon name="star" style={{ width: 15, height: 15 }} />
-                <Icon name="star" style={{ width: 15, height: 15 }} />
-                <Icon name="star" style={{ width: 15, height: 15 }} />
-              </div>
-              <p className="testi-text">
-                "I review projects during my downtime and earn $2–3K monthly. The dispute resolution process is fair and evidence-based, which I deeply appreciate."
-              </p>
-              <div className="testi-author">
-                <div className="testi-avatar" style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)' }}></div>
-                <div>
-                  <div className="testi-name">James Chen</div>
-                  <div className="testi-role">Technical Architect</div>
-                </div>
-              </div>
-            </div>
-            <div className="testi-card reveal reveal-delay-2">
-              <div className="testi-quote-bg">"</div>
-              <div className="testi-stars">
-                <Icon name="star" style={{ width: 15, height: 15 }} />
-                <Icon name="star" style={{ width: 15, height: 15 }} />
-                <Icon name="star" style={{ width: 15, height: 15 }} />
-                <Icon name="star" style={{ width: 15, height: 15 }} />
-                <Icon name="star" style={{ width: 15, height: 15 }} />
-              </div>
-              <p className="testi-text">
-                "The platform's review tools are excellent. I can conduct thorough audits efficiently, and my recommendations are always taken seriously by both parties."
-              </p>
-              <div className="testi-author">
-                <div className="testi-avatar" style={{ background: 'linear-gradient(135deg,#10b981,#059669)' }}></div>
-                <div>
-                  <div className="testi-name">Sarah Thompson</div>
-                  <div className="testi-role">Full-Stack Engineer</div>
                 </div>
               </div>
             </div>
@@ -630,7 +553,7 @@ export default function ExpertLanding() {
           <div className="sh reveal">
             <span className="pill pill-cyan">◎ By the Numbers</span>
             <h2>
-              Trusted by <span className="gt-cy">elite experts</span>
+              Live from the <span className="gt-cy">platform</span>
             </h2>
           </div>
           <div className="metrics-grid">
@@ -638,29 +561,29 @@ export default function ExpertLanding() {
               <div className="metric-ico" style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)' }}>
                 <Icon name="users" style={{ width: 24, height: 24, color: 'white' }} />
               </div>
-              <div className="metric-val gt-in">500+</div>
+              <div className="metric-val gt-in">{stats ? stats.experts.toLocaleString('en-IN') : '—'}</div>
               <div className="metric-label">Expert Reviewers</div>
             </div>
             <div className="metric-card reveal reveal-delay-1" style={{ background: '#ecfdf5', borderColor: '#a7f3d0' }}>
               <div className="metric-ico" style={{ background: 'linear-gradient(135deg,#10b981,#059669)' }}>
                 <Icon name="file-check" style={{ width: 24, height: 24, color: 'white' }} />
               </div>
-              <div className="metric-val" style={{ background: 'linear-gradient(135deg,#10b981,#059669)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>12,000+</div>
-              <div className="metric-label">Audits Completed</div>
+              <div className="metric-val" style={{ background: 'linear-gradient(135deg,#10b981,#059669)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{stats ? stats.auditsCompleted.toLocaleString('en-IN') : '—'}</div>
+              <div className="metric-label">Audits completed</div>
             </div>
             <div className="metric-card reveal reveal-delay-2" style={{ background: '#faf5ff', borderColor: '#e9d5ff' }}>
               <div className="metric-ico" style={{ background: 'linear-gradient(135deg,#a855f7,#9333ea)' }}>
                 <Icon name="scale" style={{ width: 24, height: 24, color: 'white' }} />
               </div>
-              <div className="metric-val gt-pu">3,400+</div>
-              <div className="metric-label">Disputes Resolved</div>
+              <div className="metric-val gt-pu">{stats ? stats.disputesResolved.toLocaleString('en-IN') : '—'}</div>
+              <div className="metric-label">Disputes resolved</div>
             </div>
             <div className="metric-card reveal reveal-delay-3" style={{ background: '#fffbeb', borderColor: '#fde68a' }}>
               <div className="metric-ico" style={{ background: 'linear-gradient(135deg,#f59e0b,#f97316)' }}>
-                <Icon name="star" style={{ width: 24, height: 24, color: 'white' }} />
+                <Icon name="wallet" style={{ width: 24, height: 24, color: 'white' }} />
               </div>
-              <div className="metric-val gt-am">4.9/5</div>
-              <div className="metric-label">Avg. Review Rating</div>
+              <div className="metric-val gt-am">{stats ? compactMoney(stats.paidToReviewers) : '—'}</div>
+              <div className="metric-label">Paid to reviewers</div>
             </div>
           </div>
         </div>
@@ -693,7 +616,7 @@ export default function ExpertLanding() {
               <button className="btn-glass">Login</button>
             </Link>
           </div>
-          <p className="cta-note">Application reviewed within 48 hours · No upfront cost · Start earning immediately</p>
+          <p className="cta-note">Applications are reviewed by our intake team · No upfront cost · Paid per completed case</p>
         </div>
       </section>
       {/* ══════════════════ FOOTER ══════════════════ */}

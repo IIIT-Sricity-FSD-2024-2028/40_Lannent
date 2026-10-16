@@ -16,7 +16,7 @@ import PageStyle from '../components/PageStyle';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../context/StoreContext';
 import { useValidation } from '../context/ValidationContext';
-import { escapeHtml } from '../utils/helpers';
+import { downloadPdf } from '../utils/pdf';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ExpertReportAudit.css?raw';
 
@@ -116,7 +116,7 @@ function DeliverableCard({ milestone, work }) {
         {(work.files && work.files.length)
           ? <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{work.files.map((f, i) => <FileRow key={i} f={f} />)}</div>
           : <p style={MUTED_P_STYLE}>No files were attached to this submission.</p>}
-        {milestone.submittedAt ? <div style={{ marginTop: 14, fontSize: 12.5, color: 'var(--muted-foreground)' }}>{`Submitted ${milestone.submittedAt} · milestone value $${milestone.budget}`}</div> : ''}
+        {milestone.submittedAt ? <div style={{ marginTop: 14, fontSize: 12.5, color: 'var(--muted-foreground)' }}>{`Submitted ${milestone.submittedAt} · milestone value ₹${milestone.budget}`}</div> : ''}
       </>
     );
   }
@@ -159,7 +159,31 @@ function InfoCell({ label, children }) {
 /** Read-only view of a filed report. */
 function ReportView({ report, req, isReviewer }) {
   const Store = useStore();
-  const vPass = report.verdict === 'pass';
+  const vPass = report.verdict === 'pass' || report.verdict === 'conditional';
+  const verdictWord = report.verdict === 'pass' ? 'PASS' : report.verdict === 'conditional' ? 'PASS WITH CONDITIONS' : 'FAIL';
+
+  function downloadReport() {
+    downloadPdf(`audit-report-${req.id}-${report.milestoneId || 'project'}.pdf`, {
+      title: 'Technical Audit Report',
+      subtitle: `${report.projectTitle || req.project || 'Project'} — ${report.milestoneTitle || req.milestone || 'Milestone'}`,
+      meta: `Report ${report.id} · filed ${report.createdAt || ''}`,
+      sections: [
+        { heading: 'Verdict', rows: [
+          ['Verdict', verdictWord],
+          ['Reviewer', expertName],
+          ['Worker', report.workerName || req.worker || '-'],
+          ['Overall score', `${average} / 5`],
+        ] },
+        { heading: 'Quality scores', rows: [
+          ['Code quality', `${report.codequality || 0} / 5`],
+          ['Security', `${report.security || 0} / 5`],
+          ['Performance', `${report.performance || 0} / 5`],
+          ['Documentation', `${report.documentation || 0} / 5`],
+        ] },
+        { heading: 'Technical findings', text: report.findings || 'No findings recorded.' },
+      ],
+    });
+  }
   const expertUser = Store.getUserById(report.expertId);
   const expertName = expertUser ? expertUser.name : 'Expert Reviewer';
   const expertInitials = expertName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -183,7 +207,7 @@ function ReportView({ report, req, isReviewer }) {
           <Icon name={vPass ? 'check-circle-2' : 'x-circle'} style={{ width: 22, height: 22, color: '#fff' }} />
         </div>
         <div>
-          <div className="verdict-label">{vPass ? 'APPROVED' : 'REJECTED'}</div>
+          <div className="verdict-label">{verdictWord}</div>
           <div className="verdict-text">{vPass ? 'This deliverable meets all quality standards and has been approved.' : 'This deliverable does not meet quality standards and needs revision.'}</div>
         </div>
       </div>
@@ -241,13 +265,16 @@ function ReportView({ report, req, isReviewer }) {
                 {' '}
                 <span className="info-value mono">{report.auditRequestId}</span>
               </div>
-              <InfoCell label="Verdict"><span className={`badge ${vPass ? 'badge-green' : 'badge-red'}`}>{vPass ? 'PASS' : 'FAIL'}</span></InfoCell>
+              <InfoCell label="Verdict"><span className={`badge ${vPass ? 'badge-green' : 'badge-red'}`}>{verdictWord}</span></InfoCell>
               <InfoCell label="Date">{report.createdAt || 'N/A'}</InfoCell>
             </div>
           </div>
 
           {/* Print Button */}
-          <button onClick={() => window.print()} className="btn-print" style={{ width: '100%' }}>
+          <button onClick={downloadReport} className="btn-print" style={{ width: '100%', marginBottom: 10 }}>
+            <Icon name="download" style={{ width: 15, height: 15 }} /> Download PDF
+          </button>
+          <button onClick={() => window.print()} className="btn-print" style={{ width: '100%', background: 'var(--card)', color: 'var(--foreground)', border: '1px solid var(--border)' }}>
             <Icon name="printer" style={{ width: 15, height: 15 }} /> Print Report
           </button>
         </div>
@@ -260,14 +287,9 @@ function ReportView({ report, req, isReviewer }) {
 function loadAudit(Store, searchParams, session) {
   const auditId = searchParams.get('id') || searchParams.get('reportId');
 
-  // Load audit request + linked objects
-  let req = auditId ? Store.getAuditRequestById(auditId) : null;
-
-  // Fallback: load first pending/in-review request assigned to this expert
-  if (!req) {
-    const all = Store.getAuditRequests();
-    req = all.find(a => a.status !== 'Completed' && (a.expertId === session.userId || !a.expertId)) || all[0] || null;
-  }
+  // Only the engagement in the link — a fallback to "the first one" opened
+  // somebody else's audit under this page's title.
+  const req = auditId ? Store.getAuditRequestById(auditId) : null;
   if (!req) return null;
 
   // One engagement covers every milestone on the project, so the milestone
@@ -296,7 +318,11 @@ export default function ExpertReportAudit() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [session] = useState(() => Auth.getCurrentUser());
-  const role = searchParams.get('role') || (session ? session.role : 'expert');
+  // The layout follows who is signed in. It preferred `?role=` over the
+  // session, so a link with the wrong value without the parameter (the worker sidebar's "Reports")
+  // drew another role's sidebar — whose Settings link then bounced the user
+  // to their dashboard.
+  const role = session?.role || searchParams.get('role') || 'expert';
   const [data] = useState(() => loadAudit(Store, searchParams, session));
 
   // ── Form state (only used by the assigned expert's scoring form) ──
@@ -318,12 +344,12 @@ export default function ExpertReportAudit() {
   if (!data) {
     return (
       <EmptyState
-        role="expert"
-        activePath="/expert-audit-requests"
+        role={role}
+        activePath={role === 'expert' ? '/expert-audit-requests' : '/milestone-reports'}
         pageTitle="Audit Report"
-        message="No audit request found."
-        linkHref="/expert-audit-requests"
-        linkLabel="Go to Audit Requests"
+        message="This audit could not be found, or you are not part of it."
+        linkHref={role === 'expert' ? '/expert-audit-requests' : '/milestone-reports'}
+        linkLabel="Back"
       />
     );
   }
@@ -333,7 +359,15 @@ export default function ExpertReportAudit() {
   // Only the assigned reviewer may score an audit. Clients and workers are
   // allowed on this page to READ the report about their own project — they
   // were previously handed the full scoring form and a live Submit button.
-  const isReviewer = session && session.role === 'expert';
+  // The reviewer assigned to THIS engagement — not any expert who opens the link.
+  const isReviewer = !!session && session.role === 'expert' && req.expertId === session.userId;
+  if (req.kind === 'dispute-audit') {
+    return (
+      <EmptyState role={role} activePath={role === 'expert' ? '/expert-dispute-cases' : '/milestone-reports'} pageTitle="Audit Report"
+                  message="This engagement is a dispute review. It is settled by the verdict on the dispute, not by an audit report."
+                  linkHref={req.disputeId ? `/expert-report-dispute?id=${req.disputeId}` : '/milestone-reports'} linkLabel="View the dispute" />
+    );
+  }
   const hasReport = !!(existingReport && existingReport.verdict);
   // 'paid' is the settled state in the engagement lifecycle ('Completed' is legacy).
   const isSettled = req.status === 'paid' || req.status === 'Completed';
@@ -369,8 +403,9 @@ export default function ExpertReportAudit() {
     let valid = true;
 
     // Validate findings
-    if (!findings || findings.length < 30) {
-      setFindingsErr({ text: 'Findings must be at least 30 characters.', show: true });
+    // The report is what pays the reviewer, so the server asks for 50+ characters.
+    if (!findings || findings.length < 50) {
+      setFindingsErr({ text: 'Findings must be at least 50 characters.', show: true });
       setFindingsBorder('#ef4444');
       valid = false;
     } else {
@@ -415,15 +450,13 @@ export default function ExpertReportAudit() {
         workerName: req.worker || (worker ? worker.name : ''),
       });
 
-      // Update audit request status
-      Store.updateAuditRequest(req.id, { status: 'Completed', expertId: session.userId });
+      // Filing the report is what moves the engagement on (and pays the
+      // reviewer). The PATCH that followed set `expertId` from the browser —
+      // the hole that let a reviewer write themselves onto any engagement.
 
       // Note: Expert audit report does not change milestone status - that's for client approval or dispute resolution only
 
-      // Notify client and worker
-      if (req.clientId) Store.addNotification({ userId: req.clientId, type: 'audit-complete', text: `Audit ${verdict === 'pass' ? 'passed' : 'failed'}: ${escapeHtml(req.milestone)}`, subtext: req.project + ' · just now', read: false });
-      if (req.workerId) Store.addNotification({ userId: req.workerId, type: 'audit-complete', text: `Your milestone audit result: ${verdict === 'pass' ? 'PASS ✓' : 'FAIL ✗'}`, subtext: req.milestone + ' · just now', read: false });
-
+      // The server notifies the client and the worker.
       Validate.toast(`Audit report submitted. Verdict: ${verdict === 'pass' ? 'PASS' : 'FAIL'}`, verdict === 'pass' ? 'success' : 'error');
       setTimeout(() => { navigate('/expert-audit-requests'); }, 2000);
     } catch (e) {

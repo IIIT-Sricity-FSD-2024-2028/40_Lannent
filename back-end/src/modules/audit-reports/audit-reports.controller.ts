@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Param, Body, Query, Headers, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { AuditReportsService } from './audit-reports.service';
 import { CreateAuditReportDto } from './dto/create-audit-report.dto';
 import { RoleGuard } from '../../common/guards/role.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentActor } from '../../common/decorators/actor.decorator';
+import type { Actor } from '../../common/decorators/actor.decorator';
 
 @ApiTags('Audit Reports')
 @Controller('audit-reports')
@@ -18,25 +20,24 @@ export class AuditReportsController {
   findAll(
     @Query('taskId') taskId?: string,
     @Query('auditRequestId') auditRequestId?: string,
-    @Headers('user-id') userId?: string,
-    @Headers('role') role?: string,
+    @CurrentActor() actor?: Actor,
   ) {
-    return this.auditReportsService.findAll({ taskId, auditRequestId }, { id: userId, role });
+    return this.auditReportsService.findAll({ taskId, auditRequestId }, actor);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get audit report by ID' })
-  findOne(@Param('id') id: string, @Headers('user-id') userId?: string, @Headers('role') role?: string) {
-    return this.auditReportsService.findById(id, { id: userId, role });
+  findOne(@Param('id') id: string, @CurrentActor() actor: Actor) {
+    return this.auditReportsService.findById(id, actor);
   }
 
   @Post()
   @ApiHeader({ name: 'role', required: true, description: 'User role required' })
   // Previously unguarded — any caller could file an audit report, which now
   // releases money from escrow.
-  @Roles('expert', 'superuser')
+  @Roles('expert')
   @ApiOperation({ summary: 'Submit audit report (updates milestone status on pass/fail)' })
-  create(@Body() dto: CreateAuditReportDto) {
-    return this.auditReportsService.create(dto);
+  create(@Body() dto: CreateAuditReportDto, @CurrentActor() actor: Actor) {
+    return this.auditReportsService.create(dto, actor);
   }
 }

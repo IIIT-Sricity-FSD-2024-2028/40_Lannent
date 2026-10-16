@@ -9,3 +9,7 @@
     .section-title { margin-top:24px; font-size:clamp(36px,5vw,64px); font-weight:500; letter-spacing:-0.04em; line-height:1.05; }
     .section-sub { margin-top:20px; color:#64748b; font-size:18px; max-width:560px; line-height:1.6; }
   
+
+/* Three real link columns instead of four columns of placeholders. */
+.footer-grid.footer-grid-3 { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 640px) { .footer-grid.footer-grid-3 { grid-template-columns: 1fr; } }

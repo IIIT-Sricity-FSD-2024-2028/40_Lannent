@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsIn, Min, Max, MinLength, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateAuditReportDto {
@@ -6,29 +6,32 @@ export class CreateAuditReportDto {
   @IsString()
   auditRequestId: string;
 
-  @ApiProperty({ example: 't2' })
-  @IsString()
-  taskId: string;
+  /** Ignored — taken from the engagement. */
+  @ApiPropertyOptional({ example: 't2' })
+  @IsOptional() @IsString()
+  taskId?: string;
 
   @ApiPropertyOptional({ example: 'm6', description: 'Omitted for a whole-project or dispute audit' })
   @IsOptional() @IsString()
   milestoneId?: string;
 
-  @ApiProperty({ example: 'u3' })
-  @IsString()
-  expertId: string;
-
-  @ApiPropertyOptional({ example: 'pass', enum: ['pass', 'fail', 'conditional'] })
+  /** Ignored — the assigned reviewer files the report. */
+  @ApiPropertyOptional({ example: 'u3' })
   @IsOptional() @IsString()
-  verdict?: string;
+  expertId?: string;
+
+  /** Filing a report is what pays the reviewer, so it has to say something. */
+  @ApiProperty({ example: 'pass', enum: ['pass', 'fail', 'conditional'] })
+  @IsIn(['pass', 'fail', 'conditional'], { message: 'Choose a verdict: pass, fail or conditional.' })
+  verdict: string;
 
   @ApiPropertyOptional({ example: 'Pass' })
   @IsOptional() @IsString()
   overall?: string;
 
-  @ApiPropertyOptional({ example: 'Code quality is excellent.' })
-  @IsOptional() @IsString()
-  findings?: string;
+  @ApiProperty({ example: 'Code quality is excellent. Auth flows follow OWASP guidance.' })
+  @IsString() @MinLength(50, { message: 'Write your findings in at least 50 characters.' }) @MaxLength(20000)
+  findings: string;
 
   @ApiPropertyOptional({ example: 5 })
   @IsOptional() @IsNumber() @Min(0) @Max(5)

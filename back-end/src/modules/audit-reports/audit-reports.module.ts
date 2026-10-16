@@ -5,12 +5,20 @@ import { AuditReportsRepository } from './audit-reports.repository';
 import { AuditRequestsModule } from '../audit-requests/audit-requests.module';
 import { MilestonesModule } from '../milestones/milestones.module';
 import { TasksModule } from '../tasks/tasks.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { UsersModule } from '../users/users.module';
 
 import { RequireAuthMiddleware } from '../../common/middleware/require-auth.middleware';
 import { MoneyTrailMiddleware } from '../../common/middleware/money-trail.middleware';
 
 @Module({
-  imports: [forwardRef(() => TasksModule), forwardRef(() => AuditRequestsModule), forwardRef(() => MilestonesModule)],
+  imports: [
+    forwardRef(() => TasksModule),
+    forwardRef(() => AuditRequestsModule),
+    forwardRef(() => MilestonesModule),
+    forwardRef(() => NotificationsModule),
+    forwardRef(() => UsersModule),
+  ],
   controllers: [AuditReportsController],
   providers: [AuditReportsRepository, AuditReportsService],
   exports: [AuditReportsService],

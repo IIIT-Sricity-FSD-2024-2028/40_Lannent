@@ -23,15 +23,21 @@ export default function ExpertDashboard() {
 
   // Live stats from store
   const session = Auth.getCurrentUser();
-  const userId = session?.userId || 'u3';
-  const auditReqs = Store.getAuditRequests();
-  const pendingAudits = auditReqs.filter(a => a.status === 'Pending' || a.status === 'In Review').length;
-  const openDisputes = Store.getDisputes().filter(d => d.status === 'open').length;
+  const userId = session.userId;
+  const LIVE = ['preview-sent', 'negotiating', 'agreed', 'escrow-funded', 'in-progress'];
+  const mine = Store.getAuditRequests().filter(a => a.expertId === userId);
+  const liveAudits = mine.filter(a => a.kind !== 'dispute-audit' && LIVE.includes(a.status));
+  const myDisputeList = Store.getDisputes().filter(d => d.expertId === userId || d.resolvedBy === userId);
+  const openDisputes = myDisputeList.filter(d => d.status === 'open');
   const expert = Store.getUserById(userId);
-  const earned = Store.getTransactionsByUser(userId).filter(t => t.type === 'milestone-release').reduce((s, t) => s + t.amount, 0);
+  // What actually reached this reviewer's wallet: audit and dispute fees, net.
+  const earned = Store.getTransactions()
+    .filter(t => ['audit-release', 'dispute-fee-release'].includes(t.type) && t.toId === userId)
+    .reduce((s, t) => s + (t.netAmount != null ? t.netAmount : t.amount || 0), 0);
+  const feeOf = a => a.agreedAmount || (a.offers || []).filter(o => o.status === 'pending').map(o => o.amount)[0] || null;
 
-  const myAudits = Store.getAuditRequests().filter(a => a.expertId === userId || !a.expertId).slice(0, 3);
-  const myDisputes = Store.getDisputes().filter(d => d.expertId === userId || !d.expertId).slice(0, 3);
+  const myAudits = liveAudits.slice(0, 3);
+  const myDisputes = openDisputes.slice(0, 3);
 
   return (
     <>
@@ -39,10 +45,10 @@ export default function ExpertDashboard() {
       <DashboardLayout role="expert" activePath="/expert-dashboard" pageTitle="Expert Dashboard" pageSubtitle="Manage your audit requests and dispute cases">
         {/* Stats */}
         <div className="stats-grid">
-          <StatCard value={pendingAudits} label="Pending Audits" change={`${auditReqs.filter(a => a.status === 'Pending').length} awaiting`} icon="clipboard-check" iconBg="#faf5ff" iconColor="#a855f7" />
-          <StatCard value={openDisputes} label="Dispute Cases" change={`${Store.getDisputes().filter(d => d.status === 'resolved').length} resolved`} icon="scale" iconBg="#eff6ff" iconColor="#6366f1" />
-          <StatCard value={`$${(earned || 0).toLocaleString()}`} valueStyle={{ color: '#10b981' }} label="Total Earned" change="Lifetime earnings" icon="wallet" iconBg="#ecfdf5" iconColor="#10b981" />
-          <StatCard value={`${expert?.rating || 0}★`} label="Expert Rating" change={`From ${expert?.reviewsDone || 0} reviews`} icon="star" iconBg="#fffbeb" iconColor="#f59e0b" />
+          <StatCard value={liveAudits.length} label="Active Audits" change={`${liveAudits.filter(a => ['preview-sent', 'negotiating'].includes(a.status)).length} awaiting your quote`} icon="clipboard-check" iconBg="#faf5ff" iconColor="#a855f7" />
+          <StatCard value={openDisputes.length} label="Open Disputes" change={`${myDisputeList.filter(d => d.status === 'resolved').length} resolved`} icon="scale" iconBg="#eff6ff" iconColor="#6366f1" />
+          <StatCard value={`₹${earned.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`} valueStyle={{ color: '#10b981' }} label="Total Earned" change="After platform commission" icon="wallet" iconBg="#ecfdf5" iconColor="#10b981" />
+          <StatCard value={expert?.reviewsDone || 0} label="Reviews Completed" change={`${(expert?.domains || []).length} domains covered`} icon="award" iconBg="#fffbeb" iconColor="#f59e0b" />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
@@ -53,16 +59,16 @@ export default function ExpertDashboard() {
               <Link to="/expert-audit-requests" className="btn-outline" style={{ fontSize: 13, padding: '5px 12px' }}>View All</Link>
             </div>
             {myAudits.length ? myAudits.map(a => {
-              const ms = Store.getMilestoneById(a.milestoneId);
-              const task = ms ? Store.getTaskById(ms.taskId) : null;
+              const task = Store.getTaskById(a.taskId);
               const cl = task ? Store.getUserById(task.clientId) : null;
-              const clName = cl ? cl.name : 'Unknown';
-              const pTitle = ms ? ms.title : 'Audit Request';
-              const pay = ms ? '$' + Math.floor(ms.budget * 0.1).toLocaleString() : '$150';
-              const urgency = a.status === 'Pending' ? 'urgent' : 'normal';
+              const clName = cl ? cl.name : 'Client';
+              const pTitle = task ? task.title : a.project || 'Audit Request';
+              const fee = feeOf(a);
+              const pay = fee ? '₹' + Number(fee).toLocaleString('en-IN') : 'No fee yet';
+              const urgency = a.status === 'preview-sent' ? 'urgent' : 'normal';
               const tags = task ? task.skills || [] : ['Review', 'Audit'];
               return (
-                <div key={a.id} className="audit-card-item" onClick={() => navigate('/expert-audit-requests')}>
+                <div key={a.id} className="audit-card-item" onClick={() => navigate(`/expert-audit-preview?id=${a.id}`)}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{pTitle}</div>
@@ -77,7 +83,7 @@ export default function ExpertDashboard() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       {urgency === 'urgent' ? <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', background: '#fee2e2', padding: '2px 8px', borderRadius: 9999 }}>New</span> : ''}
                       <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
-                        <Icon name="clock" style={{ width: 12, height: 12, display: 'inline', verticalAlign: 'middle' }} />{' ' + a.status}
+                        <Icon name="clock" style={{ width: 12, height: 12, display: 'inline', verticalAlign: 'middle' }} />{' ' + a.status.replace(/-/g, ' ')}
                       </span>
                     </div>
                   </div>
@@ -96,15 +102,17 @@ export default function ExpertDashboard() {
             </div>
             {myDisputes.length ? myDisputes.map(d => {
               const ms = Store.getMilestoneById(d.milestoneId);
-              const task = ms ? Store.getTaskById(ms.taskId) : null;
+              const task = Store.getTaskById(d.taskId);
+              const eng = mine.filter(a => a.disputeId === d.id).pop();
               const cl = task ? Store.getUserById(task.clientId) : null;
               const wkr = task && task.workerId ? Store.getUserById(task.workerId) : null;
               const clName = cl ? cl.name.split(' ')[0] : 'Client';
               const wName = wkr ? wkr.name.split(' ')[0] : 'Worker';
               const pTitle = ms ? ms.title : 'Dispute Case';
-              const pay = ms ? '$' + Math.floor(ms.budget * 0.15).toLocaleString() : '$200';
+              const fee = eng ? feeOf(eng) : null;
+              const pay = fee ? '₹' + Number(fee).toLocaleString('en-IN') : 'No fee yet';
               return (
-                <div key={d.id} className="audit-card-item" onClick={() => navigate('/expert-dispute-cases')}>
+                <div key={d.id} className="audit-card-item" onClick={() => navigate(eng && eng.status === 'in-progress' ? `/resolve-dispute?id=${d.id}` : eng ? `/expert-audit-preview?id=${eng.id}` : '/expert-dispute-cases')}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{pTitle}</div>

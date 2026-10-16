@@ -1,4 +1,4 @@
-    .settings-layout { display: grid; grid-template-columns: 200px 1fr; gap: 24px; }
+    .settings-layout { display: grid; grid-template-columns: 200px minmax(0,1fr); gap: 24px; }
     @media (max-width: 768px) { .settings-layout { grid-template-columns: 1fr; } }
 
     .settings-nav {

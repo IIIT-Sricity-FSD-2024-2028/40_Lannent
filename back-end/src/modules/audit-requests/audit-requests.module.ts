@@ -7,6 +7,7 @@ import { MilestonesModule } from '../milestones/milestones.module';
 import { UsersModule } from '../users/users.module';
 import { DisputesModule } from '../disputes/disputes.module';
 import { LedgerModule } from '../ledger/ledger.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 import { RequireAuthMiddleware } from '../../common/middleware/require-auth.middleware';
 import { MoneyTrailMiddleware } from '../../common/middleware/money-trail.middleware';
@@ -18,6 +19,7 @@ import { MoneyTrailMiddleware } from '../../common/middleware/money-trail.middle
     forwardRef(() => UsersModule),
     forwardRef(() => DisputesModule),
     forwardRef(() => LedgerModule),
+    forwardRef(() => NotificationsModule),
   ],
   controllers: [AuditRequestsController],
   providers: [AuditRequestsRepository, AuditRequestsService],

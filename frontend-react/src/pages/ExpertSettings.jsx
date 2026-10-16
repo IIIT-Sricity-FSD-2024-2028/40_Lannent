@@ -17,21 +17,17 @@ import { useValidation } from '../context/ValidationContext';
 import useFieldErrors from '../hooks/useFieldErrors';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ExpertSettings.css?raw';
+import AvatarColorPicker from '../components/AvatarColorPicker';
+import ChangePasswordCard from '../components/ChangePasswordCard';
+import { CATEGORIES, CATEGORY_INFO } from '../utils/categories';
+import { syncSessionFromUser } from '../utils/helpers';
 
-const DOMAINS = [
-  { id: 'frontend',  label: 'Frontend Development',  sub: 'React, Vue, Angular, HTML/CSS',   icon: 'monitor' },
-  { id: 'backend',   label: 'Backend Development',   sub: 'Node.js, Python, REST APIs',       icon: 'server' },
-  { id: 'mobile',    label: 'Mobile Apps',           sub: 'iOS, Android, React Native',       icon: 'smartphone' },
-  { id: 'devops',    label: 'DevOps & Cloud',        sub: 'Docker, CI/CD, AWS, GCP',          icon: 'cloud' },
-  { id: 'database',  label: 'Database Architecture', sub: 'SQL, NoSQL, schema design',        icon: 'database' },
-  { id: 'security',  label: 'Security & Auditing',   sub: 'Penetration testing, OWASP',       icon: 'shield' },
-  { id: 'ai',        label: 'AI / ML Systems',       sub: 'Model pipelines, data workflows',  icon: 'cpu' },
-  { id: 'sysdesign', label: 'System Design',         sub: 'Architecture, scalability',        icon: 'git-branch' },
-];
+const DOMAINS = CATEGORIES.map(c => ({ id: c, label: c, ...CATEGORY_INFO[c] }));
 const SECTIONS = [
   { id: 'profile', icon: 'user', label: 'Profile' },
   { id: 'availability', icon: 'clock', label: 'Availability' },
   { id: 'domains', icon: 'layers', label: 'Audit Domains' },
+  { id: 'security', icon: 'lock', label: 'Password & Security' },
 ];
 const SAVE_ICON = { width: 13, height: 13 };
 
@@ -50,18 +46,27 @@ export default function ExpertSettings() {
     avatarColor: user?.avatarColor || 'linear-gradient(135deg, #a855f7, #7c3aed)',
   };
   const nameParts = profile.name.split(' ');
-  const availability = user?.availability || { status: 'Actively accepting cases', maxCases: '2', type: 'Both — Audits & Disputes' };
+  const availability = (user?.availability && typeof user.availability === 'object')
+    ? user.availability
+    : { status: 'Actively accepting cases', maxCases: 2, type: 'Both — Audits & Disputes' };
 
   const [section, setSection] = useState('profile');
-  const [fname, setFname] = useState(nameParts[0] || 'Ramesh');
-  const [lname, setLname] = useState(nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Subramaniam');
+  const [fname, setFname] = useState(nameParts[0] || '');
+  const [lname, setLname] = useState(nameParts.length > 1 ? nameParts.slice(1).join(' ') : '');
   const [email, setEmail] = useState(profile.email);
   const [bio, setBio] = useState(profile.bio);
-  const [initials, setInitials] = useState((profile.name.substring(0, 2) || 'RS').toUpperCase());
+  const [initials, setInitials] = useState(user?.avatar || '?');
+  const [avatarColor, setAvatarColor] = useState(profile.avatarColor);
+  const [specialization, setSpecialization] = useState(user?.specialization || '');
+  const [hourlyRate, setHourlyRate] = useState(user?.hourlyRate || 0);
   const [availStatus, setAvailStatus] = useState(availability.status);
-  const [availMax, setAvailMax] = useState(availability.maxCases);
+  const [availMax, setAvailMax] = useState(String(availability.maxCases));
   const [availType, setAvailType] = useState(availability.type);
-  const [selectedDomains, setSelectedDomains] = useState(user?.auditDomains || ['frontend', 'backend', 'security']);
+  // The categories this reviewer is offered on — what client matching reads.
+  const [selectedDomains, setSelectedDomains] = useState(() => [...(user?.domains || [])]);
+  // The intake team vetted these. A reviewer can narrow them, not add to them.
+  const approved = user?.approvedDomains?.length ? user.approvedDomains : (user?.domains || []);
+  const offered = DOMAINS.filter(d => approved.includes(d.id));
   const { errors, clearError, validateForm, errorStyle } = useFieldErrors();
 
   if (!user) {
@@ -89,30 +94,48 @@ export default function ExpertSettings() {
     ]);
     if (!valid) return;
 
+    const rate = parseFloat(hourlyRate);
+    if (!Number.isFinite(rate) || rate < 0) { Validate.toast('Enter an hourly rate of zero or more.', 'error'); return; }
+    let saved;
     try {
-      const name = f + ' ' + l;
-      Store.updateUser(session.userId, { name, email: em, bio: b });
-      localStorage.setItem('lannent_session', JSON.stringify({ ...session, name, email: em }));
-    } catch (e) { console.warn('Store update failed', e); }
-
-    Validate.toast('Profile saved successfully!', 'success');
-    setInitials(((f.charAt(0) || '') + (l.charAt(0) || '')).toUpperCase());
+      saved = Store.updateUser(session.userId, {
+        name: f + ' ' + l, email: em, bio: b, avatarColor, specialization: specialization.trim(), hourlyRate: rate,
+      });
+    } catch (e) {
+      Validate.toast(e.message, 'error');
+      return;
+    }
+    syncSessionFromUser(saved);
+    setInitials(saved.avatar);
+    Validate.toast('Profile saved.', 'success');
   }
 
   function saveAvailability() {
     try {
-      Store.updateUser(session.userId, { availability: { status: availStatus, maxCases: availMax, type: availType } });
-    } catch (e) { console.warn('Store update failed', e); }
-    Validate.toast('Availability preferences saved!', 'success');
+      Store.updateUser(session.userId, {
+        availability: { status: availStatus, maxCases: parseInt(availMax, 10) || 0, type: availType },
+      });
+    } catch (e) {
+      Validate.toast(e.message, 'error');
+      return;
+    }
+    Validate.toast('Availability saved.', 'success');
   }
 
   function saveDomains() {
-    // Saved in the order they appear on screen (as before)
-    const selectedIds = DOMAINS.filter(d => selectedDomains.includes(d.id)).map(d => d.id);
+    if (!selectedDomains.length) {
+      Validate.toast('Choose at least one domain — clients only see reviewers who cover their category.', 'error');
+      return;
+    }
+    // Saved in the order they appear on screen.
+    const ordered = DOMAINS.filter(d => selectedDomains.includes(d.id)).map(d => d.id);
     try {
-      Store.updateUser(session.userId, { auditDomains: selectedIds });
-    } catch (e) { console.warn('Store update failed', e); }
-    Validate.toast('Audit domains updated successfully!', 'success');
+      Store.updateUser(session.userId, { domains: ordered });
+    } catch (e) {
+      Validate.toast(e.message, 'error');
+      return;
+    }
+    Validate.toast('Audit domains saved. You will be offered projects in these categories.', 'success');
   }
 
   const sectionStyle = id => (section === id ? undefined : { display: 'none' });
@@ -138,12 +161,8 @@ export default function ExpertSettings() {
             <div id="sec-profile" style={sectionStyle('profile')}>
               <div className="settings-card">
                 <h3>Expert Profile</h3>
-                <div className="avatar-row">
-                  <div className="avatar-circle" style={{ background: profile.avatarColor }}>{initials}</div>
-                  <div>
-                    <button className="btn-save" style={{ padding: '6px 14px', fontSize: 12 }} onClick={() => Validate.toast('Avatar upload feature disabled in demo', 'warning')}>Change Photo</button>
-                    <div className="avatar-info" style={{ marginTop: 5 }}>JPG or PNG · Max 2 MB</div>
-                  </div>
+                <div style={{ marginBottom: 18 }}>
+                  <AvatarColorPicker initials={initials} value={avatarColor} onChange={setAvatarColor} />
                 </div>
                 <div className="form-row">
                   <div className="form-group">
@@ -170,20 +189,21 @@ export default function ExpertSettings() {
                 </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">Reviewer ID</label>
+                    <label className="form-label">Specialization</label>
                     {' '}
-                    <input type="text" className="form-input" defaultValue={`EXP-2024-${user.id.substring(user.id.length - 4)}`} readOnly />
+                    <input type="text" className="form-input" id="es-spec" value={specialization} maxLength={120}
+                           placeholder="e.g. Full-Stack & Security" onChange={e => setSpecialization(e.target.value)} />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Role</label>
+                    <label className="form-label">Hourly rate (₹)</label>
                     {' '}
-                    <input type="text" className="form-input" defaultValue="Expert Reviewer" readOnly />
+                    <input type="number" min="0" className="form-input" id="es-rate" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} />
                   </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Bio</label>
                   {' '}
-                  <textarea className="form-input" rows="3" id="es-bio" value={bio} onChange={e => setBio(e.target.value)} />
+                  <textarea className="form-input" rows="3" id="es-bio" maxLength={500} value={bio} onChange={e => setBio(e.target.value)} />
                   <div className="form-hint">Shown to Clients and Gig Workers when assigned to their case.</div>
                 </div>
                 <button className="btn-save" onClick={saveExpertProfile}>
@@ -209,10 +229,11 @@ export default function ExpertSettings() {
                   <label className="form-label">Max Concurrent Cases</label>
                   {' '}
                   <select className="form-input" id="es-avail-max" value={availMax} onChange={e => setAvailMax(e.target.value)}>
-                    <option>1</option>
-                    <option>2</option>
-                    <option>3</option>
-                    <option>4+</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="5">5</option>
+                    <option value="10">10</option>
                   </select>
                 </div>
                 <div className="form-group">
@@ -230,15 +251,23 @@ export default function ExpertSettings() {
               </div>
             </div>
 
+            {/* SECURITY */}
+            <div id="sec-security" style={sectionStyle('security')}>
+              <div className="settings-card">
+                <h3>Password &amp; Security</h3>
+                <ChangePasswordCard />
+              </div>
+            </div>
+
             {/* DOMAINS */}
             <div id="sec-domains" style={sectionStyle('domains')}>
               <div className="settings-card">
                 <h3>Audit Domains</h3>
                 <p className="domains-summary">
-                  <span id="domain-count">{domainCount}</span>{` of ${DOMAINS.length} domains selected — you will only receive audit requests matching these.`}
+                  <span id="domain-count">{domainCount}</span>{` of the ${offered.length} categories you were approved for — clients are only offered you on projects in these. To review a new category, ask the intake team.`}
                 </p>
                 <div className="domain-grid">
-                  {DOMAINS.map(d => (
+                  {offered.map(d => (
                     <div key={d.id} className={`domain-card ${selectedDomains.includes(d.id) ? 'on' : 'off'}`} onClick={() => toggleDomain(d.id)} data-id={d.id}>
                       <div className="domain-card-icon"><Icon name={d.icon} /></div>
                       <div>

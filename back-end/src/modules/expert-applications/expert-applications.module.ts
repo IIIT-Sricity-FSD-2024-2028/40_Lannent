@@ -19,7 +19,6 @@ export class ExpertApplicationsModule implements NestModule {
       .apply(RequireAuthMiddleware, AdminAuditMiddleware)
       .exclude(
         { path: 'expert-applications', method: RequestMethod.POST },
-        { path: 'expert-applications/status', method: RequestMethod.GET },
       )
       .forRoutes(ExpertApplicationsController);
   }

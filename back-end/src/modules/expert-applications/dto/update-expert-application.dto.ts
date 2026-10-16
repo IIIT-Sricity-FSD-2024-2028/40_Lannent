@@ -1,12 +1,13 @@
-import { IsString } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsIn, IsOptional, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateExpertApplicationStatusDto {
   @ApiProperty({ example: 'approved', enum: ['approved', 'rejected'] })
-  @IsString()
+  @IsIn(['approved', 'rejected'])
   status: string;
 
-  @ApiProperty({ example: 'u4', description: 'ID of superuser reviewing the application' })
-  @IsString()
-  reviewedBy: string;
+  /** Ignored — the decision is recorded against the admin who made it. */
+  @ApiPropertyOptional({ example: 'u12' })
+  @IsOptional() @IsString()
+  reviewedBy?: string;
 }

@@ -4,12 +4,13 @@
  *
  * Static marketing page: hero video, problem cards, how-it-works steps,
  * feature bento grid, product preview, expert review, testimonials, metrics,
- * call to action, footer and the quick demo-access bar.
+ * call to action and footer.
  */
 import { Link } from 'react-router-dom';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
 import usePageTitle from '../hooks/usePageTitle';
+import usePublicStats, { compactMoney } from '../hooks/usePublicStats';
 import useScrollReveal from '../hooks/useScrollReveal';
 import useSmoothScroll from '../hooks/useSmoothScroll';
 import pageCss from './Home.css?raw';
@@ -18,6 +19,9 @@ export default function Home() {
   usePageTitle('Lannent — Trusted Collaboration for Freelance Projects');
   useScrollReveal();   // fades in every ".reveal" section on scroll
   useSmoothScroll();   // smooth "#section" links + navbar shadow + steps connector
+  // Live figures from the platform — the page used to show invented ones.
+  const stats = usePublicStats();
+  const members = stats ? stats.clients + stats.workers + stats.experts : 0;
 
   return (
     <>
@@ -66,16 +70,13 @@ export default function Home() {
             <Link to="/signup" style={{ width: '100%' }}>
               <button className="btn-hero">Get Started</button>
             </Link>
-            <div className="hero-trust">
-              <div className="hero-stars">
-                <span className="star-icon">★</span>
-                <span className="star-icon">★</span>
-                <span className="star-icon">★</span>
-                <span className="star-icon">★</span>
-                <span className="star-icon">★</span>
+            {stats && members > 0 ? (
+              <div className="hero-trust">
+                <span style={{ fontWeight: 500 }}>
+                  {`${members.toLocaleString('en-IN')} member${members === 1 ? '' : 's'} building on Lannent`}
+                </span>
               </div>
-              <span style={{ fontWeight: 500 }}>Trusted by 2,000+ builders</span>
-            </div>
+            ) : null}
           </div>
         </div>
       </section>
@@ -252,8 +253,8 @@ export default function Home() {
                       <div className="progress-bar-fill" style={{ width: '65%', background: 'linear-gradient(90deg,#10b981,#34d399)', boxShadow: '0 0 12px rgba(16,185,129,0.5)' }}></div>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-                      <span style={{ fontSize: 11, color: '#94a3b8' }}>Released: $3,900</span>
-                      <span style={{ fontSize: 11, color: '#94a3b8' }}>Held: $2,100</span>
+                      <span style={{ fontSize: 11, color: '#94a3b8' }}>Released: ₹3,900</span>
+                      <span style={{ fontSize: 11, color: '#94a3b8' }}>Held: ₹2,100</span>
                     </div>
                   </div>
                 </div>
@@ -309,7 +310,7 @@ export default function Home() {
                     <div className="mini-card">
                       <p className="mini-card-title">UI Wireframes</p>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
-                        <span style={{ fontSize: 9, color: '#059669', fontWeight: 500, padding: '2px 6px', borderRadius: 4, background: '#d1fae5' }}>$800</span>
+                        <span style={{ fontSize: 9, color: '#059669', fontWeight: 500, padding: '2px 6px', borderRadius: 4, background: '#d1fae5' }}>₹800</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'linear-gradient(135deg,#6366f1,#4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: 'white' }}>A</div>
@@ -359,7 +360,7 @@ export default function Home() {
               </div>
               <h3 style={{ fontWeight: 600, fontSize: 20, marginBottom: 8, color: '#0f172a' }}>Dispute Resolution</h3>
               <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.7 }}>
-                Fair, expert-mediated resolution with full transparency. Average case closed in under 48 hours.
+                Fair, expert-mediated resolution with full transparency. The reviewer either releases the milestone or sends it back for rework.
               </p>
             </div>
             {/* Verified (col 6) */}
@@ -398,12 +399,11 @@ export default function Home() {
                 <div className="browser-url">
                   <div className="url-bar">
                     <div className="url-dot"></div>
-                    gigboard.app/dashboard
+                    lannent.app/dashboard
                   </div>
                 </div>
-                <div className="browser-live">
-                  <div className="live-dot"></div>
-                  Live
+                <div className="browser-live" title="An illustration with sample data">
+                  Example
                 </div>
               </div>
               <div className="browser-content">
@@ -414,7 +414,7 @@ export default function Home() {
                   </div>
                   <div className="dash-stat">
                     <div className="dash-stat-label">Total Earned</div>
-                    <div className="dash-stat-val" style={{ color: '#10b981' }}>$48.2K</div>
+                    <div className="dash-stat-val" style={{ color: '#10b981' }}>₹48.2K</div>
                   </div>
                   <div className="dash-stat">
                     <div className="dash-stat-label">Completion Rate</div>
@@ -610,62 +610,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-      {/* ═══════════ TESTIMONIALS ═══════════ */}
-      <section className="section-testimonials">
-        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle,rgba(251,191,36,0.07) 1px,transparent 1px)', backgroundSize: '28px 28px', pointerEvents: 'none' }}></div>
-        <div className="container" style={{ position: 'relative', zIndex: 1 }}>
-          <div className="section-header reveal">
-            <span className="pill pill-amber">★ Testimonials</span>
-            <h2 className="section-title">
-              Loved by <span className="grad-amber">10,000+ builders</span>
-            </h2>
-          </div>
-          <div className="testimonials-grid">
-            <div className="testi-card reveal">
-              <div className="testi-quote-bg">"</div>
-              <div className="testi-stars">★★★★★</div>
-              <p className="testi-text">
-                "The escrow system gave me complete peace of mind. I knew my funds were safe until the work was verified by an expert reviewer."
-              </p>
-              <div className="testi-author">
-                <div className="testi-avatar" style={{ background: 'linear-gradient(135deg,#f43f5e,#db2777)' }}></div>
-                <div>
-                  <p style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>Sarah Chen</p>
-                  <p style={{ fontSize: 12, color: '#94a3b8' }}>Startup Founder</p>
-                </div>
-              </div>
-            </div>
-            <div className="testi-card reveal reveal-delay-1">
-              <div className="testi-quote-bg">"</div>
-              <div className="testi-stars">★★★★★</div>
-              <p className="testi-text">
-                "Milestone tracking and real-time workrooms made managing our remote freelancers effortless. Best platform we've used by a mile."
-              </p>
-              <div className="testi-author">
-                <div className="testi-avatar" style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)' }}></div>
-                <div>
-                  <p style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>Marcus Rivera</p>
-                  <p style={{ fontSize: 12, color: '#94a3b8' }}>Product Manager</p>
-                </div>
-              </div>
-            </div>
-            <div className="testi-card reveal reveal-delay-2">
-              <div className="testi-quote-bg">"</div>
-              <div className="testi-stars">★★★★★</div>
-              <p className="testi-text">
-                "The expert audit feature is a game-changer. We caught critical issues before deployment that would have cost us thousands."
-              </p>
-              <div className="testi-author">
-                <div className="testi-avatar" style={{ background: 'linear-gradient(135deg,#10b981,#059669)' }}></div>
-                <div>
-                  <p style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>Aisha Patel</p>
-                  <p style={{ fontSize: 12, color: '#94a3b8' }}>CTO, Buildfast</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
       {/* ═══════════ METRICS ═══════════ */}
       <section className="section-metrics">
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 90% 70% at 50% 50%,rgba(224,231,255,0.6) 0%,transparent 70%)', pointerEvents: 'none' }}></div>
@@ -673,7 +617,7 @@ export default function Home() {
           <div className="section-header reveal">
             <span className="pill pill-cyan">◎ By the Numbers</span>
             <h2 className="section-title">
-              Trusted by thousands of <span className="grad-cyan">professionals</span>
+              Live from the <span className="grad-cyan">platform</span>
             </h2>
           </div>
           <div className="metrics-grid">
@@ -681,29 +625,29 @@ export default function Home() {
               <div className="metric-icon" style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)' }}>
                 <Icon name="users" style={{ color: 'white', width: 24, height: 24 }} />
               </div>
-              <div className="metric-val" style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>12,500+</div>
-              <div className="metric-label">Freelancers Onboarded</div>
+              <div className="metric-val" style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{stats ? stats.workers.toLocaleString('en-IN') : '—'}</div>
+              <div className="metric-label">Gig workers on Lannent</div>
             </div>
             <div className="metric-card reveal reveal-delay-1" style={{ background: '#ecfdf5', border: '1.5px solid #a7f3d0' }}>
               <div className="metric-icon" style={{ background: 'linear-gradient(135deg,#10b981,#059669)' }}>
                 <Icon name="check-circle" style={{ color: 'white', width: 24, height: 24 }} />
               </div>
-              <div className="metric-val" style={{ background: 'linear-gradient(135deg,#10b981,#059669)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>45,000+</div>
-              <div className="metric-label">Projects Completed</div>
+              <div className="metric-val" style={{ background: 'linear-gradient(135deg,#10b981,#059669)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{stats ? stats.projectsCompleted.toLocaleString('en-IN') : '—'}</div>
+              <div className="metric-label">{stats ? `Projects completed · ${stats.projectsInProgress} in progress` : 'Projects completed'}</div>
             </div>
             <div className="metric-card reveal reveal-delay-2" style={{ background: '#eff6ff', border: '1.5px solid #bae6fd' }}>
               <div className="metric-icon" style={{ background: 'linear-gradient(135deg,#0ea5e9,#0284c7)' }}>
                 <Icon name="lock" style={{ color: 'white', width: 24, height: 24 }} />
               </div>
-              <div className="metric-val" style={{ background: 'linear-gradient(135deg,#0ea5e9,#0284c7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>$24M+</div>
-              <div className="metric-label">Escrow Secured</div>
+              <div className="metric-val" style={{ background: 'linear-gradient(135deg,#0ea5e9,#0284c7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{stats ? compactMoney(stats.escrowHeld) : '—'}</div>
+              <div className="metric-label">Held in escrow right now</div>
             </div>
             <div className="metric-card reveal reveal-delay-3" style={{ background: '#fffbeb', border: '1.5px solid #fde68a' }}>
               <div className="metric-icon" style={{ background: 'linear-gradient(135deg,#f59e0b,#f97316)' }}>
-                <Icon name="star" style={{ color: 'white', width: 24, height: 24 }} />
+                <Icon name="wallet" style={{ color: 'white', width: 24, height: 24 }} />
               </div>
-              <div className="metric-val" style={{ background: 'linear-gradient(135deg,#f59e0b,#f97316)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>98.5%</div>
-              <div className="metric-label">Client Satisfaction</div>
+              <div className="metric-val" style={{ background: 'linear-gradient(135deg,#f59e0b,#f97316)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{stats ? compactMoney(stats.paidToWorkers) : '—'}</div>
+              <div className="metric-label">Paid to gig workers</div>
             </div>
           </div>
         </div>
@@ -737,73 +681,28 @@ export default function Home() {
       {/* ═══════════ FOOTER ═══════════ */}
       <footer className="site-footer">
         <div className="container">
-          <div className="footer-grid">
+          <div className="footer-grid footer-grid-3">
             <div>
               <h4 className="footer-col-title">Product</h4>
               <ul className="footer-col">
-                <li>
-                  <a href="#">Features</a>
-                </li>
-                <li>
-                  <a href="#">Pricing</a>
-                </li>
-                <li>
-                  <a href="#">Integrations</a>
-                </li>
-                <li>
-                  <a href="#">Changelog</a>
-                </li>
+                <li><a href="#how-it-works">How it works</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#product">Product tour</a></li>
               </ul>
             </div>
             <div>
-              <h4 className="footer-col-title">Resources</h4>
+              <h4 className="footer-col-title">Get started</h4>
               <ul className="footer-col">
-                <li>
-                  <a href="#">Documentation</a>
-                </li>
-                <li>
-                  <a href="#">Blog</a>
-                </li>
-                <li>
-                  <a href="#">Support</a>
-                </li>
-                <li>
-                  <a href="#">Status</a>
-                </li>
+                <li><Link to="/signup">Create an account</Link></li>
+                <li><Link to="/login">Log in</Link></li>
               </ul>
             </div>
             <div>
-              <h4 className="footer-col-title">Company</h4>
+              <h4 className="footer-col-title">Expert Reviewers</h4>
               <ul className="footer-col">
-                <li>
-                  <a href="#">About</a>
-                </li>
-                <li>
-                  <a href="#">Careers</a>
-                </li>
-                <li>
-                  <a href="#">Contact</a>
-                </li>
-                <li>
-                  <a href="#">Press</a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="footer-col-title">Legal</h4>
-              <ul className="footer-col">
-                <li>
-                  <a href="#">Terms</a>
-                </li>
-                <li>
-                  <a href="#">Privacy</a>
-                </li>
-                <li>
-                  <a href="#">Security</a>
-                </li>
-                <li>
-                  <a href="#">Cookies</a>
-                </li>
+                <li><Link to="/expert-landing">Become a reviewer</Link></li>
+                <li><Link to="/expert-signup">Apply</Link></li>
+                <li><Link to="/expert-login">Reviewer login</Link></li>
               </ul>
             </div>
           </div>
@@ -817,11 +716,6 @@ export default function Home() {
               <span style={{ fontSize: 13, color: '#94a3b8', marginLeft: 4 }}>© 2026 All rights reserved.</span>
             </div>
             <div className="footer-badges">
-              <div className="footer-badge" style={{ background: '#ecfdf5', border: '1px solid #a7f3d0' }}>
-                <Icon name="shield-check" style={{ color: '#059669', width: 13, height: 13 }} />
-                {' '}
-                <span style={{ color: '#166534' }}>SOC 2 Type II</span>
-              </div>
               <div className="footer-badge" style={{ background: '#eef2ff', border: '1px solid #c7d2fe' }}>
                 <Icon name="lock" style={{ color: '#4f46e5', width: 13, height: 13 }} />
                 {' '}
@@ -831,46 +725,6 @@ export default function Home() {
           </div>
         </div>
       </footer>
-      {/* ── Demo Access Bar ── */}
-      <div style={{ background: '#f8fafc', borderTop: '1px solid #e2e8f0', padding: '24px 0' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', textAlign: 'center' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16 }}>Quick Demo Access</div>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link to="/login?demo=client" style={{ padding: '10px 22px', borderRadius: 12, background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: 'white', textDecoration: 'none', fontSize: 14, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect width="20" height="14" x="2" y="7" rx="2" />
-                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-              </svg>
-              Client Demo
-            </Link>
-            <Link to="/login?demo=worker" style={{ padding: '10px 22px', borderRadius: 12, background: 'linear-gradient(135deg,#10b981,#059669)', color: 'white', textDecoration: 'none', fontSize: 14, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-              </svg>
-              Worker Demo
-            </Link>
-            <Link to="/expert-login" style={{ padding: '10px 22px', borderRadius: 12, background: 'linear-gradient(135deg,#a855f7,#7c3aed)', color: 'white', textDecoration: 'none', fontSize: 14, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                <polyline points="22 4 12 14.01 9 11.01" />
-              </svg>
-              Expert Demo
-            </Link>
-            <Link to="/login?demo=superuser" style={{ padding: '10px 22px', borderRadius: 12, background: 'linear-gradient(135deg,#ef4444,#dc2626)', color: 'white', textDecoration: 'none', fontSize: 14, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
-              </svg>
-              Super User Demo
-            </Link>
-          </div>
-          <div style={{ marginTop: 12, fontSize: 12, color: '#94a3b8' }}>
-            Or sign in at <strong>login.html</strong> with <code style={{ background: '#e2e8f0', padding: '1px 5px', borderRadius: 4 }}>client@gmail.com</code>
-            , <code style={{ background: '#e2e8f0', padding: '1px 5px', borderRadius: 4 }}>worker@gmail.com</code> or <code style={{ background: '#e2e8f0', padding: '1px 5px', borderRadius: 4 }}>expert@gmail.com</code> — all use <code style={{ background: '#e2e8f0', padding: '1px 5px', borderRadius: 4 }}>Password@123</code>
-            . Super user is <code style={{ background: '#e2e8f0', padding: '1px 5px', borderRadius: 4 }}>super@gmail.com</code> / <code style={{ background: '#e2e8f0', padding: '1px 5px', borderRadius: 4 }}>Superadmin@123</code>
-            .
-          </div>
-        </div>
-      </div>
     </>
   );
 }

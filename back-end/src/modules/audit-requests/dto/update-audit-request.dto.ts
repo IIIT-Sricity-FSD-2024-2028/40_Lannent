@@ -1,12 +1,14 @@
-import { PartialType, OmitType } from '@nestjs/swagger';
+import { PickType, PartialType } from '@nestjs/swagger';
 import { CreateAuditRequestDto } from './create-audit-request.dto';
 
 /**
- * Status is deliberately not updatable here. The engagement moves through its
- * lifecycle via the /offers, /fund, /accept and /decline endpoints, each of
- * which enforces the transition it owns; a free-form status write would let a
- * caller skip straight past those guards.
+ * Descriptive fields only.
+ *
+ * Status moves through /offers, /fund, /accept and /decline, each of which
+ * enforces the transition it owns. The reviewer, worker, milestone and
+ * dispute links are set by the platform: `expertId` used to be writable here,
+ * so a reviewer could put themselves on another reviewer's funded engagement.
  */
 export class UpdateAuditRequestDto extends PartialType(
-  OmitType(CreateAuditRequestDto, ['status', 'kind', 'clientId', 'taskId'] as const),
+  PickType(CreateAuditRequestDto, ['severity', 'dueDate', 'project', 'worker', 'milestone'] as const),
 ) {}

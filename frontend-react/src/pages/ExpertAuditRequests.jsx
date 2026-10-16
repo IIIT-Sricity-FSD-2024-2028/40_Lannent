@@ -43,11 +43,14 @@ const STATUS_CLASS = {
   'Declined':        'status-completed',
   'Cancelled':       'status-completed',
 };
+// Each filter covers a group of statuses, so every card is reachable from
+// some filter and not only from All.
 const FILTERS = [
-  { id: 'filterAll', value: 'all', label: 'All' },
-  { id: 'filterAwaiting', value: 'Awaiting Review', label: 'Awaiting' },
-  { id: 'filterInReview', value: 'In Review', label: 'In Review' },
-  { id: 'filterCompleted', value: 'Completed', label: 'Completed' },
+  { id: 'filterAll', value: 'all', label: 'All', statuses: null },
+  { id: 'filterAwaiting', value: 'awaiting', label: 'Awaiting', statuses: ['Awaiting Review', 'Negotiating', 'Agreed', 'Ready to start'] },
+  { id: 'filterInReview', value: 'in-review', label: 'In Review', statuses: ['In Review'] },
+  { id: 'filterCompleted', value: 'completed', label: 'Completed', statuses: ['Completed'] },
+  { id: 'filterClosed', value: 'closed', label: 'Declined / Cancelled', statuses: ['Declined', 'Cancelled'] },
 ];
 
 /**
@@ -78,12 +81,16 @@ function getAuditRequests(Store, Auth) {
     .filter(a => a.kind !== 'dispute-audit')
     // And only what this reviewer is assigned to, or is still open to them.
     .filter(a => !a.expertId || a.expertId === session.userId)
-    .map(a => ({
+    .map(a => {
+      const task = a.taskId ? Store.getTaskById(a.taskId) : null;
+      const workerId = a.workerId || task?.workerId;
+      const workerName = workerId ? Store.getUserById(workerId)?.name : null;
+      return {
       id: a.id,
       milestoneId: a.milestoneId,
-      project: a.project,
-      worker: a.worker,
-      milestone: a.milestone,
+      project: a.project || task?.title || 'Project',
+      worker: workerName || (typeof a.worker === 'string' ? a.worker : '') || 'No worker hired yet',
+      milestone: a.milestone || (a.milestoneId ? Store.getMilestoneById(a.milestoneId)?.title : '') || 'Every milestone on the project',
       submitted: a.createdAt,
       status: auditUiStatus(a),
       rawStatus: a.status,
@@ -92,9 +99,9 @@ function getAuditRequests(Store, Auth) {
       agreedAmount: a.agreedAmount,
       priority: a.severity === 'High' ? 'high' : a.severity === 'Low' ? 'low' : 'normal',
       severity: a.severity === 'High' ? 'major' : 'minor',
-      severityLabel: a.severity + ' Priority',
-      fromStore: true,
-    }));
+      severityLabel: (a.severity || 'Medium') + ' Priority',
+    };
+    });
 }
 
 /** One audit request card. */
@@ -153,10 +160,15 @@ function AuditCard({ a }) {
             {a.rawStatus === 'in-progress' ? 'Open' : 'Review & quote'}
           </button>
         ) : ''}
-        {a.rawStatus === 'paid' ? (
-          <Link to={`/expert-report-audit?id=${a.id}`} className="btn-review" style={{ background: '#f8f9fb', color: 'var(--foreground)', border: '1px solid var(--border)' }}>
+        {a.rawStatus === 'paid' || (a.auditProgress && a.auditProgress.audited > 0) ? (
+          // Every report filed on this project, finished audit or not. The
+          // single-report page only ever showed one milestone: the latest
+          // report once the audit was done, or the next (unaudited) milestone
+          // while it was still running.
+          <Link to={`/expert-reports?audit=${encodeURIComponent(a.id)}`}
+                className="btn-review" style={{ background: '#f8f9fb', color: 'var(--foreground)', border: '1px solid var(--border)' }}>
             <Icon name="file-text" style={{ width: 15, height: 15 }} />
-            View Report
+            {a.rawStatus === 'paid' ? 'View Reports' : 'Reports so far'}
           </Link>
         ) : ''}
       </div>
@@ -172,10 +184,11 @@ export default function ExpertAuditRequests() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const q = searchQuery.toLowerCase();
+  const q = searchQuery.trim().toLowerCase();
+  const statuses = FILTERS.find(f => f.value === activeFilter)?.statuses;
   const list = auditRequests.filter(a => {
-    const ok = !q || a.project.toLowerCase().includes(q) || a.worker.toLowerCase().includes(q);
-    const sf = activeFilter === 'all' || a.status === activeFilter;
+    const ok = !q || [a.project, a.worker, a.milestone].some(v => String(v || '').toLowerCase().includes(q));
+    const sf = !statuses || statuses.includes(a.status);
     return ok && sf;
   });
 
