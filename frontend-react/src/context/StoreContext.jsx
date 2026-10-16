@@ -54,7 +54,7 @@ const Store = (() => {
    * Uploads one file and resolves to the reference a deliverable stores:
    * `{ id, name, size, mime, url }`.
    *
-   * This cannot go through `_syncPost`: that sends a JSON string over a
+   * This cannot go through `_write`: that sends a JSON string over a
    * synchronous XHR, and `_headers()` forces `Content-Type: application/json`.
    * A multipart body needs the browser to set the content type itself, so the
    * boundary is right — hence async fetch and a headers object with the
@@ -82,6 +82,11 @@ const Store = (() => {
       throw new Error((payload && payload.message) || `Upload failed (${res.status})`);
     }
     return payload.data !== undefined ? payload.data : payload;
+  }
+
+  /** Deletes a file you uploaded (refused once it is part of a submitted deliverable). */
+  function deleteFile(id) {
+    return _write('DELETE', `${API}/files/${id}`);
   }
 
   /** Absolute URL for a stored file, for links and download buttons. */
@@ -218,55 +223,6 @@ const Store = (() => {
     }
   }
 
-  async function _fetch(url, opts = {}) {
-    try {
-      const res = await fetch(url, { headers: _headers(), ...opts });
-      const json = await res.json();
-      return json.data !== undefined ? json.data : json;
-    } catch (e) {
-      console.warn('Store API error:', e);
-      return null;
-    }
-  }
-
-  async function _post(url, body) {
-    return _fetch(url, { method: 'POST', body: JSON.stringify(body) });
-  }
-
-  async function _patch(url, body) {
-    return _fetch(url, { method: 'PATCH', body: JSON.stringify(body) });
-  }
-
-  async function _delete(url) {
-    return _fetch(url, { method: 'DELETE' });
-  }
-
-  // ─── Cache Refresh ────────────────────────────────────────────────────────
-  async function _refreshAll() {
-    const [users, tasks, milestones, proposals, auditRequests, auditReports, disputes, transactions, expertApplications, notifications] = await Promise.all([
-      _fetch(`${API}/users`),
-      _fetch(`${API}/tasks`),
-      _fetch(`${API}/milestones`),
-      _fetch(`${API}/proposals`),
-      _fetch(`${API}/audit-requests`),
-      _fetch(`${API}/audit-reports`),
-      _fetch(`${API}/disputes`),
-      _fetch(`${API}/transactions`),
-      _fetch(`${API}/expert-applications`),
-      _fetch(`${API}/notifications`),
-    ]);
-    if (users) _cache.users = users;
-    if (tasks) _cache.tasks = tasks;
-    if (milestones) _cache.milestones = milestones;
-    if (proposals) _cache.proposals = proposals;
-    if (auditRequests) _cache.auditRequests = auditRequests;
-    if (auditReports) _cache.auditReports = auditReports;
-    if (disputes) _cache.disputes = disputes;
-    if (transactions) _cache.transactions = transactions;
-    if (expertApplications) _cache.expertApplications = expertApplications;
-    if (notifications) _cache.notifications = notifications;
-  }
-
   // ─── Synchronous HTTP helpers (blocks until API responds) ─────────────────
   function _syncFetch(url) {
     try {
@@ -279,6 +235,7 @@ const Store = (() => {
         const json = JSON.parse(xhr.responseText);
         return json.data !== undefined ? json.data : json;
       }
+      _handleUnauthorized(xhr.status);
     } catch (e) {
       console.warn('Store sync GET error:', url, e);
     }
@@ -286,70 +243,49 @@ const Store = (() => {
   }
 
   /**
-   * POST, reporting *why* it failed.
-   *
-   * `_syncPost` collapses "the server said no" and "the server is not there"
-   * into one null, and callers that fall back to a local write cannot tell
-   * them apart. A rejected write must not be retried as something weaker.
-   *
-   * Returns `{ ok, status, data, message }`; `status === 0` means unreachable.
+   * The server no longer accepts our token — it expired (12h), or a dev
+   * server restarted with a fresh secret. Every request then failed with 401
+   * and the app rendered as if it were offline, with the user still "signed
+   * in" and no way to tell why. Sign out and go to the login page instead.
    */
-  function _syncPostRaw(url, body) {
-    try {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', url, false);
-      const hdrs = _headers();
-      Object.keys(hdrs).forEach(k => xhr.setRequestHeader(k, hdrs[k]));
-      xhr.send(JSON.stringify(body));
-      if (xhr.status >= 200 && xhr.status < 300) {
-        const json = JSON.parse(xhr.responseText);
-        return { ok: true, status: xhr.status, data: json.data !== undefined ? json.data : json };
-      }
-      let message = '';
-      try { message = (JSON.parse(xhr.responseText) || {}).message || ''; } catch (e) {}
-      console.error('[Store] POST rejected:', url, 'status:', xhr.status, 'response:', xhr.responseText.substring(0, 300));
-      return { ok: false, status: xhr.status, data: null, message: message };
-    } catch (e) {
-      console.warn('Store sync POST error:', url, e);
-      return { ok: false, status: 0, data: null, message: 'The server could not be reached.' };
+  function _handleUnauthorized(status) {
+    if (status !== 401) return;
+    let hadToken = false;
+    try { hadToken = !!localStorage.getItem('lannent_token'); } catch {}
+    if (!hadToken) return;
+    try { localStorage.removeItem('lannent_session'); localStorage.removeItem('lannent_token'); } catch {}
+    if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+      window.location.href = '/login';
     }
   }
 
-  function _syncPost(url, body) {
-    return _syncPostRaw(url, body).data;
-  }
-
-  function _syncPatch(url, body) {
+  /**
+   * Every write goes through here. It returns the server's data, or throws an
+   * Error carrying the server's own message.
+   *
+   * The old helpers returned null both when the server was unreachable and
+   * when it *refused* the request, and most writes then fell back to editing
+   * the local cache. So a hire the server rejected for insufficient funds,
+   * or an approval it refused, showed on screen as done until the next
+   * reload. A refused write now fails visibly, with the reason.
+   */
+  function _write(method, url, body) {
+    const xhr = new XMLHttpRequest();
     try {
-      const xhr = new XMLHttpRequest();
-      xhr.open('PATCH', url, false);
+      xhr.open(method, url, false);
       const hdrs = _headers();
       Object.keys(hdrs).forEach(k => xhr.setRequestHeader(k, hdrs[k]));
-      xhr.send(JSON.stringify(body));
-      if (xhr.status >= 200 && xhr.status < 300) {
-        const json = JSON.parse(xhr.responseText);
-        return json.data !== undefined ? json.data : json;
-      }
+      xhr.send(body === undefined ? null : JSON.stringify(body));
     } catch (e) {
-      console.warn('Store sync PATCH error:', url, e);
+      throw new Error('The server could not be reached, so nothing was saved.');
     }
-    return null;
-  }
-
-  function _syncDelete(url) {
-    try {
-      const xhr = new XMLHttpRequest();
-      xhr.open('DELETE', url, false);
-      const hdrs = _headers();
-      Object.keys(hdrs).forEach(k => xhr.setRequestHeader(k, hdrs[k]));
-      xhr.send();
-      if (xhr.status >= 200 && xhr.status < 300) {
-        return true;
-      }
-    } catch (e) {
-      console.warn('Store sync DELETE error:', url, e);
+    let json = null;
+    try { json = JSON.parse(xhr.responseText); } catch {}
+    if (xhr.status >= 200 && xhr.status < 300) {
+      return json && json.data !== undefined ? json.data : json;
     }
-    return false;
+    _handleUnauthorized(xhr.status);
+    throw new Error((json && json.message) || `The server refused this request (${xhr.status}).`);
   }
 
   // True once at least one endpoint has answered. Pages read this to tell
@@ -358,8 +294,8 @@ const Store = (() => {
   let _online = false;
   let _reachedEndpoints = 0;
 
-  function init() {
-    // Load all data synchronously from the API so the cache is ready before pages render.
+  /** What a page load reads, for the signed-in role. Null when nothing should be read. */
+  function _initPlan() {
     const endpoints = [
       ['users', '/users'], ['tasks', '/tasks'], ['milestones', '/milestones'],
       ['proposals', '/proposals'], ['auditRequests', '/audit-requests'],
@@ -371,29 +307,32 @@ const Store = (() => {
     // Expert applications hold applicants' contact details and are admin-only.
     // Fetching them for every role logged a 403 on every page load, which buries
     // real errors in the console.
-    let role = null, token = null;
+    let role = null, token = null, mustChange = false;
     try {
-      role = JSON.parse(localStorage.getItem('lannent_session') || '{}').role;
+      const session = JSON.parse(localStorage.getItem('lannent_session') || '{}');
+      role = session.role;
+      mustChange = !!session.mustChangePassword;
       token = localStorage.getItem('lannent_token');
     } catch {}
+    // Nobody is signed in (login, landing, signup): every endpoint below needs
+    // credentials. And an account that must first choose its own password can
+    // read nothing until it has.
+    if ((!role && !token) || mustChange) return null;
+    return endpoints.filter(([key]) => key !== 'expertApplications' || (role === 'intake-admin' || role === 'compliance-admin'));
+  }
 
-    // Nobody is signed in — on the login page, the landing page, signup. Every
-    // endpoint below now requires credentials, so firing them anyway produced
-    // ten 401s and ten console errors before the visitor had typed anything.
-    // The cache stays empty until there is someone to fill it for.
-    if (!role && !token) {
-      // Still establish reachability, or `isOnline()` would report the API
-      // down to every visitor who has not signed in. One public endpoint is
-      // enough — this is the application-status lookup, which needs no
-      // credentials by design.
-      let reachable = null;
-      try { reachable = _syncFetch(API + '/expert-applications/status?email=ping@none.invalid'); } catch (e) {}
-      _online = reachable !== null;
-      _reachedEndpoints = _online ? 1 : 0;
-      return;
-    }
+  /** Reachability for visitors who are not signed in — one public endpoint. */
+  function _ping() {
+    let reachable = null;
+    try { reachable = _syncFetch(API + '/stats/public'); } catch (e) {}
+    _online = reachable !== null;
+    _reachedEndpoints = _online ? 1 : 0;
+  }
 
-    const allowed = endpoints.filter(([key]) => key !== 'expertApplications' || (role === 'intake-admin' || role === 'compliance-admin'));
+  /** Refills the cache synchronously (after a seed reset). Page loads use initAsync. */
+  function init() {
+    const allowed = _initPlan();
+    if (!allowed) { _ping(); return _online; }
 
     _reachedEndpoints = 0;
     for (const [key, path] of allowed) {
@@ -404,13 +343,76 @@ const Store = (() => {
       else if (!Array.isArray(_cache[key])) { _cache[key] = []; }
     }
     _online = _reachedEndpoints > 0;
+
+    // The rates every preview is computed with. Read from the server so a
+    // change the revenue desk makes shows up in every form's preview.
+    const rates = _syncFetch(API + '/ledger/fee-rates');
+    if (rates) _applyRates(rates);
     return _online;
+  }
+
+  /**
+   * Refills the cache with every read in parallel, without blocking the page.
+   *
+   * init() makes about a dozen synchronous requests one after another, and it
+   * ran on every navigation — the whole UI froze for the sum of them. The
+   * router now awaits this instead and shows a loading state meanwhile.
+   */
+  async function initAsync() {
+    const allowed = _initPlan();
+    if (!allowed) {
+      try { _online = (await fetch(API + '/stats/public')).ok; } catch { _online = false; }
+      _reachedEndpoints = _online ? 1 : 0;
+      return _online;
+    }
+    const h = _headers();
+    delete h['Content-Type'];
+    const read = async (path) => {
+      try {
+        const res = await fetch(API + path, { headers: h });
+        if (res.status === 401) { _handleUnauthorized(401); return null; }
+        if (!res.ok) return null;
+        const json = await res.json();
+        return json.data !== undefined ? json.data : json;
+      } catch { return null; }
+    };
+    const results = await Promise.all([...allowed.map(([, path]) => read(path)), read('/ledger/fee-rates')]);
+    _reachedEndpoints = 0;
+    allowed.forEach(([key], i) => {
+      const data = results[i];
+      if (data) { _cache[key] = data; _reachedEndpoints++; }
+      else if (!Array.isArray(_cache[key])) { _cache[key] = []; }
+    });
+    _online = _reachedEndpoints > 0;
+    const rates = results[results.length - 1];
+    if (rates) _applyRates(rates);
+    return _online;
+  }
+
+  /** Asynchronously re-reads the signed-in user's notifications. */
+  async function refreshNotifications() {
+    const h = _headers();
+    delete h['Content-Type'];
+    try {
+      const res = await fetch(`${API}/notifications`, { headers: h });
+      if (res.status === 401) { _handleUnauthorized(401); return _cache.notifications; }
+      if (!res.ok) return _cache.notifications;
+      const json = await res.json();
+      _cache.notifications = Array.isArray(json.data) ? json.data : [];
+    } catch (e) { /* offline: keep what we have */ }
+    return _cache.notifications;
+  }
+
+  function markNotificationRead(id) {
+    try { _write('PATCH', `${API}/notifications/${id}/read`, {}); } catch (e) { console.warn('[Store]', e.message); }
+    const n = (_cache.notifications || []).find(x => x.id === id);
+    if (n) n.read = true;
   }
 
   function isOnline() { return _online; }
 
   function resetToSeed() {
-    _syncPost(`${API}/seed/reset`, {});
+    _write('POST', `${API}/seed/reset`, {});
     init(); // reload cache
   }
 
@@ -423,50 +425,35 @@ const Store = (() => {
     // Staff/admin roles cannot be created through the public signup endpoint.
     // When the caller is a superuser creating a privileged role, use the
     // dedicated staff route that bypasses the self-service restriction.
-    const STAFF_ROLES = ['superuser', 'revenue-admin', 'intake-admin', 'compliance-admin', 'expert'];
+    // Every account a superuser makes goes through the staff route, which
+    // records who made it and makes its owner choose their own password.
     let endpoint = `${API}/users`;
     try {
       const session = JSON.parse(localStorage.getItem('lannent_session') || '{}');
-      if (session.role === 'superuser' && STAFF_ROLES.includes(data.role)) {
-        endpoint = `${API}/users/staff`;
-      }
+      if (session.role === 'superuser') endpoint = `${API}/users/staff`;
     } catch {}
-    const result = _syncPost(endpoint, data);
-    if (result) { _cache.users.push(result); return result; }
-    // Fallback if API fails
-    const initials = data.name ? data.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : 'U';
-    const user = { id: 'u_' + Date.now(), status: 'active', joinDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), walletBalance: 0, avatar: initials, avatarColor: 'linear-gradient(135deg,#6366f1,#4f46e5)', ...data };
-    _cache.users.push(user);
-    return user;
+    // No local fallback: a signup the server refused (e.g. a taken email)
+    // used to create a fake account in the cache and carry on.
+    const result = _write('POST', endpoint, data);
+    _cache.users.push(result);
+    return result;
   }
 
   function updateUser(id, updates) {
-    const result = _syncPatch(`${API}/users/${id}`, updates);
-    if (result) { const idx = _cache.users.findIndex(u => u.id === id); if (idx >= 0) _cache.users[idx] = result; return result; }
+    const result = _write('PATCH', `${API}/users/${id}`, updates);
     const idx = _cache.users.findIndex(u => u.id === id);
-    if (idx === -1) return null;
-    _cache.users[idx] = { ..._cache.users[idx], ...updates };
-    return _cache.users[idx];
+    if (idx >= 0) _cache.users[idx] = result;
+    return result;
   }
 
   function deleteUser(id) {
-    _syncDelete(`${API}/users/${id}`);
+    _write('DELETE', `${API}/users/${id}`);
     _cache.users = _cache.users.filter(u => u.id !== id);
   }
 
   // Balance changes must never fall back to a cache-only mutation: that reports
   // success for money the server never moved, and the change is lost on reload.
-  // Both of these return null when the API does not confirm the change.
-  function deductFromWallet(userId, amount) {
-    const user = getUserById(userId);
-    if (!user) return null;
-    if (user.walletBalance < amount) return null;
-    const result = _syncPost(`${API}/users/${userId}/wallet/deduct`, { amount });
-    if (!result) return null;
-    const idx = _cache.users.findIndex(u => u.id === userId);
-    if (idx >= 0) _cache.users[idx] = result;
-    return result;
-  }
+  // (`deductFromWallet` was removed along with its unrecorded server route.)
 
   // Deposits and withdrawals carry a platform fee, so these return the fee
   // breakdown ({ gross, fee, net, balance }) rather than the user record.
@@ -488,10 +475,7 @@ const Store = (() => {
   }
 
   function addToWallet(userId, amount) {
-    const user = getUserById(userId);
-    if (!user) return null;
-    const result = _syncPost(`${API}/users/${userId}/wallet/add`, { amount });
-    if (!result) return null;
+    const result = _write('POST', `${API}/users/${userId}/wallet/add`, { amount });
     _refreshUser(userId);
     _refreshTransactions();
     return result;
@@ -499,13 +483,49 @@ const Store = (() => {
 
   /** Withdraws to an external account. Returns { gross, fee, net, balance }. */
   function withdrawFromWallet(userId, amount) {
-    const user = getUserById(userId);
-    if (!user) return null;
-    const result = _syncPost(`${API}/users/${userId}/wallet/withdraw`, { amount });
-    if (!result) return null;
+    const result = _write('POST', `${API}/users/${userId}/wallet/withdraw`, { amount });
     _refreshUser(userId);
     _refreshTransactions();
     return result;
+  }
+
+  /** Escrow held on the signed-in user's projects, bucket by bucket. */
+  function getMyEscrow() {
+    return _syncFetch(`${API}/ledger/my-escrow`) || { projects: [], totals: { project: 0, audit: 0, dispute: 0, total: 0 } };
+  }
+
+  /**
+   * Changing a password ends every other session. The server hands this one a
+   * fresh token, kept here so the person who changed it stays signed in.
+   */
+  function changePassword(userId, currentPassword, newPassword) {
+    const result = _write('POST', `${API}/users/${userId}/password`, { currentPassword, newPassword });
+    try {
+      if (result && result.token) localStorage.setItem('lannent_token', result.token);
+      const session = JSON.parse(localStorage.getItem('lannent_session') || '{}');
+      if (session.mustChangePassword) {
+        session.mustChangePassword = false;
+        localStorage.setItem('lannent_session', JSON.stringify(session));
+      }
+    } catch {}
+    return result;
+  }
+
+  /** Re-reads one user (e.g. the signed-in one after a balance change). */
+  function refreshUser(userId) { return _refreshUser(userId); }
+
+  /** Re-reads everything a page may depend on after a write. */
+  function refresh(...keys) {
+    const paths = {
+      users: '/users', tasks: '/tasks', milestones: '/milestones', proposals: '/proposals',
+      auditRequests: '/audit-requests', auditReports: '/audit-reports', disputes: '/disputes',
+      transactions: '/transactions', notifications: '/notifications', messages: '/messages',
+    };
+    for (const k of keys) {
+      if (!paths[k]) continue;
+      const data = _syncFetch(API + paths[k]);
+      if (data) _cache[k] = data;
+    }
   }
 
   // ─── AUDIT ENGAGEMENTS ────────────────────────────────────────────────────
@@ -522,42 +542,53 @@ const Store = (() => {
     const fresh = _syncFetch(`${API}/audit-requests`);
     if (fresh) _cache.auditRequests = fresh;
   }
-  function makeAuditOffer(id, { amount, offeredBy, note }) {
-    const r = _syncPost(`${API}/audit-requests/${id}/offers`, { amount, offeredBy, note });
-    if (r) _refreshAuditRequests();
+  // The server decides which side an offer comes from (the caller), so
+  // `offeredBy` is no longer sent.
+  function makeAuditOffer(id, { amount, note }) {
+    const r = _write('POST', `${API}/audit-requests/${id}/offers`, { amount, note });
+    _refreshAuditRequests();
     return r;
   }
   function acceptAuditOffer(id, offerId) {
-    const r = _syncPost(`${API}/audit-requests/${id}/offers/${offerId}/accept`, {});
-    if (r) _refreshAuditRequests();
+    const r = _write('POST', `${API}/audit-requests/${id}/offers/${offerId}/accept`, {});
+    _refreshAuditRequests();
     return r;
   }
   function fundAuditEscrow(id) {
-    const r = _syncPost(`${API}/audit-requests/${id}/fund`, {});
-    if (r) { _refreshAuditRequests(); _refreshUser(_sessionUserId()); }
+    const r = _write('POST', `${API}/audit-requests/${id}/fund`, {});
+    _refreshAuditRequests(); _refreshUser(_sessionUserId()); _refreshTransactions();
     return r;
   }
-  function acceptAuditEngagement(id, expertId) {
-    const r = _syncPost(`${API}/audit-requests/${id}/accept`, { expertId });
-    if (r) {
-      _refreshAuditRequests();
-      const tasks = _syncFetch(`${API}/tasks`);
-      if (tasks) _cache.tasks = tasks;
-    }
+  /** After a decline: ask a different reviewer, with a fresh opening offer. */
+  function reassignAudit(id, expertId, openingOffer) {
+    const r = _write('POST', `${API}/audit-requests/${id}/reassign`, { expertId, openingOffer });
+    _refreshAuditRequests();
+    refresh('disputes');
+    return r;
+  }
+  function acceptAuditEngagement(id) {
+    const r = _write('POST', `${API}/audit-requests/${id}/accept`, {});
+    _refreshAuditRequests();
+    const tasks = _syncFetch(`${API}/tasks`);
+    if (tasks) _cache.tasks = tasks;
     return r;
   }
   function declineAuditEngagement(id, reason) {
-    const r = _syncPost(`${API}/audit-requests/${id}/decline`, { reason });
-    if (r) _refreshAuditRequests();
+    const r = _write('POST', `${API}/audit-requests/${id}/decline`, { reason });
+    _refreshAuditRequests(); _refreshUser(_sessionUserId());
+    return r;
+  }
+  /** Withdraws a request the reviewer has not accepted; any funded fee comes back. */
+  function cancelAuditRequest(id) {
+    const r = _write('POST', `${API}/audit-requests/${id}/cancel`, {});
+    refresh('auditRequests', 'disputes', 'milestones', 'transactions');
+    _refreshUser(_sessionUserId());
     return r;
   }
   function cancelDraftTask(taskId) {
-    const r = _syncPost(`${API}/tasks/${taskId}/cancel-draft`, {});
-    if (r) {
-      const tasks = _syncFetch(`${API}/tasks`);
-      if (tasks) _cache.tasks = tasks;
-      _refreshUser(_sessionUserId());
-    }
+    const r = _write('POST', `${API}/tasks/${taskId}/cancel-draft`, {});
+    refresh('tasks', 'auditRequests', 'transactions');
+    _refreshUser(_sessionUserId());
     return r;
   }
   function getExperts() {
@@ -592,12 +623,13 @@ const Store = (() => {
   function getRevenueByProject()    { return _syncFetch(`${API}/revenue/by-project`) || []; }
   function getProjectBreakdown(taskId) { return _syncFetch(`${API}/revenue/project/${taskId}`); }
   function getFeeConfig()           { return _syncFetch(`${API}/revenue/fee-config`); }
-  function updateFeeConfig(patch)   { return _syncPatch(`${API}/revenue/fee-config`, patch); }
+  function updateFeeConfig(patch)   { return _write('PATCH', `${API}/revenue/fee-config`, patch); }
 
   // ─── FEE PREVIEW ──────────────────────────────────────────────────────────
   // Mirrors back-end/src/modules/ledger/fee-config.ts so forms can show the
   // charge before it is committed. The server always recomputes authoritatively.
-  const FEES = {
+  // Defaults until init() reads the server's current rates.
+  let FEES = {
     deposit:            { percent: 2.9,  fixed: 0.30 },
     clientMarketplace:  { percent: 5.0 },
     contractInitiation: [
@@ -611,6 +643,19 @@ const Store = (() => {
     expertService: { percent: 10 },
     withdrawal:    { percent: 0.25, fixed: 0.25, min: 0.25 },
   };
+
+  /** Replaces the preview rates with the server's current ones. */
+  function _applyRates(r) {
+    try {
+      const inf = t => t.map(x => ({ ...x, upTo: x.upTo == null ? Infinity : x.upTo }));
+      if (r.deposit) FEES.deposit = r.deposit;
+      if (r.clientMarketplace) FEES.clientMarketplace = r.clientMarketplace;
+      if (Array.isArray(r.contractInitiation)) FEES.contractInitiation = inf(r.contractInitiation);
+      if (Array.isArray(r.workerService)) FEES.workerService = inf(r.workerService);
+      if (r.expertService) FEES.expertService = r.expertService;
+      if (r.withdrawal) FEES.withdrawal = r.withdrawal;
+    } catch (e) { /* keep the defaults */ }
+  }
 
   function _round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
   function _tier(tiers, amount) { return tiers.find(t => amount <= t.upTo) || tiers[tiers.length - 1]; }
@@ -626,11 +671,13 @@ const Store = (() => {
       const fee = _round2(Math.max(raw, FEES.withdrawal.min));
       return { gross, fee, net: _round2(gross - fee) };
     },
+    /** Hiring: the budget is already held, so only the contract fees are charged. */
     projectFunding(budget) {
       const marketplace = _round2(budget * (FEES.clientMarketplace.percent / 100));
       const initiation = _tier(FEES.contractInitiation, budget).fee;
-      return { budget, marketplace, initiation, total: _round2(budget + marketplace + initiation) };
+      return { budget, marketplace, initiation, fees: _round2(marketplace + initiation), total: _round2(budget + marketplace + initiation) };
     },
+    rates() { return FEES; },
     workerRelease(amount, lifetimeBillings) {
       const rate = _tier(FEES.workerService, lifetimeBillings || 0).percent;
       const fee = _round2(amount * (rate / 100));
@@ -649,27 +696,53 @@ const Store = (() => {
   function getTasksByWorker(workerId) { return _cache.tasks.filter(t => t.workerId === workerId); }
   function getOpenTasks() { return _cache.tasks.filter(t => t.status === 'open'); }
 
+  // Posting a project moves its budget into escrow, and cancelling or
+  // deleting one returns it — so each of these refreshes the wallet.
   function createTask(data) {
-    const result = _syncPost(`${API}/tasks`, data);
-    if (result) { _cache.tasks.push(result); return result; }
-    const task = { id: 't_' + Date.now(), status: 'open', progress: 0, workerId: null, createdAt: new Date().toISOString().slice(0, 10), ...data };
-    _cache.tasks.push(task);
-    return task;
+    const result = _write('POST', `${API}/tasks`, data);
+    _cache.tasks.push(result);
+    _refreshUser(result.clientId);
+    _refreshTransactions();
+    refresh('auditRequests');
+    return result;
   }
 
   function updateTask(id, updates) {
-    const result = _syncPatch(`${API}/tasks/${id}`, updates);
-    if (result) { const idx = _cache.tasks.findIndex(t => t.id === id); if (idx >= 0) _cache.tasks[idx] = result; return result; }
+    const result = _write('PATCH', `${API}/tasks/${id}`, updates);
     const idx = _cache.tasks.findIndex(t => t.id === id);
-    if (idx === -1) return null;
-    _cache.tasks[idx] = { ..._cache.tasks[idx], ...updates };
-    return _cache.tasks[idx];
+    if (idx >= 0) _cache.tasks[idx] = result;
+    _refreshUser(result.clientId);
+    _refreshTransactions();
+    return result;
   }
 
   function deleteTask(id) {
-    _syncDelete(`${API}/tasks/${id}`);
+    const task = _cache.tasks.find(t => t.id === id);
+    const result = _write('DELETE', `${API}/tasks/${id}`);
     _cache.tasks = _cache.tasks.filter(t => t.id !== id);
+    _cache.milestones = _cache.milestones.filter(m => m.taskId !== id);
+    if (task) _refreshUser(task.clientId);
+    _refreshTransactions();
+    return result;
   }
+
+  /** What cancelling (or deleting) a project would cost and refund, from the server. */
+  function getCancellationQuote(id) {
+    return _write('GET', `${API}/tasks/${id}/cancellation-quote`);
+  }
+
+  /** Cancels an open project nobody was hired for; the server keeps the fee and refunds the rest. */
+  function cancelTask(id) {
+    const result = _write('PATCH', `${API}/tasks/${id}`, { status: 'cancelled' });
+    const { cancellation: _cancellation, ...task } = result || {};
+    const idx = _cache.tasks.findIndex(t => t.id === id);
+    if (idx >= 0) _cache.tasks[idx] = task;
+    refresh('auditRequests', 'proposals');
+    _refreshUser(task.clientId);
+    _refreshTransactions();
+    return result;
+  }
+
 
   // ─── MILESTONES ───────────────────────────────────────────────────────────
   function getMilestones() { return _cache.milestones; }
@@ -677,20 +750,48 @@ const Store = (() => {
   function getMilestoneById(id) { return _cache.milestones.find(m => m.id === id) || null; }
 
   function createMilestone(data) {
-    const result = _syncPost(`${API}/milestones`, data);
-    if (result) { _cache.milestones.push(result); return result; }
-    const ms = { id: 'm_' + Date.now(), status: 'pending', submittedAt: null, approvedAt: null, deliverable: null, ...data };
-    _cache.milestones.push(ms);
-    return ms;
+    const result = _write('POST', `${API}/milestones`, data);
+    _cache.milestones.push(result);
+    return result;
+  }
+
+  /**
+   * Posts a project with its milestones in one request. The server checks
+   * them all before any money moves — the old way posted the project, then
+   * deleted it again if a milestone was refused, which could charge a
+   * cancellation fee for a project that never really existed.
+   */
+  function createTaskWithMilestones(taskData, milestones) {
+    const task = createTask({ ...taskData, milestones });
+    refresh('milestones');
+    return task;
+  }
+
+  /** Removes a milestone that has not started, before anyone is hired. */
+  function deleteMilestone(id) {
+    const result = _write('DELETE', `${API}/milestones/${id}`);
+    _cache.milestones = _cache.milestones.filter(m => m.id !== id);
+    return result;
+  }
+
+  /** Whether the client may end the contract because the worker stopped delivering. */
+  function getNonDeliveryStatus(taskId) {
+    return _syncFetch(`${API}/tasks/${taskId}/non-delivery`) || { eligible: false, reason: '' };
+  }
+
+  /** Ends a contract for non-delivery: undelivered milestones are cancelled and refunded. */
+  function endForNonDelivery(taskId) {
+    const result = _write('POST', `${API}/tasks/${taskId}/end-for-non-delivery`, {});
+    refresh('tasks', 'milestones', 'auditRequests', 'transactions');
+    _refreshUser(_sessionUserId());
+    return result;
   }
 
   function updateMilestone(id, updates) {
-    const result = _syncPatch(`${API}/milestones/${id}`, updates);
-    if (result) { const idx = _cache.milestones.findIndex(m => m.id === id); if (idx >= 0) _cache.milestones[idx] = result; return result; }
+    const result = _write('PATCH', `${API}/milestones/${id}`, updates);
     const idx = _cache.milestones.findIndex(m => m.id === id);
-    if (idx === -1) return null;
-    _cache.milestones[idx] = { ..._cache.milestones[idx], ...updates };
-    return _cache.milestones[idx];
+    if (idx >= 0) _cache.milestones[idx] = result;
+    return result;
   }
 
   function _checkTaskCompletion(taskId) {
@@ -699,124 +800,85 @@ const Store = (() => {
   }
 
   function submitDeliverable(milestoneId, deliverable) {
-    const res = _syncPostRaw(`${API}/milestones/${milestoneId}/submit`, { deliverable });
-    if (res.ok) {
-      const idx = _cache.milestones.findIndex(m => m.id === milestoneId);
-      if (idx >= 0) _cache.milestones[idx] = res.data;
-      return res.data;
-    }
-
-    // The server answered and refused. The old fallback re-sent this as a
-    // milestone PATCH, whose schema has no `deliverable` and no `submittedAt`
-    // — validation stripped both, so the milestone flipped to "submitted"
-    // carrying nothing, and the client opened it to an empty file list. A
-    // refusal has to surface, not degrade into silent data loss.
-    if (res.status > 0) {
-      throw new Error(res.message || `The server rejected this submission (${res.status}).`);
-    }
-
-    // Genuinely offline — keep the local write so the work is not lost.
-    return updateMilestone(milestoneId, { status: 'submitted', submittedAt: new Date().toISOString().slice(0, 10), deliverable });
+    // A refusal surfaces with the server's reason. (Re-sending it as a PATCH
+    // once silently dropped the deliverable; keeping a local copy when the
+    // server is down would show a submission the client never receives.)
+    const result = _write('POST', `${API}/milestones/${milestoneId}/submit`, { deliverable });
+    const idx = _cache.milestones.findIndex(m => m.id === milestoneId);
+    if (idx >= 0) _cache.milestones[idx] = result;
+    return result;
   }
 
   function approveDeliverable(milestoneId) {
-    const result = _syncPost(`${API}/milestones/${milestoneId}/approve`, {});
-    if (result) {
-      const idx = _cache.milestones.findIndex(m => m.id === milestoneId);
-      if (idx >= 0) _cache.milestones[idx] = result;
-      // Refresh tasks, users, and transactions cache to get updated progress/wallet/releases
-      const ms = result;
-      if (ms.taskId) _checkTaskCompletion(ms.taskId);
-      if (ms.workerId) {
-        const u = _syncFetch(`${API}/users/${ms.workerId}`);
-        if (u) { const uidx = _cache.users.findIndex(x => x.id === ms.workerId); if (uidx >= 0) _cache.users[uidx] = u; }
-      }
-      // Refresh transactions cache (backend creates milestone-release tx)
-      const txs = _syncFetch(`${API}/transactions`);
-      if (txs) _cache.transactions = txs;
-      // Refresh client user (task owner) for wallet balance
-      const task = _cache.tasks.find(t => t.id === ms.taskId);
-      if (task && task.clientId) {
-        const cu = _syncFetch(`${API}/users/${task.clientId}`);
-        if (cu) { const cidx = _cache.users.findIndex(x => x.id === task.clientId); if (cidx >= 0) _cache.users[cidx] = cu; }
-      }
-      return result;
-    }
-    const ms = getMilestoneById(milestoneId);
-    if (ms) { ms.status = 'completed'; ms.approvedAt = new Date().toISOString().slice(0, 10); }
-    return ms;
+    // No fallback: marking a milestone paid locally when the server refused
+    // to release escrow showed money moving that never moved.
+    const result = _write('POST', `${API}/milestones/${milestoneId}/approve`, {});
+    const idx = _cache.milestones.findIndex(m => m.id === milestoneId);
+    if (idx >= 0) _cache.milestones[idx] = result;
+    // Refresh tasks, users, and transactions cache to get updated progress/wallet/releases
+    const ms = result;
+    if (ms.taskId) _checkTaskCompletion(ms.taskId);
+    _refreshTransactions();
+    // Completing the last milestone returns any unused budget to the client.
+    const task = _cache.tasks.find(t => t.id === ms.taskId);
+    if (task && task.clientId) _refreshUser(task.clientId);
+    return result;
   }
 
-  // ─── PROPOSALS ────────────────────────────────────────────────────────────
+  // ─── APPLICATIONS & INVITATIONS ───────────────────────────────────────────
+  // There is no bidding: the client's budget is the price. A worker applies
+  // and the client accepts; a client invites and the worker accepts. Either
+  // acceptance hires the worker and starts the project.
   function getProposals() { return _cache.proposals; }
   function getProposalsByTask(taskId) { return _cache.proposals.filter(p => p.taskId === taskId); }
-  function getProposalsByWorker(workerId) { return _cache.proposals.filter(p => p.workerId === workerId && p.type !== 'invitation'); }
+  function getApplicationsByWorker(workerId) { return _cache.proposals.filter(p => p.workerId === workerId && p.type === 'application'); }
   function getInvitationsByWorker(workerId) { return _cache.proposals.filter(p => p.workerId === workerId && p.type === 'invitation'); }
 
-  function createProposal(data) {
-    const result = _syncPost(`${API}/proposals`, data);
-    if (result) { _cache.proposals.push(result); return result; }
-    const prop = { id: 'p_' + Date.now(), status: 'pending', createdAt: new Date().toISOString().slice(0, 10), ...data };
-    _cache.proposals.push(prop);
-    return prop;
+  /** Whether someone could be hired onto this project now: open, with milestones adding up to the budget. */
+  function isReadyToHire(task) {
+    if (!task || task.status !== 'open' || task.workerId) return false;
+    const list = _cache.milestones.filter(m => m.taskId === task.id);
+    const total = list.reduce((a, m) => a + (Number(m.budget) || 0), 0);
+    return list.length > 0 && Math.abs(total - Number(task.budget)) < 0.005;
   }
 
-  function updateProposal(id, updates) {
-    const result = _syncPatch(`${API}/proposals/${id}`, updates);
-    if (result) { const idx = _cache.proposals.findIndex(p => p.id === id); if (idx >= 0) _cache.proposals[idx] = result; return result; }
-    const idx = _cache.proposals.findIndex(p => p.id === id);
-    if (idx === -1) return null;
-    _cache.proposals[idx] = { ..._cache.proposals[idx], ...updates };
-    return _cache.proposals[idx];
+  function _putProposal(result) {
+    const idx = _cache.proposals.findIndex(p => p.id === result.id);
+    if (idx >= 0) _cache.proposals[idx] = result; else _cache.proposals.push(result);
+    return result;
   }
 
-  function hireWorker(proposalId) {
-    const result = _syncPost(`${API}/proposals/${proposalId}/hire`, {});
-    if (result) {
-      // Refresh proposals, tasks, transactions from API
-      const proposals = _syncFetch(`${API}/proposals`);
-      const tasks = _syncFetch(`${API}/tasks`);
-      const transactions = _syncFetch(`${API}/transactions`);
-      if (proposals) _cache.proposals = proposals;
-      if (tasks) _cache.tasks = tasks;
-      if (transactions) _cache.transactions = transactions;
-      return result;
-    }
-    // Fallback
-    const prop = _cache.proposals.find(p => p.id === proposalId);
-    if (!prop) return null;
-    _cache.proposals = _cache.proposals.map(p =>
-      p.taskId === prop.taskId ? { ...p, status: p.id === proposalId ? 'hired' : 'rejected' } : p
-    );
-    return _cache.proposals.find(p => p.id === proposalId);
+  /** A worker applies to an open project at its posted budget. */
+  function applyToTask(taskId, message) {
+    return _putProposal(_write('POST', `${API}/proposals`, { taskId, message }));
   }
 
-  function acceptInvitation(proposalId) {
-    const result = _syncPost(`${API}/proposals/${proposalId}/accept`, {});
-    if (result) {
-      const proposals = _syncFetch(`${API}/proposals`);
-      const tasks = _syncFetch(`${API}/tasks`);
-      if (proposals) _cache.proposals = proposals;
-      if (tasks) _cache.tasks = tasks;
-      return result;
-    }
-    const prop = _cache.proposals.find(p => p.id === proposalId);
-    if (!prop || prop.type !== 'invitation') return null;
-    prop.status = 'hired';
-    return prop;
+  /** A client invites a worker to their open project at its posted budget. */
+  function sendInvitation({ taskId, workerId, message }) {
+    return _putProposal(_write('POST', `${API}/proposals`, { taskId, workerId, message }));
   }
 
-  function declineInvitation(proposalId) {
-    const result = _syncPost(`${API}/proposals/${proposalId}/decline`, {});
-    if (result) {
-      const idx = _cache.proposals.findIndex(p => p.id === proposalId);
-      if (idx >= 0) _cache.proposals[idx] = result;
-      return result;
-    }
-    const prop = _cache.proposals.find(p => p.id === proposalId);
-    if (!prop || prop.type !== 'invitation') return null;
-    prop.status = 'rejected';
-    return prop;
+  /** Whoever sent a pending application or invitation takes it back. */
+  function withdrawProposal(id) {
+    return _putProposal(_write('PATCH', `${API}/proposals/${id}`, { status: 'withdrawn' }));
+  }
+
+  /**
+   * The client accepts an application, or the invited worker accepts an
+   * invitation. Either hires the worker and moves money, so everything it
+   * touches is re-read.
+   */
+  function acceptProposal(id) {
+    const result = _write('POST', `${API}/proposals/${id}/accept`, {});
+    refresh('proposals', 'tasks', 'milestones');
+    _refreshTransactions();
+    _refreshUser(_sessionUserId());
+    return result;
+  }
+
+  /** The client rejects an application, or the invited worker declines an invitation. */
+  function declineProposal(id) {
+    return _putProposal(_write('POST', `${API}/proposals/${id}/decline`, {}));
   }
 
   // ─── AUDIT REQUESTS ──────────────────────────────────────────────────────
@@ -824,20 +886,16 @@ const Store = (() => {
   function getAuditRequestById(id) { return _cache.auditRequests.find(a => a.id === id) || null; }
 
   function createAuditRequest(data) {
-    const result = _syncPost(`${API}/audit-requests`, data);
-    if (result) { _cache.auditRequests.push(result); return result; }
-    const req = { id: 'ar_' + Date.now(), createdAt: new Date().toISOString().slice(0, 10), ...data };
-    _cache.auditRequests.push(req);
-    return req;
+    const result = _write('POST', `${API}/audit-requests`, data);
+    _cache.auditRequests.push(result);
+    return result;
   }
 
   function updateAuditRequest(id, updates) {
-    const result = _syncPatch(`${API}/audit-requests/${id}`, updates);
-    if (result) { const idx = _cache.auditRequests.findIndex(a => a.id === id); if (idx >= 0) _cache.auditRequests[idx] = result; return result; }
+    const result = _write('PATCH', `${API}/audit-requests/${id}`, updates);
     const idx = _cache.auditRequests.findIndex(a => a.id === id);
-    if (idx === -1) return null;
-    _cache.auditRequests[idx] = { ..._cache.auditRequests[idx], ...updates };
-    return _cache.auditRequests[idx];
+    if (idx >= 0) _cache.auditRequests[idx] = result;
+    return result;
   }
 
   // ─── AUDIT REPORTS ────────────────────────────────────────────────────────
@@ -862,30 +920,21 @@ const Store = (() => {
   function getReportsByTask(taskId) { return _cache.auditReports.filter(r => r.taskId === taskId); }
 
   function saveAuditReport(data) {
-    console.log('[Store] saveAuditReport called with:', JSON.stringify(data));
-    console.log('[Store] Current headers:', JSON.stringify(_headers()));
-    const result = _syncPost(`${API}/audit-reports`, data);
-    console.log('[Store] _syncPost result:', result);
-    if (result) {
-      const existing = _cache.auditReports.findIndex(r =>
-        r.auditRequestId === data.auditRequestId && (r.milestoneId || null) === (data.milestoneId || null));
-      if (existing >= 0) _cache.auditReports[existing] = result;
-      else _cache.auditReports.push(result);
-      // Refresh related caches
-      const ar = _syncFetch(`${API}/audit-requests`);
-      const ms = _syncFetch(`${API}/milestones`);
-      if (ar) _cache.auditRequests = ar;
-      if (ms) _cache.milestones = ms;
-      return result;
-    }
-    // No retry, and no local fallback.
-    //
-    // This used to re-POST with a hardcoded `role: expert` header, which let ANY
-    // signed-in user file an audit report — and filing one releases escrow to a
-    // reviewer. It then cached a fake report locally when the server refused,
-    // so the UI showed a report the backend had never accepted.
-    console.error('[Store] Audit report was rejected by the server.');
-    return null;
+    // No retry and no local fallback (a retry with a forged `role: expert`
+    // header, and a fake cached report, were both removed earlier). The
+    // request headers — bearer token included — are no longer logged to the
+    // console here.
+    const result = _write('POST', `${API}/audit-reports`, data);
+    const existing = _cache.auditReports.findIndex(r =>
+      r.auditRequestId === data.auditRequestId && (r.milestoneId || null) === (data.milestoneId || null));
+    if (existing >= 0) _cache.auditReports[existing] = result;
+    else _cache.auditReports.push(result);
+    // Refresh related caches
+    const ar = _syncFetch(`${API}/audit-requests`);
+    const ms = _syncFetch(`${API}/milestones`);
+    if (ar) _cache.auditRequests = ar;
+    if (ms) _cache.milestones = ms;
+    return result;
   }
 
   // ─── DISPUTES ─────────────────────────────────────────────────────────────
@@ -893,114 +942,69 @@ const Store = (() => {
   function getDisputeById(id) { return _cache.disputes.find(d => d.id === id) || null; }
 
   function createDispute(data) {
-    const result = _syncPost(`${API}/disputes`, data);
-    if (result) {
-      _cache.disputes.push(result);
-      if (data.milestoneId) {
-        const ms = _syncFetch(`${API}/milestones`);
-        if (ms) _cache.milestones = ms;
-      }
-      return result;
-    }
-    const dispute = { id: 'd_' + Date.now(), status: 'open', expertId: null, verdict: null, resolution: null, createdAt: new Date().toISOString().slice(0, 10), ...data };
-    _cache.disputes.push(dispute);
-    if (data.milestoneId) {
-      const localMs = getMilestoneById(data.milestoneId);
-      if (localMs) {
-        localMs.status = 'disputed';
-      }
-    }
-    return dispute;
+    const result = _write('POST', `${API}/disputes`, data);
+    _cache.disputes.push(result);
+    refresh('milestones', 'auditRequests');
+    return result;
   }
 
-  function resolveDispute(id, { verdict, resolution, expertId }) {
-    const result = _syncPost(`${API}/disputes/${id}/resolve`, { verdict, resolution, expertId });
-    if (result) {
-      const idx = _cache.disputes.findIndex(d => d.id === id);
-      if (idx >= 0) _cache.disputes[idx] = result;
-      // Refresh milestones & tasks
-      const ms = _syncFetch(`${API}/milestones`);
-      const tasks = _syncFetch(`${API}/tasks`);
-      if (ms) _cache.milestones = ms;
-      if (tasks) _cache.tasks = tasks;
-      return result;
-    }
-    const idx = _cache.disputes.findIndex(d => d.id === id);
-    if (idx === -1) return null;
-    _cache.disputes[idx] = { ..._cache.disputes[idx], status: 'resolved', verdict, resolution, expertId, resolvedAt: new Date().toISOString().slice(0, 10) };
-    return _cache.disputes[idx];
+  /** The client withdraws a dispute the reviewer has not accepted yet. */
+  function withdrawDispute(id) {
+    const result = _write('POST', `${API}/disputes/${id}/withdraw`, {});
+    refresh('disputes', 'milestones', 'auditRequests', 'transactions');
+    _refreshUser(_sessionUserId());
+    return result;
+  }
+
+  function resolveDispute(id, { verdict, resolution }) {
+    // The server records the caller as the reviewer, so no expertId is sent.
+    const result = _write('POST', `${API}/disputes/${id}/resolve`, { verdict, resolution });
+    refresh('disputes', 'milestones', 'tasks', 'auditRequests', 'transactions');
+    _refreshUser(_sessionUserId());
+    return result;
   }
 
   // ─── TRANSACTIONS ─────────────────────────────────────────────────────────
   function getTransactions() { return _cache.transactions; }
   function getTransactionsByUser(userId) { return _cache.transactions.filter(t => t.fromId === userId || t.toId === userId); }
 
-  function createTransaction(data) {
-    const result = _syncPost(`${API}/transactions`, data);
-    if (result) { _cache.transactions.push(result); return result; }
-    const tx = { id: 'tx_' + Date.now(), status: 'completed', createdAt: new Date().toISOString().slice(0, 10), ...data };
-    _cache.transactions.push(tx);
-    return tx;
-  }
+  // `createTransaction` was removed with its server route. Ledger rows are
+  // written by the server alongside the money movement they record.
 
   // ─── EXPERT APPLICATIONS ──────────────────────────────────────────────────
   function getExpertApplications() { return _cache.expertApplications || []; }
   function getExpertApplicationById(id) { return (_cache.expertApplications || []).find(a => a.id === id) || null; }
   function getExpertApplicationByEmail(email) { return (_cache.expertApplications || []).find(a => a.email.toLowerCase() === email.toLowerCase()) || null; }
 
-  /**
-   * Public lookup: does an application exist for this email, and what is its
-   * status. The full application list is admin-only — it holds applicants'
-   * contact details — so signup and login use this instead.
-   */
-  function getExpertApplicationStatus(email) {
-    return _syncFetch(`${API}/expert-applications/status?email=${encodeURIComponent(email)}`)
-      || { exists: false, status: null };
-  }
-
   function saveExpertApplication(data) {
-    if (getExpertApplicationByEmail(data.email)) {
-      return { success: false, error: 'An application with this email already exists.' };
-    }
-    const result = _syncPost(`${API}/expert-applications`, data);
-    if (result) {
-      _cache.expertApplications.push(result);
+    // The server rejects a duplicate email itself; this cache is empty for
+    // anyone who is not intake staff, so a local check never caught one.
+    try {
+      const result = _write('POST', `${API}/expert-applications`, data);
+      if (_cache.expertApplications) _cache.expertApplications.push(result);
       return { success: true, application: result };
+    } catch (e) {
+      return { success: false, error: e.message };
     }
-    const app = { id: 'ea_' + Date.now(), status: 'pending', appliedAt: new Date().toISOString().slice(0, 10), reviewedAt: null, reviewedBy: null, ...data };
-    _cache.expertApplications.push(app);
-    return { success: true, application: app };
   }
 
-  function updateExpertApplicationStatus(id, status, reviewerId) {
-    const result = _syncPatch(`${API}/expert-applications/${id}/status`, { status, reviewedBy: reviewerId });
-    if (result) {
-      const idx = _cache.expertApplications.findIndex(a => a.id === id);
-      if (idx >= 0) _cache.expertApplications[idx] = result;
-      // Refresh users (auto-created on approval)
-      if (status === 'approved') {
-        const users = _syncFetch(`${API}/users`);
-        if (users) _cache.users = users;
-      }
-      return result;
-    }
+  function updateExpertApplicationStatus(id, status) {
+    const result = _write('PATCH', `${API}/expert-applications/${id}/status`, { status });
     const idx = _cache.expertApplications.findIndex(a => a.id === id);
-    if (idx === -1) return null;
-    _cache.expertApplications[idx].status = status;
-    return _cache.expertApplications[idx];
+    if (idx >= 0) _cache.expertApplications[idx] = result;
+    // Refresh users (auto-created on approval)
+    if (status === 'approved') {
+      const users = _syncFetch(`${API}/users`);
+      if (users) _cache.users = users;
+    }
+    return result;
   }
 
   // ─── NOTIFICATIONS ────────────────────────────────────────────────────────
   function getNotifications(userId) { return (_cache.notifications || []).filter(n => n.userId === userId); }
 
-  function addNotification(data) {
-    const result = _syncPost(`${API}/notifications`, data);
-    if (result) { _cache.notifications.push(result); return; }
-    _cache.notifications.push({ id: 'n_' + Date.now(), read: false, createdAt: new Date().toISOString().slice(0, 10), ...data });
-  }
-
   function markNotificationsRead(userId) {
-    _syncPatch(`${API}/notifications/${userId}/read-all`, {});
+    try { _write('PATCH', `${API}/notifications/${userId}/read-all`, {}); } catch (e) { console.warn('[Store]', e.message); }
     // Update local cache
     (_cache.notifications || []).forEach(n => {
       if (n.userId === userId) n.read = true;
@@ -1011,43 +1015,44 @@ const Store = (() => {
   function getMessagesByTask(taskId) { return (_cache.messages || []).filter(m => m.taskId === taskId); }
   function getMessagesByUser(userId) { return (_cache.messages || []).filter(m => m.senderId === userId || m.receiverId === userId); }
 
-  function sendMessage(data) {
-    const result = _syncPost(`${API}/messages`, data);
-    if (result) {
-      _cache.messages.push(result);
-    } else {
-      _cache.messages.push({ id: 'msg_' + Date.now(), createdAt: new Date().toISOString(), ...data });
-    }
-    // Auto-generate notification for the receiver
-    const sender = getUserById(data.senderId);
-    const senderName = sender ? sender.name : (data.senderName || 'Someone');
-    addNotification({
-      userId: data.receiverId,
-      type: 'message',
-      text: `New message from ${senderName}`,
-      subtext: data.content.length > 50 ? data.content.substring(0, 50) + '...' : data.content,
-    });
+  /** Sends a chat message (the server notifies the receiver). `attachment` is a stored file reference. */
+  function sendMessage({ taskId, receiverId, content, attachment }) {
+    const result = _write('POST', `${API}/messages`, { taskId, receiverId, content, ...(attachment ? { attachment } : {}) });
+    _cache.messages.push(result);
+    return result;
+  }
+
+  /** Re-reads the signed-in user's conversations. */
+  function refreshMessages() {
+    const data = _syncFetch(`${API}/messages`);
+    if (data) _cache.messages = data;
+    return _cache.messages;
   }
 
   // ─── PUBLIC API ───────────────────────────────────────────────────────────
   return {
-    init, resetToSeed, isOnline,
-    getUsers, getUserById, getUserByEmail, createUser, updateUser, deleteUser, deductFromWallet, addToWallet, withdrawFromWallet, Fees, getLedgerSummary, getEscrowForTask,
+    init, initAsync, resetToSeed, isOnline,
+    getUsers, getUserById, getUserByEmail, createUser, updateUser, deleteUser, addToWallet, withdrawFromWallet, Fees, getLedgerSummary, getEscrowForTask,
     getRevenueSummary, getRevenueByFeeType, getRevenueTimeseries, getRevenueByUser,
     getRevenueDistribution, getRevenueByProject, getProjectBreakdown, getFeeConfig, updateFeeConfig,
     getTasks, getTaskById, getTasksByClient, getTasksByWorker, getOpenTasks, createTask, updateTask, deleteTask,
-    getMilestones, getMilestonesByTask, getMilestoneById, createMilestone, updateMilestone, submitDeliverable, approveDeliverable,
-    getProposals, getProposalsByTask, getProposalsByWorker, getInvitationsByWorker, createProposal, updateProposal, hireWorker, acceptInvitation, declineInvitation,
+    getCancellationQuote, cancelTask,
+    getMilestones, getMilestonesByTask, getMilestoneById, createMilestone, updateMilestone, deleteMilestone, submitDeliverable, approveDeliverable,
+    getNonDeliveryStatus, endForNonDelivery,
+    getProposals, getProposalsByTask, getApplicationsByWorker, getInvitationsByWorker, isReadyToHire,
+    applyToTask, sendInvitation, withdrawProposal, acceptProposal, declineProposal,
     getAuditRequests, getAuditRequestById, createAuditRequest, updateAuditRequest,
     getAuditPreview, getAuditRequestsByTask, makeAuditOffer, acceptAuditOffer, fundAuditEscrow,
-    acceptAuditEngagement, declineAuditEngagement, cancelDraftTask, getExperts,
-    uploadFile, fileUrl, downloadFile,
+    acceptAuditEngagement, declineAuditEngagement, cancelDraftTask, cancelAuditRequest, getExperts,
+    uploadFile, fileUrl, downloadFile, deleteFile,
     getAuditReports, getAuditReportByRequest, getReportsByRequest, getReportsByTask, saveAuditReport,
-    getDisputes, getDisputeById, createDispute, resolveDispute,
-    getTransactions, getTransactionsByUser, createTransaction,
-    getNotifications, addNotification, markNotificationsRead,
-    getMessagesByTask, getMessagesByUser, sendMessage,
-    getExpertApplications, getExpertApplicationById, getExpertApplicationByEmail, getExpertApplicationStatus, saveExpertApplication, updateExpertApplicationStatus,
+    getDisputes, getDisputeById, createDispute, resolveDispute, withdrawDispute,
+    getTransactions, getTransactionsByUser,
+    getNotifications, markNotificationsRead, markNotificationRead, refreshNotifications,
+    getMessagesByTask, getMessagesByUser, sendMessage, refreshMessages,
+    getMyEscrow, changePassword,
+    refreshUser, refresh, reassignAudit, createTaskWithMilestones,
+    getExpertApplications, getExpertApplicationById, getExpertApplicationByEmail, saveExpertApplication, updateExpertApplicationStatus,
   };
 })();
 

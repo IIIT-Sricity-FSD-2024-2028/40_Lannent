@@ -1,3 +1,18 @@
 .DS_Store
 back-end/node_modules/
 back-end/dist/
+
+# ── Kept locally, never pushed ──────────────────────────────────────────────
+# Per-person work split and its notes (team planning only)
+work-split/
+
+# Claude: project instructions, local settings, MCP config, and the fix log
+# it wrote during review sessions
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+**/.claude/
+**/CLAUDE.md
+**/CLAUDE.local.md
+.mcp.json
+BUG_FIXES.md

@@ -14,7 +14,7 @@ const clientItems = [
   { icon: 'plus-circle', label: 'Post Task', path: '/post-task' },
   { icon: 'user-plus', label: 'Hire Workers', path: '/hire-gig-workers' },
   { icon: 'users', label: 'Worker Applications', path: '/worker-applications' },
-  { icon: 'shield-check', label: 'Audit Offers', path: '/client-audit-offers' },
+  { icon: 'shield-check', label: 'Audit & Dispute Fees', path: '/audit-offers' },
   { icon: 'wallet', label: 'Wallet', path: '/client-wallet' },
   { icon: 'message-square', label: 'Messages', path: '/messages' },
   { icon: 'file-text', label: 'Reports', path: '/milestone-reports' },
@@ -38,6 +38,7 @@ const expertItems = [
   { icon: 'clipboard-check', label: 'Audit Requests', path: '/expert-audit-requests' },
   { icon: 'scale', label: 'Dispute Cases', path: '/expert-dispute-cases' },
   { icon: 'file-text', label: 'Reports', path: '/expert-reports' },
+  { icon: 'wallet', label: 'Wallet', path: '/expert-wallet' },
   { icon: 'message-square', label: 'Messages', path: '/messages' },
   { icon: 'settings', label: 'Settings', path: '/expert-settings' },
 ];
@@ -46,6 +47,7 @@ const superItems = [
   { icon: 'layout-dashboard', label: 'Dashboard', path: '/superuser-dashboard' },
   { icon: 'users', label: 'Manage Users', path: '/superuser-users' },
   { icon: 'folder-kanban', label: 'Manage Tasks', path: '/superuser-tasks' },
+  { icon: 'scale', label: 'Disputes', path: '/superuser-disputes' },
   { icon: 'wallet', label: 'Escrow & Finance', path: '/superuser-escrow' },
 ];
 
@@ -102,11 +104,9 @@ export default function Sidebar({ role, activePath, collapsed, onToggle }) {
 
       <nav className="sidebar-nav">
         {menuItems.map(item => {
-          // Like the original's pathname.endsWith(item.path): "expert-messages"
-          // also lights up the "messages" item.
-          const isActive = activePath && (activePath === item.path || location.pathname.endsWith(item.path.slice(1)));
+          const isActive = activePath ? activePath === item.path : location.pathname === item.path;
           return (
-            <Link key={item.label} to={item.path} className={'sidebar-item' + (isActive ? ' active' : '')}>
+            <Link key={item.label} to={item.path} title={item.label} className={'sidebar-item' + (isActive ? ' active' : '')}>
               <span className="sidebar-item-icon">
                 <Icon name={item.icon} style={{ width: 20, height: 20 }} />
               </span>

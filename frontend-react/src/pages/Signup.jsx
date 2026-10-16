@@ -129,7 +129,15 @@ export default function Signup() {
     setSubmitting(true);
     setTimeout(() => {
       const initials = nameVal.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-      Store.createUser({ name: nameVal, email: emailVal, password: pw, role: selectedRole, avatar: initials, avatarColor: ROLE_COLORS[selectedRole] || '' });
+      try {
+        Store.createUser({ name: nameVal, email: emailVal, password: pw, role: selectedRole, avatar: initials, avatarColor: ROLE_COLORS[selectedRole] || '' });
+      } catch (e) {
+        // e.g. the email is taken. A refused signup used to create a
+        // local-only account and then fail to sign in with no explanation.
+        showError('signupEmail', e.message);
+        setSubmitting(false);
+        return;
+      }
       const result = Auth.login(emailVal, pw);
       if (result.success) {
         navigate(Auth.getDashboardUrl(selectedRole));
@@ -157,7 +165,7 @@ export default function Signup() {
           <div className="auth-card-brand">
             <Icon name="shield-check" style={{ width: 20, height: 20 }} />
             {' '}
-            <span className="auth-card-brand-name">GigBoard</span>
+            <span className="auth-card-brand-name">Lannent</span>
           </div>
           <h2 style={{ fontSize: 24, fontWeight: 500, letterSpacing: '-0.03em', marginTop: 24, marginBottom: 4 }}>Create your account</h2>
           <p style={{ fontSize: 14, color: 'var(--muted-foreground)', marginBottom: 24 }}>Get started with your first project</p>

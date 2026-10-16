@@ -29,6 +29,8 @@ export default function UserMenu({ role, user, open, onToggle, onClose }) {
   function handleAction(action) {
     switch (action) {
       case 'profile':
+        navigate('/profile');
+        break;
       case 'settings':
         navigate(getSettingsPage(role));
         break;

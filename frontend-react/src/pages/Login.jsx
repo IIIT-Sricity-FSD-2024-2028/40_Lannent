@@ -7,27 +7,15 @@
  * links here that way).
  */
 import { useState } from 'react';
-import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import Icon from '../components/Icon';
 import AuthBranding from '../components/AuthBranding';
 import PasswordInput from '../components/PasswordInput';
 import FieldError from '../components/FieldError';
-import { GoogleIcon, GithubIcon } from '../components/SocialIcons';
 import { useAuth } from '../context/AuthContext';
 import { useValidation } from '../context/ValidationContext';
 import useFieldErrors from '../hooks/useFieldErrors';
 import usePageTitle from '../hooks/usePageTitle';
-
-// Demo prefill: index.html links here as ?demo=<role>.
-const DEMO_ACCOUNTS = {
-  client: { email: 'client@gmail.com', password: 'Password@123' },
-  worker: { email: 'worker@gmail.com', password: 'Password@123' },
-  expert: { email: 'expert@gmail.com', password: 'Password@123' },
-  superuser: { email: 'super@gmail.com', password: 'Superadmin@123' },
-  'revenue-admin': { email: 'admin@gmail.com', password: 'Admin@123' },
-  'intake-admin': { email: 'intake@gmail.com', password: 'Intake@123' },
-  'compliance-admin': { email: 'compliance@gmail.com', password: 'Compliance@123' },
-};
 
 // Shared look of the <code> chips in the demo credentials box.
 const codeStyle = { background: '#e2e8f0', padding: '1px 5px', borderRadius: 4 };
@@ -46,11 +34,8 @@ export default function Login() {
   const Validate = useValidation();
   usePageTitle('Login — Lannent');
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  const demo = DEMO_ACCOUNTS[searchParams.get('demo')];
-  const [email, setEmail] = useState(demo ? demo.email : '');
-  const [password, setPassword] = useState(demo ? demo.password : '');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const { errors, showError, clearError, validateForm, errorStyle } = useFieldErrors();
 
@@ -81,10 +66,6 @@ export default function Login() {
     }, 400);
   }
 
-  function handleSocialLogin() {
-    Validate.toast('Social login is not available in demo mode. Use email/password.', 'info');
-  }
-
   return (
     <div className="auth-page">
       <AuthBranding />
@@ -95,7 +76,7 @@ export default function Login() {
           <div className="auth-card-brand">
             <Icon name="shield-check" style={{ width: 20, height: 20 }} />
             {' '}
-            <span className="auth-card-brand-name">GigBoard</span>
+            <span className="auth-card-brand-name">Lannent</span>
           </div>
           <h2 style={{ fontSize: 24, fontWeight: 500, letterSpacing: '-0.03em', marginTop: 24, marginBottom: 4 }}>Welcome back</h2>
           <p style={{ fontSize: 14, color: 'var(--muted-foreground)', marginBottom: 32 }}>Sign in to your account to continue</p>
@@ -118,8 +99,6 @@ export default function Login() {
             <div className="form-group">
               <div className="form-label-row">
                 <label className="form-label" style={{ marginBottom: 0 }}>Password</label>
-                {' '}
-                <Link to="/forgot-password" className="forgot-link">Forgot password?</Link>
               </div>
               <PasswordInput
                 id="loginPassword"
@@ -134,22 +113,6 @@ export default function Login() {
               {submitting ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
-
-          <div className="divider">
-            <div className="divider-line"></div>
-            <span className="divider-text">or continue with</span>
-            <div className="divider-line"></div>
-          </div>
-
-          <div className="social-btns">
-            <button className="btn-social" onClick={handleSocialLogin}>
-              <GoogleIcon /> Google
-            </button>
-            {' '}
-            <button className="btn-social" onClick={handleSocialLogin}>
-              <GithubIcon /> GitHub
-            </button>
-          </div>
 
           <p className="auth-footer-text">
             Don't have an account? <Link to="/signup">Sign up</Link>

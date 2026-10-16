@@ -1,7 +1,8 @@
 /**
  * LANNENT — TopNavbar
  * The bar across the top of every dashboard page (from dashboard.js):
- * tagline on the left, notifications bell and user menu on the right.
+ * tagline on the left, notifications bell (not for the superuser) and user
+ * menu on the right.
  * Only one of the two dropdowns is open at a time; clicking anywhere else
  * closes them.
  */
@@ -33,11 +34,15 @@ export default function TopNavbar({ role, user }) {
         <span>Empowering World-Class Builders</span>
       </div>
       <div className="topnav-actions">
-        <NotificationDropdown
-          userId={user.id}
-          open={notifOpen}
-          onToggle={() => { setUserMenuOpen(false); setNotifOpen(o => !o); }}
-        />
+        {/* The superuser runs the platform from its admin pages and is not a
+            party to any project, so it gets no notification bell. */}
+        {role !== 'superuser' && (
+          <NotificationDropdown
+            userId={user.id}
+            open={notifOpen}
+            onToggle={() => { setUserMenuOpen(false); setNotifOpen(o => !o); }}
+          />
+        )}
         <UserMenu
           role={role}
           user={user}

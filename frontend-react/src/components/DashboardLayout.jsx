@@ -14,18 +14,17 @@ import TopNavbar from './TopNavbar';
 import OfflineBanner from './OfflineBanner';
 import { useAuth } from '../context/AuthContext';
 
-/** Name / initials / email shown in the top bar — the session's, or a role default. */
+/** Name / initials / email shown in the top bar — always the signed-in user's. */
 function getDisplayUser(Auth, role) {
-  let name =
-    role === 'worker' ? 'Alex W.' :
-    role === 'expert' ? 'Dr. Jane S.' :
-    role === 'superuser' ? 'Super Admin' :
-    role === 'revenue-admin' ? 'Revenue Admin' :
-    role === 'intake-admin' ? 'Intake Admin' :
-    role === 'compliance-admin' ? 'Compliance' :
-    'James Client';
-  let initials = role === 'worker' ? 'AW' : role === 'expert' ? 'JS' : role === 'superuser' ? 'SA' : 'JC';
-  let email = name.toLowerCase().replace(/\s+/g, '') + '@lannent.com';
+  // Every dashboard route is behind a sign-in guard, so the session is there.
+  // The old fallback invented people ("James Client", "Dr. Jane S.").
+  const ROLE_NAMES = {
+    client: 'Client', worker: 'Gig Worker', expert: 'Expert Reviewer', superuser: 'Super Admin',
+    'revenue-admin': 'Revenue Admin', 'intake-admin': 'Intake Admin', 'compliance-admin': 'Compliance',
+  };
+  let name = ROLE_NAMES[role] || 'Member';
+  let initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  let email = '';
   let avatarColor = '';
   let id = '';
 
