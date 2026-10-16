@@ -6,7 +6,6 @@ import {
   Param,
   Body,
   Res,
-  Headers,
   UploadedFile,
   UseInterceptors,
   UseGuards,
@@ -21,6 +20,8 @@ import { uploadOptions } from './upload.config';
 import { RoleGuard } from '../../common/guards/role.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { ROLES } from '../../common/constants/roles';
+import { CurrentActor } from '../../common/decorators/actor.decorator';
+import type { Actor } from '../../common/decorators/actor.decorator';
 
 @ApiTags('Files')
 @Controller('files')
@@ -48,10 +49,12 @@ export class FilesController {
   upload(
     @UploadedFile() file: any,
     @Body() body: { taskId?: string; milestoneId?: string; purpose?: string },
-    @Headers('user-id') userId: string,
-    @Headers('role') role: string,
+    @CurrentActor() actor: Actor,
   ) {
-    return this.filesService.create(file, { id: userId, role }, body);
+    // Only these purposes come from a signed-in upload; 'expert-application'
+    // is the public route's alone.
+    const purpose = ['deliverable', 'message', 'document'].includes(String(body?.purpose)) ? body.purpose : 'document';
+    return this.filesService.create(file, actor, { taskId: body?.taskId || undefined, milestoneId: body?.milestoneId || undefined, purpose });
   }
 
   /**
@@ -79,8 +82,8 @@ export class FilesController {
   @Get(':id/meta')
   @ApiHeader({ name: 'role', required: true, description: 'User role required' })
   @ApiOperation({ summary: 'Get a file reference without downloading it' })
-  meta(@Param('id') id: string, @Headers('user-id') userId: string, @Headers('role') role: string) {
-    return this.filesService.meta(id, { id: userId, role });
+  meta(@Param('id') id: string, @CurrentActor() actor: Actor) {
+    return this.filesService.meta(id, actor);
   }
 
   @Get(':id')
@@ -88,11 +91,10 @@ export class FilesController {
   @ApiOperation({ summary: 'Download a file (scoped to the people on the project)' })
   download(
     @Param('id') id: string,
-    @Headers('user-id') userId: string,
-    @Headers('role') role: string,
+    @CurrentActor() actor: Actor,
     @Res() res: Response,
   ) {
-    const { path, record } = this.filesService.pathFor(id, { id: userId, role });
+    const { path, record } = this.filesService.pathFor(id, actor);
 
     // `attachment` and nosniff together: whatever the file claims to be, the
     // browser saves it rather than rendering it on this origin. An uploaded
@@ -110,8 +112,8 @@ export class FilesController {
   @Delete(':id')
   @ApiHeader({ name: 'role', required: true, description: 'User role required' })
   @ApiOperation({ summary: 'Delete a file (uploader or staff only)' })
-  remove(@Param('id') id: string, @Headers('user-id') userId: string, @Headers('role') role: string) {
-    return this.filesService.remove(id, { id: userId, role });
+  remove(@Param('id') id: string, @CurrentActor() actor: Actor) {
+    return this.filesService.remove(id, actor);
   }
 }
 

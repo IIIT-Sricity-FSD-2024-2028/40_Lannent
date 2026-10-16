@@ -26,6 +26,10 @@ export class NotificationsRepository {
     return notification;
   }
 
+  findById(id: string): any | null {
+    return this.notifications.find(n => n.id === id) || null;
+  }
+
   markAllReadByUserId(userId: string): number {
     let count = 0;
     this.notifications.forEach(n => {

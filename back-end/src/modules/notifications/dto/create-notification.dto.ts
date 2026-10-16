@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, Matches } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateNotificationDto {
@@ -17,4 +17,8 @@ export class CreateNotificationDto {
   @ApiPropertyOptional({ example: 'E-commerce Redesign · 2 min ago' })
   @IsOptional() @IsString()
   subtext?: string;
+
+  @ApiPropertyOptional({ example: '/client-my-projects', description: 'In-app page the notification opens' })
+  @IsOptional() @IsString() @Matches(/^\/[\w\-/?=&.%]*$/, { message: 'link must be an in-app path' })
+  link?: string;
 }

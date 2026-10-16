@@ -16,8 +16,13 @@ import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './WorkerMyProjects.css?raw';
 
-const DONE_STATUSES = ['completed', 'approved', 'audit-passed', 'done', 'paid'];
-const STATUS_BADGES = { 'open': ['badge-gray', 'Open'], 'in-progress': ['badge-blue', 'In Progress'], 'completed': ['badge-green', 'Completed'] };
+const DONE_STATUSES = ['completed', 'approved'];
+const STATUS_BADGES = {
+  'open': ['badge-gray', 'Open'],
+  'in-progress': ['badge-blue', 'In Progress'],
+  'completed': ['badge-green', 'Completed'],
+  'cancelled': ['badge-red', 'Cancelled'],
+};
 
 function fmtDate(d) {
   if (!d) return 'No deadline';
@@ -31,13 +36,15 @@ function StatusBadge({ status }) {
 
 /** The worker's tasks, shaped as project cards. */
 function getProjects(Store, userId) {
+  const payouts = Store.getTransactionsByUser(userId).filter(tx => tx.type === 'milestone-release' && tx.toId === userId);
   return Store.getTasksByWorker(userId).map(t => {
     const client = t.clientId ? Store.getUserById(t.clientId) : null;
     const milestones = Store.getMilestonesByTask(t.id);
     const doneList = milestones.filter(m => DONE_STATUSES.includes(m.status));
     const done = doneList.length;
-    const earned = doneList.reduce((s, m) => s + (m.budget || 0), 0);
-    const calculatedProgress = milestones.length > 0 ? Math.round((done / milestones.length) * 100) : (t.progress || 0);
+    // What actually reached the wallet — milestone payouts net of the service fee.
+    const earned = Math.round(payouts.filter(tx => tx.taskId === t.id).reduce((s, tx) => s + (Number(tx.amount) || 0), 0) * 100) / 100;
+    const calculatedProgress = milestones.length > 0 ? Math.round((done / milestones.length) * 100) : 0;
     return {
       id: t.id,
       name: t.title,
@@ -47,10 +54,10 @@ function getProjects(Store, userId) {
       progress: calculatedProgress,
       status: t.status,
       milestones: `${done}/${milestones.length}`,
-      earned: `$${earned.toLocaleString()}`,
-      total: `$${(t.budget || 0).toLocaleString()}`,
+      earned: `₹${earned.toLocaleString('en-IN')}`,
+      total: `₹${(t.budget || 0).toLocaleString('en-IN')}`,
       deadline: fmtDate(t.deadline),
-      category: t.status === 'completed' ? 'completed' : 'active',
+      category: t.status === 'completed' ? 'completed' : t.status === 'cancelled' ? 'cancelled' : 'active',
     };
   });
 }
@@ -74,7 +81,7 @@ function ProjectCard({ project: p }) {
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
           <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>Milestone Progress</span>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--foreground)' }}>{`${p.milestones} completed`}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--foreground)' }}>{`${p.milestones} approved`}</span>
         </div>
         <div style={{ height: 6, borderRadius: 9999, background: 'var(--muted)', overflow: 'hidden' }}>
           <div style={{ height: '100%', borderRadius: 9999, background: 'linear-gradient(90deg,#10b981,#059669)', width: `${p.progress}%`, transition: 'width 0.4s' }}></div>
@@ -84,7 +91,7 @@ function ProjectCard({ project: p }) {
         <div style={{ background: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: 12, padding: 12 }}>
           <div style={{ fontSize: 11, color: '#16a34a', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
             <Icon name="wallet" style={{ width: 13, height: 13 }} />
-            Earned
+            Earned (net)
           </div>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#16a34a' }}>
             {`${p.earned} `}<span style={{ fontSize: 11, color: '#22c55e' }}>{`/ ${p.total}`}</span>
@@ -122,6 +129,7 @@ export default function WorkerMyProjects() {
   const all = getProjects(Store, session.userId);
   const active = all.filter(p => p.category === 'active').length;
   const completed = all.filter(p => p.category === 'completed').length;
+  const cancelled = all.filter(p => p.category === 'cancelled').length;
   const list = activeTab === 'all' ? all : all.filter(p => p.category === activeTab);
 
   const tabClass = tab => 'tab-btn' + (activeTab === tab ? ' active' : '');
@@ -137,6 +145,7 @@ export default function WorkerMyProjects() {
             <button className={tabClass('active')} onClick={() => setActiveTab('active')}>{`Active (${active})`}</button>
             {' '}
             <button className={tabClass('completed')} onClick={() => setActiveTab('completed')}>{`Completed (${completed})`}</button>
+            {cancelled ? <>{' '}<button className={tabClass('cancelled')} onClick={() => setActiveTab('cancelled')}>{`Cancelled (${cancelled})`}</button></> : null}
           </div>
           <Link to="/browse-tasks" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <Icon name="search" style={{ width: 16, height: 16 }} /> Find More Tasks

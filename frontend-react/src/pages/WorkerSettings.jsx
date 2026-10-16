@@ -18,6 +18,9 @@ import { useValidation } from '../context/ValidationContext';
 import useFieldErrors from '../hooks/useFieldErrors';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './WorkerSettings.css?raw';
+import AvatarColorPicker from '../components/AvatarColorPicker';
+import ChangePasswordCard from '../components/ChangePasswordCard';
+import { syncSessionFromUser, splitPhone, safeHref } from '../utils/helpers';
 
 const EXPERIENCE_LEVELS = ['Junior', 'Mid-Level', 'Senior', 'Expert'];
 const AVAILABILITY = ['Full-time', 'Part-time', 'Contract', 'Not Available'];
@@ -27,6 +30,7 @@ const TABS = [
   { id: 'profile', icon: 'user', label: 'Profile Information' },
   { id: 'professional', icon: 'briefcase', label: 'Professional Details' },
   { id: 'portfolio', icon: 'folder-open', label: 'Portfolio' },
+  { id: 'security', icon: 'lock', label: 'Password & Security' },
 ];
 
 /** The red alert-circle used in the phone error line. */
@@ -60,9 +64,9 @@ function PortfolioGrid({ projects, onAdd, onRemove }) {
     <div className="ws-portfolio-grid">
       {projects.map(p => (
         <div className="ws-portfolio-card" key={p.id}>
-          {p.thumbnail
-            ? <div className="ws-portfolio-thumb"><img src={p.thumbnail} alt={p.title} loading="lazy" /></div>
-            : <div className="ws-portfolio-thumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--secondary)', color: 'var(--muted-foreground)', fontSize: 12 }}>No image</div>}
+          <div className="ws-portfolio-thumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--secondary)', color: 'var(--muted-foreground)' }}>
+            <Icon name="folder-open" style={{ width: 28, height: 28 }} />
+          </div>
           <div className="ws-portfolio-body">
             <div className="ws-portfolio-title-row">
               <div className="ws-portfolio-title">{p.title}</div>
@@ -71,9 +75,11 @@ function PortfolioGrid({ projects, onAdd, onRemove }) {
               </button>
             </div>
             <div className="ws-portfolio-desc">{p.description}</div>
-            <a href={p.url} target="_blank" rel="noopener noreferrer" className="ws-ext-link">
-              <Icon name="external-link" style={{ width: 12, height: 12 }} />View Project
-            </a>
+            {safeHref(p.url) ? (
+              <a href={safeHref(p.url)} target="_blank" rel="noopener noreferrer" className="ws-ext-link">
+                <Icon name="external-link" style={{ width: 12, height: 12 }} />View Project
+              </a>
+            ) : null}
           </div>
         </div>
       ))}
@@ -98,18 +104,23 @@ export default function WorkerSettings() {
   }));
   const [professionalData] = useState(() => ({
     jobTitle: user.jobTitle || '',
-    experienceLevel: user.experienceLevel || 'Mid-Level',
+    // Left blank until the worker chooses — pre-filling "Mid-Level" /
+    // "Full-time" showed every worker who saved once as exactly that.
+    experienceLevel: user.experienceLevel || '',
     hourlyRate: user.hourlyRate || 0,
     languages: user.languages || ['English'],
-    availability: user.availability || 'Full-time',
+    availability: typeof user.availability === 'string' ? user.availability : '',
   }));
 
   const [activeTab, setActiveTab] = useState('profile');
   const [skills, setSkills] = useState(() => [...(user.skills || [])]);
+  const [languages, setLanguages] = useState(() => [...((user.languages && user.languages.length) ? user.languages : ['English'])]);
+  const [avatarColor, setAvatarColor] = useState(profileData.avatarColor);
+  const [initials, setInitials] = useState(user.avatar || '?');
   const [portfolioProjects, setPortfolioProjects] = useState(() => user.portfolioProjects || []);
   const [bioLength, setBioLength] = useState(profileData.bio.length);
-  const [countryCode, setCountryCode] = useState('+91');
-  const [phone, setPhone] = useState(profileData.phone);
+  const [countryCode, setCountryCode] = useState(() => splitPhone(user.phone, user.phoneCountryCode).code);
+  const [phone, setPhone] = useState(() => splitPhone(user.phone, user.phoneCountryCode).digits);
   const [phoneSaveError, setPhoneSaveError] = useState('');
   const [portfolioOpen, setPortfolioOpen] = useState(false);
   const { errors, clearError, validateForm, errorStyle } = useFieldErrors();
@@ -149,16 +160,16 @@ export default function WorkerSettings() {
     // Combine country code + phone for storage
     const fullPhone = phoneVal ? (countryCode + phoneVal) : '';
 
+    let saved;
     try {
-      const current = Auth.getCurrentUser();
-      if (current) {
-        Store.updateUser(current.userId, { name, email, phone: fullPhone, phoneCountryCode: countryCode, location, bio });
-        const updated = { ...current, name, email };
-        localStorage.setItem('lannent_session', JSON.stringify(updated));
-      }
-    } catch (e) { console.warn('Store update failed', e); }
-
-    Validate.toast('Profile saved successfully!', 'success');
+      saved = Store.updateUser(session.userId, { name, email, phone: fullPhone, phoneCountryCode: phoneVal ? countryCode : '', location, bio, avatarColor });
+    } catch (e) {
+      Validate.toast(e.message, 'error');
+      return;
+    }
+    syncSessionFromUser(saved);
+    setInitials(saved.avatar);
+    Validate.toast('Profile saved.', 'success');
   }
 
   // ── Professional ──
@@ -168,15 +179,21 @@ export default function WorkerSettings() {
     const hourlyRate = field('wsHourlyRate')?.value || 0;
     const availability = field('wsAvailability')?.value || '';
 
-    const current = Auth.getCurrentUser();
-    if (current) {
-      Store.updateUser(current.userId, {
-        jobTitle, experienceLevel, hourlyRate: parseFloat(hourlyRate), availability,
-        skills,
-        languages: professionalData.languages,
-      });
+    const rate = parseFloat(hourlyRate);
+    if (!Number.isFinite(rate) || rate < 0) { Validate.toast('Enter an hourly rate of zero or more.', 'error'); return; }
+    try {
+      Store.updateUser(session.userId, { jobTitle, experienceLevel, hourlyRate: rate, availability, skills, languages });
+    } catch (e) {
+      Validate.toast(e.message, 'error');
+      return;
     }
-    Validate.toast('Professional details saved!', 'success');
+    Validate.toast('Professional details saved.', 'success');
+  }
+
+  function addLanguage() {
+    const input = field('wsNewLang');
+    const l = input?.value.trim();
+    if (l && !languages.includes(l)) { setLanguages(list => [...list, l]); input.value = ''; }
   }
 
   function wsAddSkill() {
@@ -194,8 +211,14 @@ export default function WorkerSettings() {
 
   // ── Portfolio ──
   function savePortfolio(next) {
+    try {
+      Store.updateUser(session.userId, { portfolioProjects: next });
+    } catch (e) {
+      Validate.toast(e.message, 'error');
+      return false;
+    }
     setPortfolioProjects(next);
-    Store.updateUser(Auth.getCurrentUser().userId, { portfolioProjects: next });
+    return true;
   }
 
   function wsRemovePortfolioProject(id) {
@@ -214,18 +237,23 @@ export default function WorkerSettings() {
       if (titleEl) titleEl.style.borderColor = '#ef4444';
       return;
     }
+    if (url && !safeHref(url)) {
+      Validate.toast('The project URL must start with http:// or https://', 'error');
+      return;
+    }
 
     // A stock photo picked at random used to stand in here "so new cards look
     // real" — it made every portfolio entry claim an image of work nobody did.
     // Entries carry no thumbnail until there is a real one to carry.
-    savePortfolio([...portfolioProjects, {
+    const ok = savePortfolio([...portfolioProjects, {
       id: Date.now().toString(),
       title,
-      description: desc || 'No description provided.',
-      url: url || '#',
-      thumbnail: null,
+      description: desc || '',
+      ...(url ? { url } : {}),
     }]);
+    if (!ok) return;
     setPortfolioOpen(false);
+    Validate.toast('Project added to your portfolio.', 'success');
 
     // Reset form
     if (titleEl) { titleEl.value = ''; titleEl.style.borderColor = ''; }
@@ -252,7 +280,7 @@ export default function WorkerSettings() {
   return (
     <>
       <PageStyle css={pageCss} />
-      <DashboardLayout role="worker" activePath="/profile-settings" pageTitle="Account Settings" pageSubtitle="Manage your profile, portfolio, payouts, and notifications.">
+      <DashboardLayout role="worker" activePath="/worker-settings" pageTitle="Account Settings" pageSubtitle="Manage your profile, portfolio, payouts, and notifications.">
         <div className="ws-layout" ref={contentRef}>
           <div className="ws-sidenav">
             <div className="ws-nav-card">
@@ -274,17 +302,7 @@ export default function WorkerSettings() {
                 <div className="ws-section-title">Profile Information</div>
                 <div className="ws-section-sub">Update your personal information and profile photo</div>
 
-                <div className="ws-photo-row">
-                  <div className="ws-avatar-wrap">
-                    <div className="ws-avatar-lg" style={{ background: profileData.avatarColor }}>{profileData.fullName.substring(0, 2).toUpperCase()}</div>
-                    <div className="ws-avatar-cam"><Icon name="camera" style={{ width: 13, height: 13 }} /></div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Profile Photo</div>
-                    <div style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 10 }}>JPG, PNG or GIF. Max size 2MB.</div>
-                    <button className="ws-btn-sm"><Icon name="upload" style={{ width: 13, height: 13 }} />Upload Photo</button>
-                  </div>
-                </div>
+                <AvatarColorPicker initials={initials} value={avatarColor} onChange={setAvatarColor} />
                 <div className="ws-divider"></div>
 
                 <div className="ws-grid-2" style={{ marginBottom: 16 }}>
@@ -334,7 +352,7 @@ export default function WorkerSettings() {
 
                 <div style={{ marginBottom: 8 }}>
                   <label className="ws-label">Bio</label>
-                  <textarea className="ws-textarea" id="wsBio" rows="4" placeholder="Tell clients about yourself..." defaultValue={profileData.bio}
+                  <textarea className="ws-textarea" id="wsBio" rows="4" maxLength={500} placeholder="Tell clients about yourself..." defaultValue={profileData.bio}
                             onInput={e => setBioLength(e.target.value.length)}></textarea>
                   <div className="ws-char-count" id="wsBioCount">{bioLength + '/500 characters'}</div>
                 </div>
@@ -358,19 +376,21 @@ export default function WorkerSettings() {
                   </div>
                   <div>
                     <label className="ws-label">Experience Level</label>
-                    <select className="ws-select" id="wsExpLevel" defaultValue={EXPERIENCE_LEVELS.includes(professionalData.experienceLevel) ? professionalData.experienceLevel : EXPERIENCE_LEVELS[0]}>
+                    <select className="ws-select" id="wsExpLevel" defaultValue={EXPERIENCE_LEVELS.includes(professionalData.experienceLevel) ? professionalData.experienceLevel : ''}>
+                      <option value="">Not set</option>
                       {EXPERIENCE_LEVELS.map(o => <option key={o}>{o}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="ws-label">Hourly Rate ($)</label>
-                    <InputWrap icon="dollar-sign">
-                      <input type="number" className="ws-input" id="wsHourlyRate" defaultValue={professionalData.hourlyRate} />
+                    <label className="ws-label">Hourly Rate (₹)</label>
+                    <InputWrap icon="indian-rupee">
+                      <input type="number" min="0" className="ws-input" id="wsHourlyRate" defaultValue={professionalData.hourlyRate} />
                     </InputWrap>
                   </div>
                   <div>
                     <label className="ws-label">Availability</label>
-                    <select className="ws-select" id="wsAvailability" defaultValue={AVAILABILITY.includes(professionalData.availability) ? professionalData.availability : AVAILABILITY[0]}>
+                    <select className="ws-select" id="wsAvailability" defaultValue={AVAILABILITY.includes(professionalData.availability) ? professionalData.availability : ''}>
+                      <option value="">Not set</option>
                       {AVAILABILITY.map(o => <option key={o}>{o}</option>)}
                     </select>
                   </div>
@@ -395,7 +415,16 @@ export default function WorkerSettings() {
                 <div style={{ marginBottom: 8 }}>
                   <label className="ws-label">Languages</label>
                   <div className="ws-chips">
-                    {professionalData.languages.map(l => <div className="ws-chip-purple" key={l}>{l}</div>)}
+                    {languages.map(l => (
+                      <div className="ws-chip-purple" key={l}>
+                        <span>{l}</span>
+                        <button onClick={() => setLanguages(list => list.filter(x => x !== l))} title="Remove"><Icon name="x" style={{ width: 11, height: 11 }} /></button>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input type="text" className="ws-input" id="wsNewLang" style={{ width: 180, height: 36 }} placeholder="Add language..." />
+                    <button className="ws-btn-sm" onClick={addLanguage}><Icon name="plus" style={{ width: 13, height: 13 }} />Add</button>
                   </div>
                 </div>
 
@@ -404,6 +433,13 @@ export default function WorkerSettings() {
                     <Icon name="save" style={{ width: 15, height: 15 }} />Save Changes
                   </button>
                 </div>
+              </div>
+
+              {/* ── Tab: Security ── */}
+              <div id="ws-tab-security" className={'ws-tab' + tabClass('security')}>
+                <div className="ws-section-title">Password &amp; Security</div>
+                <div className="ws-section-sub">Change the password you sign in with</div>
+                <ChangePasswordCard />
               </div>
 
               {/* ── Tab: Portfolio ── */}
@@ -447,14 +483,6 @@ export default function WorkerSettings() {
                 <div>
                   <label className="ws-label">Project URL</label>
                   <input type="url" className="ws-input" id="wsPortUrl" placeholder="https://example.com" />
-                </div>
-                <div>
-                  <label className="ws-label">Upload Screenshots</label>
-                  <div className="ws-upload-zone">
-                    <Icon name="upload" style={{ width: 32, height: 32 }} />
-                    <div className="ws-upload-main">Click to upload or drag and drop</div>
-                    <div className="ws-upload-sub">PNG, JPG or GIF (max. 5MB)</div>
-                  </div>
                 </div>
               </div>
               <div className="ws-modal-actions">

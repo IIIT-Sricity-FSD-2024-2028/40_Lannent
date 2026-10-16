@@ -12,20 +12,23 @@ import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
+import EmptyState from '../components/EmptyState';
 import PageStyle from '../components/PageStyle';
 import { useStore } from '../context/StoreContext';
 import { useValidation } from '../context/ValidationContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './SubmitDeliverable.css?raw';
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+// The same allowlist and size limit the server enforces
+// (back-end/src/modules/files/upload.config.ts). Source code goes in a .zip.
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_EXTENSIONS = [
-  '.zip', '.rar', '.7z', '.tar', '.gz',                // archives
-  '.pdf',                                              // documents
-  '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp',    // images
-  '.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.cpp', '.c', '.h', '.cs', '.rb', '.go', '.rs', '.php', '.html', '.css', '.scss', '.json', '.xml', '.yml', '.yaml', '.md', '.sql', '.sh', '.bat', // code
+  '.zip',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+  '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp',
+  '.txt', '.md', '.csv', '.json',
 ];
-const ACCEPT = '.zip,.rar,.7z,.tar,.gz,.pdf,.jpg,.jpeg,.png,.gif,.svg,.webp,.js,.ts,.jsx,.tsx,.py,.java,.cpp,.c,.h,.cs,.rb,.go,.rs,.php,.html,.css,.scss,.json,.xml,.yml,.yaml,.md,.sql,.sh,.bat';
+const ACCEPT = ALLOWED_EXTENSIONS.join(',');
 const URL_PATTERN = /^https?:\/\/(github\.com|gitlab\.com|bitbucket\.org)\/.+/i;
 const BRANCH_PATTERN = /^[a-zA-Z0-9_\-/]+$/;
 
@@ -51,15 +54,7 @@ const NEXT_STEPS = [
 ];
 
 // Shown when the page is opened without a known milestone
-const DEMO_MILESTONE = {
-  projectName: 'E-Commerce Mobile App',
-  milestoneTitle: 'Milestone 2: Payment Integration & Checkout Flow',
-  client: 'Sarah Johnson',
-  clientAvatar: 'SJ',
-  clientColor: 'linear-gradient(135deg,#6366f1,#4f46e5)',
-  budget: 3500,
-  deadline: 'March 15, 2026',
-};
+
 
 const OVERLAY_STYLE = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, backdropFilter: 'blur(4px)' };
 const CARD_STYLE = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, padding: 24, marginBottom: 20 };
@@ -99,27 +94,25 @@ function resolveMilestoneId(searchParams) {
   return '';
 }
 
-/** Banner details for the milestone in the URL (or the demo values). */
+/** Banner details for the milestone being submitted, or null when there is none. */
 function loadMilestone(Store, searchParams) {
-  const milestone = { ...DEMO_MILESTONE };
-  const mId = searchParams.get('milestoneId') || searchParams.get('id');
-  if (mId) {
-    const mData = Store.getMilestoneById(mId);
-    if (mData) {
-      const tData = Store.getTaskById(mData.taskId);
-      const cUser = tData ? Store.getUserById(tData.clientId) : null;
-      milestone.projectName = tData ? tData.title : milestone.projectName;
-      milestone.milestoneTitle = mData.title || milestone.milestoneTitle;
-      milestone.budget = mData.budget || milestone.budget;
-      milestone.deadline = mData.dueDate ? new Date(mData.dueDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'No Deadline';
-      if (cUser) {
-        milestone.client = cUser.name;
-        milestone.clientAvatar = cUser.avatar;
-        milestone.clientColor = cUser.avatarColor;
-      }
-    }
-  }
-  return milestone;
+  const mId = resolveMilestoneId(searchParams);
+  const mData = mId ? Store.getMilestoneById(mId) : null;
+  if (!mData) return null;
+  const tData = Store.getTaskById(mData.taskId);
+  const cUser = tData ? Store.getUserById(tData.clientId) : null;
+  return {
+    id: mData.id,
+    status: mData.status,
+    revisionNote: mData.status === 'revision-needed' ? mData.revisionNote : null,
+    projectName: tData ? tData.title : 'Project',
+    milestoneTitle: mData.title || 'Milestone',
+    budget: mData.budget || 0,
+    deadline: mData.dueDate ? new Date(mData.dueDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'No deadline',
+    client: cUser ? cUser.name : 'Client',
+    clientAvatar: cUser ? cUser.avatar : '?',
+    clientColor: cUser ? cUser.avatarColor : 'linear-gradient(135deg,#6366f1,#4f46e5)',
+  };
 }
 
 /** Red line under a field. Its text stays put while hidden, as in the original. */
@@ -160,8 +153,10 @@ export default function SubmitDeliverable() {
   // ── Files ──
   const inFlight = uploadedFiles.filter(f => f.uploading);
   const invalid = uploadedFiles.filter(f => f.error);
+  // Work can be handed in as files or as a link to it (a repository, say) —
+  // the server needs at least one of the two.
   const fileErr = remember('file',
-    uploadedFiles.length === 0 ? 'Please upload at least one file'
+    uploadedFiles.length === 0 && !repoUrl.trim() ? 'Upload at least one file, or add a link to the work'
       // A file that is still going up has no reference yet, so submitting now
       // would record a name with nothing behind it.
       : inFlight.length > 0 ? `Uploading ${inFlight.length} file(s) — one moment`
@@ -192,7 +187,7 @@ export default function SubmitDeliverable() {
 
   // ── Sidebar validation status ──
   const statusItems = [
-    { label: 'Files uploaded', ok: uploadedFiles.length > 0 && !uploadedFiles.some(f => f.error || f.uploading) },
+    { label: 'Files or a link added', ok: (uploadedFiles.length > 0 || !!repoUrl.trim()) && !uploadedFiles.some(f => f.error || f.uploading) },
     { label: 'Title filled (5+ chars)', ok: titleLen >= 5 },
     { label: 'Description filled (20+ chars)', ok: notesLen >= 20 },
     { label: 'Checklist completed', ok: unchecked === 0 },
@@ -227,9 +222,9 @@ export default function SubmitDeliverable() {
       const ext = '.' + file.name.split('.').pop().toLowerCase();
       let error = null;
       // Validate type
-      if (!ALLOWED_EXTENSIONS.includes(ext)) error = 'Unsupported file type';
+      if (!ALLOWED_EXTENSIONS.includes(ext)) error = 'Unsupported type — zip code and other files first';
       // Validate size
-      else if (file.size > MAX_FILE_SIZE) error = 'File size exceeds 50MB';
+      else if (file.size > MAX_FILE_SIZE) error = 'File size exceeds 10MB';
 
       const row = { id: Date.now() + Math.random(), name: file.name, size: file.size, sizeFormatted: formatSize(file.size), type: file.type || ext, error, uploading: !error, ref: null };
       if (!error) pending.push({ row, file });
@@ -254,7 +249,13 @@ export default function SubmitDeliverable() {
   }
 
   function removeFile(id) {
+    const row = uploadedFiles.find(f => f.id === id);
     setUploadedFiles(list => list.filter(f => f.id !== id));
+    // Removing it from the form deletes the stored copy too. Until submitted,
+    // nobody else can open it, but it should not be left on the server.
+    if (row && row.ref && row.ref.id) {
+      try { Store.deleteFile(row.ref.id); } catch (e) { console.warn('[SubmitDeliverable] could not delete', e.message); }
+    }
   }
 
   // ═════════════════════════════════════════════════════════
@@ -270,20 +271,6 @@ export default function SubmitDeliverable() {
       return;
     }
     setConfirmOpen(true);
-  }
-
-  function saveDraft() {
-    const data = {
-      files: uploadedFiles.filter(f => !f.error).map(f => f.name),
-      title, notes, repoUrl, branch,
-      savedAt: new Date().toISOString(),
-    };
-    try {
-      localStorage.setItem('deliverableDraft', JSON.stringify(data));
-      Validate.toast('Draft saved successfully!', 'success');
-    } catch (e) {
-      Validate.toast('Could not save draft', 'error');
-    }
   }
 
   /** Replaces the confirm dialog with the reason the submission did not go through. */
@@ -322,21 +309,16 @@ export default function SubmitDeliverable() {
       if (repoLink) deliverable.link = repoLink;
       if (branch.trim()) deliverable.branch = branch.trim();
       Store.submitDeliverable(milestoneId, deliverable);
-      const _ms = Store.getMilestoneById(milestoneId);
-      const _task = _ms ? Store.getTaskById(_ms.taskId) : null;
-      if (_task && _task.clientId) {
-        Store.addNotification({ userId: _task.clientId, type: 'milestone-submitted', text: 'New deliverable submitted', subtext: (_ms.title || 'Milestone') + ' — ' + (_task.title || 'Project') + ' · just now', read: false });
-      }
       // The audit hand-off is the server's job now: it points the project's
       // one engagement at this milestone and notifies the reviewer the
       // client assigned — and only that reviewer.
     } catch (e) {
       console.warn('Store save failed', e);
-      showSubmitError(e && e.message ? e.message : 'The submission could not be saved. Your draft has been kept.');
+      showSubmitError(e && e.message ? e.message : 'The submission could not be saved. Your entries are still on this page — try again.');
       return;
     }
 
-    // Clear draft — only now that the server has the submission.
+    // Drafts saved by an earlier version of this page were never read back.
     try { localStorage.removeItem('deliverableDraft'); } catch (e) { /* ignore */ }
 
     // Resolve taskId for workroom link
@@ -347,6 +329,20 @@ export default function SubmitDeliverable() {
 
     setConfirmOpen(false);
     setTimeout(() => setOverlays(list => [...list, { id: Date.now(), type: 'success', taskId }]), 300);
+  }
+
+  const blocked = !milestone ? 'No milestone was selected. Open Submit Deliverable from your milestone board.'
+    : milestone.status === 'disputed' ? 'This milestone is under dispute. You can resubmit once the reviewer gives their verdict.'
+    : ['completed', 'approved'].includes(milestone.status) ? 'This milestone has already been settled.'
+    : null;
+  if (blocked) {
+    return (
+      <>
+        <PageStyle css={pageCss} />
+        <EmptyState role="worker" activePath="/worker-my-projects" pageTitle="Submit Deliverable" message={blocked}
+                    linkHref="/worker-my-projects" linkLabel="Back to My Projects" />
+      </>
+    );
   }
 
   return (
@@ -360,6 +356,13 @@ export default function SubmitDeliverable() {
           </Link>
         </div>
 
+        {milestone.revisionNote ? (
+          <div style={{ background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: 16, padding: '16px 20px', marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Changes requested</div>
+            <div style={{ fontSize: 14, color: '#78350f', lineHeight: 1.6 }}>{milestone.revisionNote}</div>
+          </div>
+        ) : null}
+
         {/* Milestone info banner */}
         <div style={{ background: 'linear-gradient(135deg,#eef2ff,#e0e7ff)', border: '1.5px solid #c7d2fe', borderRadius: 16, padding: '20px 24px', marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -370,7 +373,7 @@ export default function SubmitDeliverable() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontWeight: 700, fontSize: 20, color: '#10b981' }}>{`$${milestone.budget.toLocaleString()}`}</div>
+                <div style={{ fontWeight: 700, fontSize: 20, color: '#10b981' }}>{`₹${milestone.budget.toLocaleString('en-IN')}`}</div>
                 <div style={{ fontSize: 11, color: '#4f46e5' }}>Milestone Pay</div>
               </div>
               <div style={{ textAlign: 'center' }}>
@@ -401,7 +404,7 @@ export default function SubmitDeliverable() {
                   <Icon name="upload-cloud" style={{ width: 28, height: 28, color: '#6366f1' }} />
                 </div>
                 <p style={{ fontWeight: 600, fontSize: 15, color: 'var(--foreground)', marginBottom: 4 }}>Drop files here or click to browse</p>
-                <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>ZIP, PDF, images, code files. Max 50MB each.</p>
+                <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>ZIP (put source code in a zip), PDF, Office documents, images, TXT/MD/CSV/JSON. Max 10MB each.</p>
               </div>
               <input ref={fileInputRef} type="file" id="fileInput" multiple style={{ display: 'none' }} onChange={handleFileSelect} accept={ACCEPT} />
               <div id="fileList" style={{ marginTop: 16 }}>
@@ -486,9 +489,6 @@ export default function SubmitDeliverable() {
 
             {/* ════ Action Buttons ════ */}
             <div style={{ display: 'flex', gap: 12 }}>
-              <button className="btn-outline" style={{ flex: 1, padding: 12, borderRadius: 12 }} onClick={saveDraft}>
-                <Icon name="save" style={{ width: 14, height: 14, display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />Save Draft
-              </button>
               <button id="submitBtn" className="btn-primary btn-submit-main" style={{ flex: 2, padding: 12, borderRadius: 12, fontSize: 15 }} onClick={showConfirmModal} disabled={!allValid}>
                 <Icon name="send" style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle', marginRight: 8 }} />Submit Deliverable
               </button>

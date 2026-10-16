@@ -2,8 +2,9 @@
  * LANNENT — WorkerInvitations
  * Converted from front-end/pages/worker-invitations.html.
  *
- * Invitations clients have sent the worker. Pending ones can be accepted
- * (the project becomes active and escrow is locked) or rejected.
+ * Invitations clients have sent the worker, at the project's posted budget.
+ * Accepting one hires the worker and starts the project straight away;
+ * rejecting tells the client. There is no counter-offer.
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -19,7 +20,8 @@ import useRerender from '../hooks/useRerender';
 import usePageTitle from '../hooks/usePageTitle';
 
 const FILTERS = [['all', 'All'], ['pending', 'Pending'], ['accepted', 'Accepted'], ['declined', 'Declined']];
-const STATUS_BADGES = { 'Pending': 'badge-orange', 'Accepted': 'badge-green', 'Declined': 'badge-red' };
+const STATUS_BADGES = { 'Pending': 'badge-orange', 'Accepted': 'badge-green', 'Declined': 'badge-red', 'Withdrawn': 'badge-gray', 'Closed': 'badge-gray' };
+const STATUS_LABELS = { pending: 'Pending', hired: 'Accepted', declined: 'Declined', withdrawn: 'Withdrawn', closed: 'Closed' };
 
 /** The worker's invitations, shaped for display. */
 function loadInvitations(Store, userId) {
@@ -32,10 +34,11 @@ function loadInvitations(Store, userId) {
       projectName: task ? task.title : 'Unknown Task',
       client: client ? client.name : 'Unknown Client',
       budget: task ? task.budget : 0,
-      status: status === 'pending' ? 'Pending' : status === 'hired' ? 'Accepted' : 'Declined',
+      status: STATUS_LABELS[status] || 'Closed',
+      reason: p.closedReason || '',
       rawStatus: p.status,
       received: p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently',
-      message: p.coverLetter || '',
+      message: p.message || '',
       taskId: p.taskId,
     };
   });
@@ -66,8 +69,13 @@ export default function WorkerInvitations() {
   }
 
   function acceptInvite(id) {
-    Validate.confirm('Accept this invitation? The project will be moved to your active projects and escrow will be locked.', () => {
-      Store.acceptInvitation(id);
+    Validate.confirm('Accept this invitation at the posted budget? You are hired straight away and the project moves to My Projects.', () => {
+      try {
+        Store.acceptProposal(id);
+      } catch (e) {
+        Validate.toast((e.message), 'error');
+        return;
+      }
       refreshPage();
       Validate.toast('Invitation accepted! Project is now active in My Projects.', 'success');
     });
@@ -75,7 +83,12 @@ export default function WorkerInvitations() {
 
   function declineInvite(id) {
     Validate.confirm('Reject this invitation? The client will be notified.', () => {
-      Store.declineInvitation(id);
+      try {
+        Store.declineProposal(id);
+      } catch (e) {
+        Validate.toast((e.message), 'error');
+        return;
+      }
       refreshPage();
       Validate.toast('Invitation rejected.', 'success');
     });
@@ -122,14 +135,19 @@ export default function WorkerInvitations() {
                     {`Received ${p.received}`}
                   </span>
                 </div>
-                <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.5, marginTop: 12, background: 'var(--input-bg)', padding: 12, borderRadius: 12, borderLeft: '3px solid #6366f1' }}>
-                  <strong>Message:</strong>
-                  <br />
-                  {p.message}
-                </p>
+                {p.message ? (
+                  <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.5, marginTop: 12, background: 'var(--input-bg)', padding: 12, borderRadius: 12, borderLeft: '3px solid #6366f1' }}>
+                    <strong>Message:</strong>
+                    <br />
+                    {p.message}
+                  </p>
+                ) : null}
+                {p.status === 'Closed' && p.reason ? (
+                  <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 8 }}>{p.reason}</p>
+                ) : null}
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: '#10b981', marginBottom: 12 }}>{`$${typeof p.budget === 'number' ? p.budget.toLocaleString() : p.budget} Budget`}</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: '#10b981', marginBottom: 12 }}>{`₹${typeof p.budget === 'number' ? p.budget.toLocaleString('en-IN') : p.budget} Budget`}</div>
                 {p.status === 'Pending' && (
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                     <button className="btn-primary" style={{ fontSize: 13, padding: '8px 16px', borderRadius: 10 }} onClick={() => acceptInvite(p.id)}>Accept</button>

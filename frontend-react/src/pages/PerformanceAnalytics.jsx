@@ -3,7 +3,7 @@
  * Converted from front-end/pages/performance-analytics.html.
  *
  * The worker's performance, derived from real data: earnings, project
- * performance, milestone velocity, client feedback and proposal success,
+ * performance, milestone velocity, client feedback and invitations,
  * with three Chart.js charts.
  */
 import { useState } from 'react';
@@ -16,18 +16,18 @@ import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './PerformanceAnalytics.css?raw';
 
-const DONE_MS = ['completed', 'approved', 'audit-passed', 'done'];
+const DONE_MS = ['completed', 'approved'];
 const isDone = m => DONE_MS.indexOf(m.status) !== -1;
-const fmtMoney = n => '$' + n.toLocaleString();
+const fmtMoney = n => '₹' + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('en-IN');
 
-function monthLabel(d) {
+/** Year and month, so last year's March is not counted as this year's. */
+function monthKey(d) {
   const dt = new Date(d);
-  return isNaN(dt) ? null : dt.toLocaleString('en-US', { month: 'short' });
+  return isNaN(dt) ? null : `${dt.getFullYear()}-${dt.getMonth()}`;
 }
 
 /** Everything on the page, derived from the Store — not hardcoded. */
 function buildPerformance(Store, workerId) {
-  const me = Store.getUserById(workerId) || {};
   const myTasks = Store.getTasksByWorker(workerId);
   let myMilestones = [];
   myTasks.forEach(t => {
@@ -39,7 +39,8 @@ function buildPerformance(Store, workerId) {
   const months12 = [];
   const now = new Date();
   for (let k = 11; k >= 0; k--) {
-    months12.push(new Date(now.getFullYear(), now.getMonth() - k, 1).toLocaleString('en-US', { month: 'short' }));
+    const d = new Date(now.getFullYear(), now.getMonth() - k, 1);
+    months12.push({ key: monthKey(d), label: d.toLocaleString('en-US', { month: 'short' }) });
   }
 
   const totalEarnings = myReleases.reduce((a, t) => a + (t.amount || 0), 0);
@@ -52,8 +53,8 @@ function buildPerformance(Store, workerId) {
   };
 
   const earningsData = months12.map(m => ({
-    month: m,
-    earnings: myReleases.filter(t => monthLabel(t.createdAt) === m).reduce((a, t) => a + (t.amount || 0), 0),
+    month: m.label,
+    earnings: myReleases.filter(t => monthKey(t.createdAt) === m.key).reduce((a, t) => a + (t.amount || 0), 0),
   }));
 
   const projectPerformance = myTasks.map(t => {
@@ -67,19 +68,19 @@ function buildPerformance(Store, workerId) {
       milestonesCompleted: ms.filter(isDone).length,
       totalMilestones: ms.length,
       payment: myReleases.filter(tx => tx.taskId === t.id).reduce((a, tx) => a + (tx.amount || 0), 0),
-      rating: me.rating || 0,
+      status: t.status,
     };
   });
 
   // Velocity = days between a milestone being submitted and approved.
   const turnarounds = myMilestones
     .filter(m => m.submittedAt && m.approvedAt)
-    .map(m => ({ month: monthLabel(m.approvedAt), days: Math.max((new Date(m.approvedAt) - new Date(m.submittedAt)) / 86400000, 0) }))
+    .map(m => ({ month: monthKey(m.approvedAt), days: Math.max((new Date(m.approvedAt) - new Date(m.submittedAt)) / 86400000, 0) }))
     .filter(x => !isNaN(x.days));
   const milestoneVelocityData = months12.slice(-6).map(m => {
-    const inMonth = turnarounds.filter(x => x.month === m);
+    const inMonth = turnarounds.filter(x => x.month === m.key);
     const avg = inMonth.length ? inMonth.reduce((a, x) => a + x.days, 0) / inMonth.length : 0;
-    return { month: m, avgDays: +avg.toFixed(1) };
+    return { month: m.label, avgDays: +avg.toFixed(1) };
   });
   const avgDaysAll = turnarounds.length ? turnarounds.reduce((a, x) => a + x.days, 0) / turnarounds.length : 0;
   const lateDeliveries = myMilestones.filter(m => m.dueDate && m.submittedAt && new Date(m.submittedAt) > new Date(m.dueDate)).length;
@@ -89,18 +90,16 @@ function buildPerformance(Store, workerId) {
     lateDeliveries,
   };
 
-  const myProposals = Store.getProposalsByWorker(workerId);
-  const accepted = myProposals.filter(p => p.status === 'hired').length;
-  const proposalStats = { sent: myProposals.length, accepted, successRate: myProposals.length ? Math.round((accepted / myProposals.length) * 100) : 0 };
-  const allProposals = Store.getProposals();
-  const platformHired = allProposals.filter(p => p.status === 'hired').length;
-  const platformRate = allProposals.length ? Math.round((platformHired / allProposals.length) * 100) : 0;
+  // Applications the worker sent, at the clients' posted budgets (there is no bidding).
+  const invitations = Store.getApplicationsByWorker(workerId);
+  const accepted = invitations.filter(p => p.status === 'hired').length;
+  const rejected = invitations.filter(p => ['rejected', 'withdrawn', 'closed'].includes(p.status)).length;
+  const pending = invitations.filter(p => p.status === 'pending').length;
+  const proposalStats = { sent: invitations.length, accepted, rejected, pending, successRate: invitations.length ? Math.round((accepted / invitations.length) * 100) : 0 };
 
   return {
     overviewStats, earningsData, projectPerformance, milestoneVelocityData, velocityStats,
-    // The platform has no reviews model yet, so there is nothing honest to show here.
-    clientFeedback: [],
-    proposalStats, platformRate, rateDelta: proposalStats.successRate - platformRate, hasProposals: myProposals.length > 0,
+    proposalStats, hasProposals: invitations.length > 0,
   };
 }
 
@@ -141,11 +140,11 @@ const earningsChartConfig = earningsData => ({
     maintainAspectRatio: false,
     plugins: {
       legend: { display: false },
-      tooltip: { ...TOOLTIP, callbacks: { label: ctx => ' $' + ctx.parsed.y.toLocaleString() } },
+      tooltip: { ...TOOLTIP, callbacks: { label: ctx => ' ₹' + ctx.parsed.y.toLocaleString('en-IN') } },
     },
     scales: {
       x: { grid: GRID, ticks: TICKS },
-      y: { grid: GRID, ticks: { ...TICKS, callback: v => '$' + (v / 1000).toFixed(0) + 'k' } },
+      y: { grid: GRID, beginAtZero: true, ticks: { ...TICKS, callback: v => (v >= 1000 ? '₹' + (v / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : '₹' + v) } },
     },
   },
 });
@@ -165,24 +164,30 @@ const velocityChartConfig = velocityData => ({
     },
     scales: {
       x: { grid: { display: false }, ticks: TICKS },
-      y: { grid: GRID, ticks: TICKS, min: 3, max: 7 },
+      y: { grid: GRID, ticks: TICKS, beginAtZero: true, suggestedMax: 7 },
     },
   },
 });
 
-const PROPOSAL_CHART = {
+const proposalChartConfig = stats => ({
   type: 'doughnut',
   data: {
-    labels: ['Accepted', 'Rejected'],
-    datasets: [{ data: [46, 14], backgroundColor: ['#22c55e', '#ef4444'], borderWidth: 0, hoverOffset: 4 }],
+    labels: ['Hired', 'Not selected', 'Pending'],
+    datasets: [{
+      // An empty ring still needs a value to draw; grey it out.
+      data: stats.sent ? [stats.accepted, stats.rejected, stats.pending] : [0, 0, 1],
+      backgroundColor: ['#22c55e', '#ef4444', stats.sent ? '#f59e0b' : '#e5e7eb'],
+      borderWidth: 0,
+      hoverOffset: 4,
+    }],
   },
   options: {
     responsive: true,
     maintainAspectRatio: false,
     cutout: '62%',
-    plugins: { legend: { display: false }, tooltip: { ...TOOLTIP } },
+    plugins: { legend: { display: false }, tooltip: { ...TOOLTIP, enabled: !!stats.sent } },
   },
-};
+});
 
 /** One of the four stat cards at the top. */
 function PaStat({ icon, iconColor, bg, border, trendIcon, value, label }) {
@@ -202,8 +207,9 @@ function PaStat({ icon, iconColor, bg, border, trendIcon, value, label }) {
 
 /** One project row of "Project Performance". */
 function ProjectRow({ p }) {
-  const pct = Math.round((p.milestonesCompleted / p.totalMilestones) * 100);
-  const isCompleted = p.milestonesCompleted === p.totalMilestones;
+  const pct = p.totalMilestones ? Math.round((p.milestonesCompleted / p.totalMilestones) * 100) : 0;
+  const STATUS = { completed: ['pa-badge-green', 'Completed'], cancelled: ['pa-badge-red', 'Cancelled'] };
+  const [badgeClass, badgeText] = STATUS[p.status] || ['pa-badge-blue', 'In Progress'];
   return (
     <div className="pa-project-item">
       <div className="pa-project-header">
@@ -213,10 +219,6 @@ function ProjectRow({ p }) {
             <div className="pa-avatar" style={{ width: 20, height: 20, fontSize: 9 }}>{p.initials}</div>
             <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{p.client}</span>
           </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 12 }}>
-          <Icon name="star" style={{ width: 14, height: 14, fill: '#f59e0b', color: '#f59e0b' }} />
-          <span style={{ fontSize: 13, fontWeight: 500 }}>{p.rating}</span>
         </div>
       </div>
       <div className="pa-project-meta">
@@ -231,7 +233,7 @@ function ProjectRow({ p }) {
         </div>
         <div>
           <div className="pa-project-meta-label">Status</div>
-          <span className={'pa-badge ' + (isCompleted ? 'pa-badge-green' : 'pa-badge-blue')}>{isCompleted ? 'Completed' : 'In Progress'}</span>
+          <span className={'pa-badge ' + badgeClass}>{badgeText}</span>
         </div>
       </div>
     </div>
@@ -256,8 +258,9 @@ export default function PerformanceAnalytics() {
   const Auth = useAuth();
   usePageTitle('Performance Analytics — Lannent');
   const session = Auth.getCurrentUser();
-  const [data] = useState(() => buildPerformance(Store, session ? session.userId : 'u2'));
+  const [data] = useState(() => buildPerformance(Store, session.userId));
   const { overviewStats, velocityStats, proposalStats } = data;
+  const share = n => (proposalStats.sent ? Math.round((n / proposalStats.sent) * 100) : 0);
   const avgMonthly = Math.round(data.earningsData.reduce((s, d) => s + d.earnings, 0) / data.earningsData.length);
 
   return (
@@ -266,7 +269,7 @@ export default function PerformanceAnalytics() {
       <DashboardLayout role="worker" activePath="/performance-analytics" pageTitle="Performance Analytics" pageSubtitle="Track your earnings, project performance, and success rate.">
         {/* ── 1. Stat Cards ── */}
         <div className="pa-grid-4" style={{ marginBottom: 24 }}>
-          <PaStat icon="dollar-sign" iconColor="#16a34a" bg="#f0fdf4" border="#bbf7d0" trendIcon="trending-up" value={fmtMoney(overviewStats.totalEarnings)} label="Total Earnings" />
+          <PaStat icon="indian-rupee" iconColor="#16a34a" bg="#f0fdf4" border="#bbf7d0" trendIcon="trending-up" value={fmtMoney(overviewStats.totalEarnings)} label="Total Earnings" />
           <PaStat icon="check-circle" iconColor="#2563eb" bg="#eff6ff" border="#bfdbfe" trendIcon="award" value={overviewStats.projectsCompleted} label="Projects Completed" />
           <PaStat icon="activity" iconColor="#ea580c" bg="#fff7ed" border="#fed7aa" trendIcon="trending-up" value={overviewStats.activeProjects} label="Active Projects" />
           <PaStat icon="target" iconColor="#7c3aed" bg="#faf5ff" border="#ddd6fe" trendIcon="star" value={`${overviewStats.successRate}%`} label="Success Rate" />
@@ -294,7 +297,9 @@ export default function PerformanceAnalytics() {
               <div className="pa-card" style={{ marginBottom: 24 }}>
                 <div className="pa-card-title">Project Performance</div>
                 <div style={{ height: 12 }}></div>
-                {data.projectPerformance.map(p => <ProjectRow key={p.id} p={p} />)}
+                {data.projectPerformance.length
+                  ? data.projectPerformance.map(p => <ProjectRow key={p.id} p={p} />)
+                  : <div style={{ padding: '18px 4px', color: 'var(--muted-foreground)', fontSize: 13 }}>No projects yet — once a client hires you, each project's progress and payments show here.</div>}
               </div>
 
               {/* ── 4. Milestone Velocity ── */}
@@ -308,39 +313,24 @@ export default function PerformanceAnalytics() {
                 </div>
                 <div className="pa-chart-mid"><ChartCanvas id="velocityChart" config={velocityChartConfig(data.milestoneVelocityData)} /></div>
               </div>
-
-              {/* ── 5. Client Feedback ── */}
-              <div className="pa-card">
-                <div className="pa-card-header">
-                  <div className="pa-card-title" style={{ marginBottom: 0 }}>Client Feedback</div>
-                  <div className="pa-stars-badge">
-                    <Icon name="star" style={{ width: 14, height: 14, fill: '#ca8a04', color: '#ca8a04' }} />
-                    <span style={{ fontSize: 13, fontWeight: 500, color: '#854d0e' }}>4.9 Average</span>
-                  </div>
-                </div>
-                {/* No reviews model exists yet, so this always shows the empty note. */}
-                <div style={{ padding: '22px 4px', textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 13 }}>
-                  No client reviews yet. Ratings appear here once clients review your completed milestones.
-                </div>
-              </div>
             </div>
           </div>
 
-          {/* ── 6. Proposal Success Rate (right sidebar) ── */}
+          {/* ── 6. Applications (right sidebar) ── */}
           <div>
             <div className="pa-card">
-              <div className="pa-card-title" style={{ marginBottom: 20 }}>Proposal Success Rate</div>
+              <div className="pa-card-title" style={{ marginBottom: 20 }}>Application Success Rate</div>
               <div className="pa-proposal-row">
                 <div className="pa-proposal-icon-label">
                   <Icon name="send" style={{ width: 16, height: 16, color: '#2563eb' }} />
-                  Proposals Sent
+                  Applications Sent
                 </div>
                 <div className="pa-proposal-val">{proposalStats.sent}</div>
               </div>
               <div className="pa-proposal-row">
                 <div className="pa-proposal-icon-label">
                   <Icon name="check-circle" style={{ width: 16, height: 16, color: '#16a34a' }} />
-                  Accepted
+                  Hired
                 </div>
                 <div className="pa-proposal-val" style={{ color: '#16a34a' }}>{proposalStats.accepted}</div>
               </div>
@@ -348,36 +338,43 @@ export default function PerformanceAnalytics() {
               <div className="pa-proposal-row">
                 <div className="pa-proposal-icon-label" style={{ fontWeight: 500, color: 'var(--foreground)' }}>
                   <Icon name="target" style={{ width: 16, height: 16, color: '#7c3aed' }} />
-                  Success Rate
+                  Acceptance Rate
                 </div>
                 <div className="pa-proposal-val" style={{ fontSize: 24, color: '#7c3aed' }}>{`${proposalStats.successRate}%`}</div>
               </div>
-              <div className="pa-chart-donut" style={{ marginTop: 8 }}><ChartCanvas id="proposalChart" config={PROPOSAL_CHART} /></div>
+              <div className="pa-chart-donut" style={{ marginTop: 8 }}><ChartCanvas id="proposalChart" config={proposalChartConfig(proposalStats)} /></div>
               <div className="pa-legend">
                 <div className="pa-legend-row">
                   <div className="pa-legend-dot-label">
                     <div className="pa-legend-dot" style={{ background: '#22c55e' }}></div>
-                    <span className="pa-legend-text">Accepted</span>
+                    <span className="pa-legend-text">Hired</span>
                   </div>
-                  <span className="pa-legend-val">46 (77%)</span>
+                  <span className="pa-legend-val">{`${proposalStats.accepted} (${share(proposalStats.accepted)}%)`}</span>
                 </div>
                 <div className="pa-legend-row">
                   <div className="pa-legend-dot-label">
                     <div className="pa-legend-dot" style={{ background: '#ef4444' }}></div>
-                    <span className="pa-legend-text">Rejected</span>
+                    <span className="pa-legend-text">Not selected</span>
                   </div>
-                  <span className="pa-legend-val">14 (23%)</span>
+                  <span className="pa-legend-val">{`${proposalStats.rejected} (${share(proposalStats.rejected)}%)`}</span>
+                </div>
+                <div className="pa-legend-row">
+                  <div className="pa-legend-dot-label">
+                    <div className="pa-legend-dot" style={{ background: '#f59e0b' }}></div>
+                    <span className="pa-legend-text">Pending</span>
+                  </div>
+                  <span className="pa-legend-val">{`${proposalStats.pending} (${share(proposalStats.pending)}%)`}</span>
                 </div>
               </div>
               <div className="pa-insight-box">
                 <div className="pa-insight-inner">
                   <Icon name="trending-up" style={{ width: 16, height: 16, color: '#16a34a', flexShrink: 0, marginTop: 2 }} />
                   <div>
-                    <div className="pa-insight-title">{!data.hasProposals ? 'No proposals yet' : data.rateDelta > 0 ? 'Above average' : data.rateDelta < 0 ? 'Below average' : 'On par'}</div>
+                    <div className="pa-insight-title">{!data.hasProposals ? 'No applications yet' : `${proposalStats.accepted} of ${proposalStats.sent} hired`}</div>
                     <div className="pa-insight-body">
                       {!data.hasProposals
-                        ? 'Submit proposals to see how your acceptance rate compares with the platform.'
-                        : `Your acceptance rate is ${proposalStats.successRate}% against a platform average of ${data.platformRate}%.`}
+                        ? 'Apply to open projects from Browse Tasks. Clients can also invite you directly.'
+                        : `Clients hired you on ${proposalStats.successRate}% of your applications. An application closes when the client hires someone else.`}
                     </div>
                   </div>
                 </div>

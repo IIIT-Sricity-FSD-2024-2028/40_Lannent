@@ -1,9 +1,11 @@
-import { PartialType } from '@nestjs/swagger';
+import { PartialType, OmitType } from '@nestjs/swagger';
 import { CreateMilestoneDto } from './create-milestone.dto';
 import {
   IsOptional,
   IsString,
   IsNumber,
+  Min,
+  Max,
   IsArray,
   IsUrl,
   MaxLength,
@@ -12,14 +14,24 @@ import {
 import { Type, Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
-export class UpdateMilestoneDto extends PartialType(CreateMilestoneDto) {
-  @ApiPropertyOptional({ example: 'in-progress', enum: ['pending', 'in-progress', 'submitted', 'review', 'completed', 'approved', 'disputed', 'audit-passed', 'revision-needed'] })
+/**
+ * `taskId` and `workerId` are not editable: moving a milestone to another
+ * task, or naming yourself as its payee, are not edits. A worker could
+ * previously PATCH their own id onto someone else's milestone and be paid
+ * when its client approved it.
+ */
+export class UpdateMilestoneDto extends PartialType(OmitType(CreateMilestoneDto, ['taskId', 'workerId'] as const)) {
+  @ApiPropertyOptional({ example: 'in-progress', enum: ['pending', 'in-progress', 'revision-needed'] })
   @IsOptional() @IsString()
   status?: string;
 
   @ApiPropertyOptional({ example: 60 })
-  @IsOptional() @IsNumber()
+  @IsOptional() @IsNumber() @Min(0) @Max(100)
   progress?: number;
+
+  @ApiPropertyOptional({ example: 'The checkout button should match the design.', description: 'Sent with a change request' })
+  @IsOptional() @IsString() @MaxLength(2000)
+  revisionNote?: string;
 }
 
 /** A file in the store, as a deliverable references it. */

@@ -1,4 +1,4 @@
-    .submit-layout { display:grid; grid-template-columns:1fr 300px; gap:20px; }
+    .submit-layout { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:20px; }
     .drop-zone { border:2px dashed var(--border); border-radius:16px; padding:40px; text-align:center; transition:border-color 0.2s, background 0.2s; cursor:pointer; }
     .drop-zone:hover, .drop-zone.dragging { border-color:#6366f1; background:#f5f3ff; }
     .drop-zone.has-error { border-color:#ef4444 !important; background:#fef2f2; }

@@ -1,7 +1,7 @@
 /**
  * LANNENT — FilterTabs
  * The pill-shaped filter bar ("All / Pending / Accepted / ...") used on the
- * proposals and invitations pages. The selected tab looks raised.
+ * invitations pages. The selected tab looks raised.
  *
  *   <FilterTabs tabs={[['all', 'All'], ['pending', 'Pending']]} active={filter} onChange={setFilter} />
  */

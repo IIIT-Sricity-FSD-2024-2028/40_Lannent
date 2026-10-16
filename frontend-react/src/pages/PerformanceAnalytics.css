@@ -70,6 +70,7 @@
     }
     .pa-badge-green  { background:#f0fdf4; border-color:#bbf7d0; color:#15803d; }
     .pa-badge-blue   { background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8; }
+    .pa-badge-red    { background:#fef2f2; border-color:#fecaca; color:#b91c1c; }
 
     /* ── Velocity mini cards ───────────────────────────────── */
     .pa-mini-card {

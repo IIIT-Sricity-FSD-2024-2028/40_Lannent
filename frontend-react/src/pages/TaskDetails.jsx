@@ -3,7 +3,9 @@
  * Converted from front-end/pages/task-details.html.
  *
  * Full details of one task (?id=<taskId>): description, milestones, skills,
- * budget and client. Workers can submit a proposal while the task is open.
+ * budget and client. There is no bidding: the client's budget is the price.
+ * While the task is open a worker can apply at that price; the client then
+ * accepts one application, which hires that worker and starts the project.
  */
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -14,9 +16,21 @@ import PageStyle from '../components/PageStyle';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../context/StoreContext';
 import { useValidation } from '../context/ValidationContext';
-import { escapeHtml } from '../utils/helpers';
+import { getSavedTaskIds, toggleSavedTask } from '../utils/helpers';
 import usePageTitle from '../hooks/usePageTitle';
+import useRerender from '../hooks/useRerender';
 import pageCss from './TaskDetails.css?raw';
+
+const MILESTONE_STATUS_TEXT = {
+  completed: '✓ Completed',
+  approved: '✓ Approved',
+  submitted: '⬆ Submitted',
+  review: '⬆ In review',
+  'in-progress': '⏳ In Progress',
+  'revision-needed': '↺ Revision requested',
+  disputed: '⚠ Disputed',
+  pending: '○ Pending',
+};
 
 const MILESTONE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316', '#8b5cf6'];
 
@@ -36,13 +50,19 @@ export default function TaskDetails() {
   const urlId = searchParams.get('id');
   const role = Auth.getCurrentUser()?.role;
 
-  // Apply modal
+  // "Save Task" bookmark — the button had no handler at all.
+  const userId = Auth.getCurrentUser()?.userId;
+  const [saved, setSaved] = useState(() => !!urlId && getSavedTaskIds(userId).includes(urlId));
+  // Apply dialog: an optional note to the client. There is no price to name.
   const [applyOpen, setApplyOpen] = useState(false);
-  const [timeline, setTimeline] = useState('3 weeks');
-  const [coverLetter, setCoverLetter] = useState('');
-  // The page shows the proposal count from when it was opened (it is not
-  // refreshed after submitting, as before).
-  const [proposalCount] = useState(() => (urlId ? Store.getProposalsByTask(urlId).filter(p => p.type !== 'invitation').length : 0));
+  const [note, setNote] = useState('');
+  const rerender = useRerender();
+  function toggleSave() {
+    if (!userId || !urlId) { Validate.toast('Please log in to save tasks.', 'error'); return; }
+    const nowSaved = toggleSavedTask(userId, urlId);
+    setSaved(nowSaved);
+    Validate.toast(nowSaved ? 'Task saved.' : 'Task removed from saved.', nowSaved ? 'success' : 'info');
+  }
 
   const task = urlId ? Store.getTaskById(urlId) : null;
 
@@ -73,65 +93,40 @@ export default function TaskDetails() {
   const clientInitials = clientInfo ? clientInfo.avatar : (task.clientInitials || '??');
   const clientMemberDate = clientInfo ? ('Member since ' + clientInfo.joinDate) : '';
   const clientProjects = clientInfo ? (Store.getTasksByClient(task.clientId)?.length || 0) : 0;
-  const clientRating = clientInfo?.rating || 0;
-  const budgetDisplay = task.budget && typeof task.budget === 'number' ? ('$' + task.budget.toLocaleString()) : (task.budget || '$0');
+  const budgetDisplay = task.budget && typeof task.budget === 'number' ? ('₹' + task.budget.toLocaleString('en-IN')) : (task.budget || '₹0');
   const budgetNum = task.numBudget || (typeof task.budget === 'number' ? task.budget : parseInt(budgetDisplay.replace(/[^0-9]/g, '')) || 0);
   const taskMilestones = Store.getMilestonesByTask(task.id);
   const taskStatus = task.status || 'open';
   const statusLabel = taskStatus.charAt(0).toUpperCase() + taskStatus.slice(1).replace('-', ' ');
-  const statusBadgeClass = taskStatus === 'open' ? 'badge-green' : taskStatus === 'in-progress' ? 'badge-blue' : taskStatus === 'completed' ? 'badge-purple' : 'badge-yellow';
+  const statusBadgeClass = taskStatus === 'open' ? 'badge-green' : taskStatus === 'in-progress' ? 'badge-blue' : taskStatus === 'completed' ? 'badge-purple' : taskStatus === 'cancelled' ? 'badge-red' : 'badge-orange';
 
-  function submitProposal() {
-    if (!coverLetter) {
-      Validate.toast('Please write a cover letter', 'error');
-      return;
-    }
-    const currentUser = Auth.getCurrentUser();
-    if (!currentUser) {
-      Validate.toast('Please log in to submit a proposal', 'error');
-      return;
-    }
+  // This worker's most recent application or invitation here, if any.
+  const mine = role === 'worker'
+    ? Store.getProposalsByTask(task.id).filter(p => p.workerId === userId).slice(-1)[0] || null
+    : null;
+  const pendingApplication = mine && mine.type === 'application' && mine.status === 'pending' ? mine : null;
+  const pendingInvitation = mine && mine.type === 'invitation' && mine.status === 'pending' ? mine : null;
+  const rejected = Store.getProposalsByTask(task.id).some(p => p.workerId === userId && p.type === 'application' && p.status === 'rejected');
 
-    const latest = Store.getTaskById(task.id);
-
-    // ── Guard: only open tasks accept proposals ───────────────────
-    if (latest && latest.status !== 'open') {
-      Validate.toast('This project is no longer accepting proposals.', 'error');
-      setApplyOpen(false);
-      return;
-    }
-
-    const taskBudget = latest ? (typeof latest.budget === 'number' ? latest.budget : parseInt(String(latest.budget).replace(/[^0-9]/g, '')) || 1000) : 1000;
-
+  function apply() {
     try {
-      Store.createProposal({
-        taskId: task.id || 't1',
-        workerId: currentUser.userId,
-        workerName: currentUser.name || 'Worker',
-        avatar: currentUser.avatar || 'WK',
-        avatarColor: currentUser.avatarColor || '#6366f1',
-        bidPrice: '$' + taskBudget.toLocaleString(),
-        timeline,
-        coverLetter,
-        skills: currentUser.skills || [],
-        status: 'pending',
-      });
-
-      // Notify the task's client about the new proposal
-      if (latest && latest.clientId) {
-        Store.addNotification({
-          userId: latest.clientId,
-          type: 'proposal',
-          text: `New proposal from ${escapeHtml(currentUser.name || 'a worker')}`,
-          subtext: `${escapeHtml(latest.title)} — Bid: $${taskBudget.toLocaleString()}, Timeline: ${timeline}`,
-        });
-      }
+      Store.applyToTask(task.id, note.trim());
     } catch (e) {
-      console.error('[submitProposal] Error:', e);
+      Validate.toast(e.message, 'error');
+      return;
     }
-
     setApplyOpen(false);
-    Validate.toast('✓ Proposal submitted successfully!', 'success');
+    setNote('');
+    rerender();
+    Validate.toast('✓ Application sent. The client will accept or decline it.', 'success');
+  }
+
+  function withdraw() {
+    Validate.confirm('Withdraw your application? You can apply again later.', () => {
+      try { Store.withdrawProposal(pendingApplication.id); } catch (e) { Validate.toast(e.message, 'error'); return; }
+      rerender();
+      Validate.toast('Application withdrawn.', 'success');
+    });
   }
 
   return (
@@ -164,7 +159,7 @@ export default function TaskDetails() {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--muted-foreground)' }}>
                       <Icon name="clock" style={{ width: 13, height: 13 }} />
-                      Posted recently
+                      {task.createdAt ? 'Posted ' + new Date(task.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Posted recently'}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--muted-foreground)' }}>
                       <Icon name="map-pin" style={{ width: 13, height: 13 }} />
@@ -192,14 +187,14 @@ export default function TaskDetails() {
                 {taskMilestones.length > 0 ? taskMilestones.map((m, i) => {
                   const color = MILESTONE_COLORS[i % MILESTONE_COLORS.length];
                   const msStatus = m.status || 'pending';
-                  const msStatusLabel = msStatus === 'completed' ? '✓ Completed' : msStatus === 'submitted' ? '⬆ Submitted' : msStatus === 'in-progress' ? '⏳ In Progress' : msStatus === 'disputed' ? '⚠ Disputed' : '○ Pending';
+                  const msStatusLabel = MILESTONE_STATUS_TEXT[msStatus] || msStatus;
                   return (
                 <div key={m.id} className="milestone-item">
                   <div className="milestone-dot" style={{ background: color, marginTop: 6 }}></div>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                       <span style={{ fontWeight: 600, fontSize: 14 }}>{`Milestone ${i+1}: ${m.title}`}</span>
-                      <span style={{ fontWeight: 700, color: color }}>{`$${(m.budget || 0).toLocaleString()}`}</span>
+                      <span style={{ fontWeight: 700, color: color }}>{`₹${(m.budget || 0).toLocaleString('en-IN')}`}</span>
                     </div>
                     <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 4 }}>{m.description || ''}</p>
                     <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{msStatusLabel}</span>
@@ -224,20 +219,39 @@ export default function TaskDetails() {
             {/* Apply Card */}
             <div className="detail-card" style={{ position: 'sticky', top: 80 }}>
               <div style={{ textAlign: 'center', padding: '8px 0 20px' }}>
-                <div style={{ fontSize: 28, fontWeight: 700, color: '#10b981', marginBottom: 4 }}>{`$${budgetNum.toLocaleString()}`}</div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: '#10b981', marginBottom: 4 }}>{`₹${budgetNum.toLocaleString('en-IN')}`}</div>
                 <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Total budget</div>
               </div>
               {taskStatus === 'open' ? (
                 <>
-                <button className="btn-primary" style={{ width: '100%', padding: 12, borderRadius: 12, fontSize: 15, marginBottom: 12 }} onClick={() => setApplyOpen(true)}>Apply Now</button>
+                {role !== 'worker' ? (
+                  <div style={{ width: '100%', padding: 12, borderRadius: 12, fontSize: 14, fontWeight: 600, textAlign: 'center', marginBottom: 12, background: '#eef2ff', color: '#3730a3' }}>Open for applications</div>
+                ) : pendingInvitation ? (
+                  <Link to="/worker-invitations" className="btn-primary" style={{ display: 'block', width: '100%', padding: 12, borderRadius: 12, fontSize: 15, marginBottom: 12, textAlign: 'center', textDecoration: 'none' }}>You&apos;re invited — answer it</Link>
+                ) : pendingApplication ? (
+                  <>
+                    <div style={{ width: '100%', padding: 12, borderRadius: 12, fontSize: 14, fontWeight: 600, textAlign: 'center', marginBottom: 8, background: '#ecfdf5', color: '#047857' }}>✓ Applied — waiting for the client</div>
+                    <button className="btn-outline" style={{ width: '100%', padding: 10, borderRadius: 12, fontSize: 14, marginBottom: 12 }} onClick={withdraw}>Withdraw application</button>
+                  </>
+                ) : rejected ? (
+                  <div style={{ width: '100%', padding: 12, borderRadius: 12, fontSize: 13, textAlign: 'center', marginBottom: 12, ...STATUS_BOX_COLORS.other }}>The client declined your application to this project.</div>
+                ) : (
+                  <>
+                    <button className="btn-primary" style={{ width: '100%', padding: 12, borderRadius: 12, fontSize: 15, marginBottom: 8 }} onClick={() => setApplyOpen(true)}>{`Apply for ${budgetDisplay}`}</button>
+                    <p style={{ fontSize: 12, color: 'var(--muted-foreground)', textAlign: 'center', marginBottom: 12, lineHeight: 1.5 }}>
+                      The price is fixed by the client. If they accept your application, you are hired and the project starts.
+                    </p>
+                  </>
+                )}
                 {' '}
-                <button className="btn-outline" style={{ width: '100%', padding: 12, borderRadius: 12, fontSize: 15 }}>
-                  <Icon name="bookmark" style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
-                  Save Task
-                </button>
+                {role === 'worker' && <button className="btn-outline" style={{ width: '100%', padding: 12, borderRadius: 12, fontSize: 15, ...(saved ? { borderColor: '#6366f1', color: '#4f46e5', background: '#eef2ff' } : {}) }}
+                        onClick={toggleSave} aria-pressed={saved}>
+                  <Icon name={saved ? 'bookmark-check' : 'bookmark'} style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+                  {saved ? 'Saved' : 'Save Task'}
+                </button>}
                 </>
               ) : (
-                <div style={{ width: '100%', padding: 12, borderRadius: 12, fontSize: 14, fontWeight: 600, textAlign: 'center', marginBottom: 12, ...STATUS_BOX_COLORS[taskStatus === 'in-progress' || taskStatus === 'completed' ? taskStatus : 'other'] }}>{taskStatus === 'in-progress' ? '🔄 In Progress — Not Accepting Proposals' : taskStatus === 'completed' ? '✅ Completed' : '⚠️ ' + statusLabel}</div>
+                <div style={{ width: '100%', padding: 12, borderRadius: 12, fontSize: 14, fontWeight: 600, textAlign: 'center', marginBottom: 12, ...STATUS_BOX_COLORS[taskStatus === 'in-progress' || taskStatus === 'completed' ? taskStatus : 'other'] }}>{taskStatus === 'in-progress' ? '🔄 In Progress — a worker has been hired' : taskStatus === 'completed' ? '✅ Completed' : '⚠️ ' + statusLabel}</div>
               )}
               <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -251,10 +265,6 @@ export default function TaskDetails() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                   <span style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Milestones</span>
                   <span style={{ fontSize: 13, fontWeight: 600 }}>{`${taskMilestones.length} defined`}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <span style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Proposals</span>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{`${proposalCount} submitted`}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                   <span style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Progress</span>
@@ -279,8 +289,8 @@ export default function TaskDetails() {
                     <div style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>Projects</div>
                   </div>
                   <div style={{ textAlign: 'center', flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 16 }}>{clientRating > 0 ? clientRating + '★' : 'N/A'}</div>
-                    <div style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>Rating</div>
+                    <div style={{ fontWeight: 700, fontSize: 16 }}>{clientInfo?.completedProjects || 0}</div>
+                    <div style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>Completed</div>
                   </div>
                   <div style={{ textAlign: 'center', flex: 1 }}>
                     <div style={{ fontWeight: 700, fontSize: 16 }}>{task.auditEnabled ? 'Yes' : 'No'}</div>
@@ -291,37 +301,24 @@ export default function TaskDetails() {
             </div>
           </div>
         </div>
-        {/* Apply Modal */}
-        <div id="applyModal" style={{ display: applyOpen ? 'flex' : 'none', position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 200, alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
-          <div style={{ background: 'white', borderRadius: 24, padding: 32, width: '100%', maxWidth: 480, margin: '0 16px', boxShadow: '0 32px 80px rgba(0,0,0,0.15)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-              <h2 style={{ fontSize: 20, fontWeight: 600 }}>Submit Proposal</h2>
-              <button onClick={() => setApplyOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted-foreground)' }}>
-                <Icon name="x" style={{ width: 20, height: 20 }} />
-              </button>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Delivery Timeline</label>
-              {' '}
-              <select id="timelineInput" className="form-input filter-select" style={{ padding: '12px 16px' }} value={timeline} onChange={e => setTimeline(e.target.value)}>
-                <option>3 weeks</option>
-                <option>4 weeks</option>
-                <option>5 weeks</option>
-                <option>6 weeks</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Cover Letter</label>
-              {' '}
-              <textarea id="coverLetterInput" className="form-input" rows="4" placeholder="Describe your relevant experience and why you're the best fit for this project..."
-                        value={coverLetter} onChange={e => setCoverLetter(e.target.value)} />
-            </div>
-            <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-              <button onClick={() => setApplyOpen(false)} className="btn-outline" style={{ flex: 1, padding: 12, borderRadius: 12 }}>Cancel</button>
-              <button className="btn-primary" style={{ flex: 1, padding: 12, borderRadius: 12 }} onClick={submitProposal}>Submit Proposal</button>
+        {applyOpen && (
+          <div style={{ display: 'flex', position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 200, alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}
+               onClick={e => { if (e.target === e.currentTarget) setApplyOpen(false); }}>
+            <div style={{ background: 'var(--card)', borderRadius: 24, padding: 28, width: '100%', maxWidth: 460, margin: '0 16px', boxShadow: '0 32px 80px rgba(0,0,0,0.15)' }}>
+              <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 6 }}>{`Apply for ${budgetDisplay}`}</h2>
+              <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 16, lineHeight: 1.5 }}>
+                The budget is set by the client and is not negotiable. If they accept, you are hired at that price and paid milestone by milestone, less the service fee.
+              </p>
+              <label className="form-label" htmlFor="applyNote">Note to the client (optional)</label>
+              <textarea id="applyNote" className="form-input" rows="4" maxLength={2000} placeholder="Relevant experience, links to similar work…"
+                        value={note} onChange={e => setNote(e.target.value)} />
+              <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+                <button onClick={() => setApplyOpen(false)} className="btn-outline" style={{ flex: 1, padding: 12, borderRadius: 12 }}>Cancel</button>
+                <button onClick={apply} className="btn-primary" style={{ flex: 1, padding: 12, borderRadius: 12 }}>Send application</button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </DashboardLayout>
     </>
   );

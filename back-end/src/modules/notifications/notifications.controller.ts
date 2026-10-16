@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Patch, Body, Query, Param, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiHeader, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Patch, Param, UseGuards, ForbiddenException } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
-import { CreateNotificationDto } from './dto/create-notification.dto';
 import { RoleGuard } from '../../common/guards/role.guard';
+import { CurrentActor } from '../../common/decorators/actor.decorator';
+import type { Actor } from '../../common/decorators/actor.decorator';
 
 @ApiTags('Notifications')
 @Controller('notifications')
@@ -10,22 +11,29 @@ import { RoleGuard } from '../../common/guards/role.guard';
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
+  /** Your own notifications. `?userId=` used to return anyone's — or, omitted, everyone's. */
   @Get()
-  @ApiOperation({ summary: 'Get notifications (supports ?userId= filter)' })
-  @ApiQuery({ name: 'userId', required: false })
-  findAll(@Query('userId') userId?: string) {
-    return this.notificationsService.findAll({ userId });
+  @ApiOperation({ summary: 'Get your notifications' })
+  findAll(@CurrentActor() actor: Actor) {
+    return this.notificationsService.findAll({ userId: actor.id });
   }
 
-  @Post()
-  @ApiOperation({ summary: 'Create a notification' })
-  create(@Body() dto: CreateNotificationDto) {
-    return this.notificationsService.create(dto);
+  // POST /notifications was removed. It let any signed-in user who could see a client's
+  // project put any text — "Your account is locked, message me to unlock it"
+  // — into that client's notifications, styled as a payment or a dispute.
+  // Every notification is now written by the platform itself, about
+  // something that actually happened.
+
+  @Patch(':id/read')
+  @ApiOperation({ summary: 'Mark one of your notifications as read' })
+  markRead(@Param('id') id: string, @CurrentActor() actor: Actor) {
+    return this.notificationsService.markRead(id, actor.id);
   }
 
   @Patch(':userId/read-all')
-  @ApiOperation({ summary: 'Mark all notifications as read for a user' })
-  markAllRead(@Param('userId') userId: string) {
+  @ApiOperation({ summary: 'Mark all your notifications as read' })
+  markAllRead(@Param('userId') userId: string, @CurrentActor() actor: Actor) {
+    if (userId !== actor.id) throw new ForbiddenException('You can only mark your own notifications as read.');
     return this.notificationsService.markAllRead(userId);
   }
 }

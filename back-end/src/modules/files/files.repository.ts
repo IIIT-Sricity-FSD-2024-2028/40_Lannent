@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 
 /**
  * FilesRepository — In-Memory Data Access Layer
@@ -13,10 +14,13 @@ import { Injectable } from '@nestjs/common';
 @Injectable()
 export class FilesRepository {
   private files: any[] = [];
-  private counter = 100;
 
+  /**
+   * Random, not sequential. `f_<time>_<counter>` let anyone who could see one
+   * id work out the ids uploaded around it.
+   */
   generateId(): string {
-    return 'f_' + Date.now() + '_' + this.counter++;
+    return 'f_' + randomUUID().replace(/-/g, '');
   }
 
   findAll(query?: { uploadedBy?: string; taskId?: string }): any[] {
