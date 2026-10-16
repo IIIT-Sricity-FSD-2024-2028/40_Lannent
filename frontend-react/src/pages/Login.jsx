@@ -20,15 +20,6 @@ import usePageTitle from '../hooks/usePageTitle';
 // Shared look of the <code> chips in the demo credentials box.
 const codeStyle = { background: '#e2e8f0', padding: '1px 5px', borderRadius: 4 };
 
-/** One "Role: email / password" line of the demo credentials box. */
-function DemoLine({ label, email, password }) {
-  return (
-    <span style={{ display: 'block' }}>
-      {label + ': '}<code style={codeStyle}>{email}</code> / <code style={codeStyle}>{password}</code>
-    </span>
-  );
-}
-
 export default function Login() {
   const Auth = useAuth();
   const Validate = useValidation();
@@ -117,18 +108,6 @@ export default function Login() {
           <p className="auth-footer-text">
             Don't have an account? <Link to="/signup">Sign up</Link>
           </p>
-
-          {/* Demo credentials */}
-          <div style={{ marginTop: 20, padding: '14px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 12, color: '#64748b', lineHeight: 1.8 }}>
-            <strong style={{ color: '#334155', display: 'block', marginBottom: 4 }}>🔑 Demo Credentials</strong>
-            <DemoLine label="Client" email="client@gmail.com" password="Password@123" />
-            <DemoLine label="Worker" email="worker@gmail.com" password="Password@123" />
-            <DemoLine label="Expert" email="expert@gmail.com" password="Password@123" />
-            <DemoLine label="Super Admin" email="super@gmail.com" password="Superadmin@123" />
-            <DemoLine label="Revenue Admin" email="admin@gmail.com" password="Admin@123" />
-            <DemoLine label="Intake Admin" email="intake@gmail.com" password="Intake@123" />
-            <DemoLine label="Compliance Admin" email="compliance@gmail.com" password="Compliance@123" />
-          </div>
         </div>
       </div>
     </div>
