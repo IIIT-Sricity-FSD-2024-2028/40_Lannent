@@ -1,4 +1,4 @@
-import { Injectable, NestMiddleware, Logger, UnauthorizedException } from '@nestjs/common';
+import { Injectable, NestMiddleware, Logger, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../../modules/auth/auth.service';
 import { getContext, shortId } from '../logging/request-context';
@@ -64,6 +64,20 @@ export class AuthMiddleware implements NestMiddleware {
         );
       }
 
+      const problem = this.auth.accountProblem(claims);
+      if (problem) {
+        throw new UnauthorizedException(problem);
+      }
+
+      // An account someone else created starts with a password its creator
+      // knows. Until the owner replaces it, the only thing it may do is that —
+      // otherwise the creator could sign in and act as the new staff member.
+      if (this.auth.mustChangePassword(claims.sub) && !isPasswordChange(req, claims.sub)) {
+        throw new ForbiddenException(
+          'Choose your own password before continuing — this account was created with a temporary one.',
+        );
+      }
+
       req.user = { id: claims.sub, role: claims.role, email: claims.email, via: 'token' };
       // The token is the authority, so the request is made to agree with it.
       // Twenty handlers across six controllers read identity from these two
@@ -109,4 +123,12 @@ export class AuthMiddleware implements NestMiddleware {
     this.reported.add(route);
     this.logger.warn(`auth.fallback — ${route} identified by the role header, with no bearer token`);
   }
+}
+
+/** The routes an account with a temporary password may still use. */
+function isPasswordChange(req: Request, userId: string): boolean {
+  const path = (req.originalUrl || '').split('?')[0];
+  if (req.method === 'POST' && path === `/api/users/${userId}/password`) return true;
+  if (req.method === 'GET' && path === '/api/auth/me') return true;
+  return false;
 }

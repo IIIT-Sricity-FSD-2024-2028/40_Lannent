@@ -48,7 +48,7 @@ export class RevenueController {
 
   @Get('distribution')
   @Roles(ROLES.REVENUE_ADMIN, ROLES.COMPLIANCE_ADMIN)
-  @ApiOperation({ summary: 'How every escrowed dollar splits between workers, reviewers and the platform' })
+  @ApiOperation({ summary: 'How every escrowed rupee splits between workers, reviewers and the platform' })
   distribution() {
     return this.revenue.distribution();
   }

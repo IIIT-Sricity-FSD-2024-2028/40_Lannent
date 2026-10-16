@@ -9,7 +9,9 @@ import { FEE_CONFIG, round2 } from '../ledger/fee-config';
 import { UpdateFeeConfigDto } from './dto/update-fee-config.dto';
 
 /** Money that left escrow and reached a person. */
-const PAYOUT_TYPES = ['milestone-release', 'audit-release'];
+const PAYOUT_TYPES = ['milestone-release', 'audit-release', 'dispute-fee-release'];
+/** Money that entered escrow. */
+const LOCK_TYPES = ['escrow-lock', 'audit-escrow-lock', 'dispute-escrow-lock'];
 
 /**
  * RevenueService — read-only aggregation over the ledger, plus fee tuning.
@@ -50,7 +52,9 @@ export class RevenueService {
   summary() {
     const totalRevenue = this.ledger.totalRevenue();
     const grossVolume = this.grossVolume();
-    const allTasks = this.tasks.findAll({ status: undefined } as any) || [];
+    // 'system' includes drafts. The viewer-less call hid them, so
+    // `draftProjects` always reported 0.
+    const allTasks = this.tasks.findAll({}, 'system');
 
     return {
       totalRevenue,
@@ -122,7 +126,7 @@ export class RevenueService {
         const deposits = txs.filter((t: any) => t.type === 'deposit' && t.toId === u.id);
         const withdrawals = txs.filter((t: any) => t.type === 'withdrawal' && t.fromId === u.id);
         const escrowFunded = txs.filter(
-          (t: any) => ['escrow-lock', 'audit-escrow-lock'].includes(t.type) && t.fromId === u.id,
+          (t: any) => LOCK_TYPES.includes(t.type) && t.fromId === u.id,
         );
 
         const feesPaid = round2(
@@ -141,7 +145,7 @@ export class RevenueService {
           feesPaid,
           totalDeposited: round2(deposits.reduce((a: number, t: any) => a + this.gross(t), 0)),
           totalWithdrawn: round2(withdrawals.reduce((a: number, t: any) => a + this.gross(t), 0)),
-          escrowFunded: round2(escrowFunded.reduce((a: number, t: any) => a + this.gross(t), 0)),
+          escrowFunded: round2(escrowFunded.reduce((a: number, t: any) => a + (t.netAmount ?? t.amount ?? 0), 0)),
           // Effective rate this user paid on what they earned.
           effectiveRate: grossEarned > 0 ? round2((feesPaid / grossEarned) * 100) : 0,
         };
@@ -151,7 +155,7 @@ export class RevenueService {
   }
 
   /**
-   * Where every dollar that entered escrow ended up. The buckets are mutually
+   * Where every rupee that entered escrow ended up. The buckets are mutually
    * exclusive and sum to the total funded, so the chart always adds up.
    */
   distribution() {
@@ -162,7 +166,7 @@ export class RevenueService {
     // An escrow-lock row's grossAmount is what the client was charged in total
     // (budget + marketplace + initiation); only netAmount entered escrow.
     const funded = sum(
-      txs.filter((t: any) => ['escrow-lock', 'audit-escrow-lock'].includes(t.type)),
+      txs.filter((t: any) => LOCK_TYPES.includes(t.type)),
       (t) => t.netAmount ?? t.amount ?? 0,
     );
     const workerNet = sum(
@@ -171,6 +175,10 @@ export class RevenueService {
     );
     const expertNet = sum(
       txs.filter((t: any) => t.type === 'audit-release'),
+      (t) => t.netAmount ?? t.amount ?? 0,
+    );
+    const disputeNet = sum(
+      txs.filter((t: any) => t.type === 'dispute-fee-release'),
       (t) => t.netAmount ?? t.amount ?? 0,
     );
     const refunded = sum(txs.filter((t: any) => t.type === 'refund'));
@@ -183,12 +191,20 @@ export class RevenueService {
         .filter((r) => ['worker-service', 'expert-service'].includes(r.feeType))
         .reduce((a, r) => a + r.amount, 0),
     );
+    const cancellationFees = round2(
+      this.ledger
+        .getRevenue()
+        .filter((r) => r.feeType === 'cancellation')
+        .reduce((a, r) => a + r.amount, 0),
+    );
     const stillHeld = this.ledger.totalHeld();
 
     const segments = [
       { label: 'Paid to workers', amount: workerNet },
-      { label: 'Paid to reviewers', amount: expertNet },
+      { label: 'Paid to reviewers (audits)', amount: expertNet },
+      { label: 'Paid to reviewers (disputes)', amount: disputeNet },
       { label: 'Platform commission', amount: escrowFees },
+      { label: 'Cancellation fees', amount: cancellationFees },
       { label: 'Refunded to clients', amount: refunded },
       { label: 'Still held in escrow', amount: stillHeld },
     ];
@@ -222,7 +238,7 @@ export class RevenueService {
         );
         const funded = round2(
           txs
-            .filter((t: any) => ['escrow-lock', 'audit-escrow-lock'].includes(t.type) && t.taskId === taskId)
+            .filter((t: any) => LOCK_TYPES.includes(t.type) && t.taskId === taskId)
             .reduce((a: number, t: any) => a + (t.netAmount ?? t.amount ?? 0), 0),
         );
         return {
@@ -233,7 +249,11 @@ export class RevenueService {
           budget: task?.budget || 0,
           funded,
           platformRevenue: rev,
-          escrowHeld: this.ledger.getEscrow(taskId).projectHeld + this.ledger.getEscrow(taskId).auditHeld,
+          escrowHeld: round2(
+            this.ledger.getEscrow(taskId).projectHeld +
+            this.ledger.getEscrow(taskId).auditHeld +
+            this.ledger.getEscrow(taskId).disputeHeld,
+          ),
         };
       })
       .sort((a, b) => b.platformRevenue - a.platformRevenue);
@@ -256,20 +276,14 @@ export class RevenueService {
     const feeOf = (type: string) =>
       round2(revenue.filter((r) => r.feeType === type).reduce((a, r) => a + r.amount, 0));
 
-    // An audit payout belongs to an engagement; its kind says whether the money
-    // was earned auditing the project or arbitrating a dispute on it.
-    const auditReleases = txs.filter((t: any) => t.type === 'audit-release');
-    const kindOf = (t: any) => {
-      const ar = t.auditRequestId
-        ? this.safe(() => this.auditRequests.findById(t.auditRequestId))
-        : null;
-      return ar?.kind || 'project-audit';
-    };
-    const auditRows = auditReleases.filter((t: any) => kindOf(t) === 'project-audit');
-    const disputeRows = auditReleases.filter((t: any) => kindOf(t) === 'dispute-audit');
+    // Audit and dispute fees move through separate escrow buckets and are
+    // recorded under separate transaction types, so they are never summed.
+    const auditRows = txs.filter((t: any) => t.type === 'audit-release');
+    const disputeRows = txs.filter((t: any) => t.type === 'dispute-fee-release');
 
     const escrowLocks = txs.filter((t: any) => t.type === 'escrow-lock');
     const auditLocks = txs.filter((t: any) => t.type === 'audit-escrow-lock');
+    const disputeLocks = txs.filter((t: any) => t.type === 'dispute-escrow-lock');
     const releases = txs.filter((t: any) => t.type === 'milestone-release');
     const refunds = txs.filter((t: any) => t.type === 'refund');
 
@@ -281,7 +295,8 @@ export class RevenueService {
     const initiation = feeOf('contract-initiation');
     const workerFees = feeOf('worker-service');
     const expertFees = feeOf('expert-service');
-    const platformRevenue = round2(marketplace + initiation + workerFees + expertFees);
+    const cancellationFee = feeOf('cancellation');
+    const platformRevenue = round2(marketplace + initiation + workerFees + expertFees + cancellationFee);
 
     return {
       project: {
@@ -295,9 +310,13 @@ export class RevenueService {
       clientPaid: {
         intoProjectEscrow: sum(escrowLocks, net),
         intoAuditEscrow: sum(auditLocks, net),
+        // Only clients raise disputes, so only clients pay dispute reviewers.
+        intoDisputeEscrow: sum(disputeLocks, net),
         marketplaceFee: marketplace,
         initiationFee: initiation,
-        total: round2(sum(escrowLocks, net) + sum(auditLocks, net) + marketplace + initiation),
+        total: round2(
+          sum(escrowLocks, net) + sum(auditLocks, net) + sum(disputeLocks, net) + marketplace + initiation,
+        ),
       },
 
       // What the gig worker took out
@@ -325,15 +344,17 @@ export class RevenueService {
         reviewers: [...new Set(disputeRows.map((t: any) => t.toId))].map(nameOf),
       },
 
-      refundedToClient: sum(refunds, gross),
-      stillHeld: { project: escrow.projectHeld, audit: escrow.auditHeld,
-                   total: round2(escrow.projectHeld + escrow.auditHeld) },
+      refunded: sum(refunds, gross),
+      refundedToClient: sum(refunds.filter((t: any) => t.toId === task.clientId), gross),
+      stillHeld: { project: escrow.projectHeld, audit: escrow.auditHeld, dispute: escrow.disputeHeld,
+                   total: round2(escrow.projectHeld + escrow.auditHeld + escrow.disputeHeld) },
 
       platformEarnings: {
         marketplaceFee: marketplace,
         initiationFee: initiation,
         workerServiceFees: workerFees,
         reviewerCommission: expertFees,
+        cancellationFee,
         total: platformRevenue,
       },
 
@@ -354,6 +375,7 @@ export class RevenueService {
       workerService: FEE_CONFIG.workerService,
       expertService: FEE_CONFIG.expertService,
       withdrawal: FEE_CONFIG.withdrawal,
+      cancellation: FEE_CONFIG.cancellation,
     };
   }
 
@@ -371,6 +393,39 @@ export class RevenueService {
     // FEE_CONFIG objects, so the rates below would mutate `before` too and
     // every diff would come out empty.
     const before = structuredClone(this.getFeeConfig());
+
+    // Validate the whole request before changing anything. The tier arrays
+    // were checked while being applied, so a bad third value threw after the
+    // scalar rates and the first tiers had already changed — a half-applied
+    // update, with no audit record because the throw skipped it.
+    const tiers = FEE_CONFIG.workerService.length;
+    const bands = FEE_CONFIG.contractInitiation.length;
+    if (dto.workerServicePercents) {
+      if (!Array.isArray(dto.workerServicePercents) || dto.workerServicePercents.length !== tiers) {
+        throw new BadRequestException(`Expected ${tiers} worker service tiers.`);
+      }
+      dto.workerServicePercents.forEach((p, i) => {
+        if (typeof p !== 'number' || !Number.isFinite(p) || p < 0 || p > 100) {
+          throw new BadRequestException(`Worker service tier ${i + 1} must be between 0 and 100.`);
+        }
+      });
+    }
+    const freeHours = dto.cancellationFreeHours ?? FEE_CONFIG.cancellation.freeHours;
+    const earlyDays = dto.cancellationEarlyDays ?? FEE_CONFIG.cancellation.earlyDays;
+    if (earlyDays * 24 < freeHours) {
+      throw new BadRequestException('The early-cancellation window must end after the free window.');
+    }
+    if (dto.contractInitiationFees) {
+      if (!Array.isArray(dto.contractInitiationFees) || dto.contractInitiationFees.length !== bands) {
+        throw new BadRequestException(`Expected ${bands} initiation bands.`);
+      }
+      dto.contractInitiationFees.forEach((f, i) => {
+        if (typeof f !== 'number' || !Number.isFinite(f) || f < 0) {
+          throw new BadRequestException(`Initiation band ${i + 1} must be zero or greater.`);
+        }
+      });
+    }
+
     if (dto.depositPercent !== undefined) FEE_CONFIG.deposit.percent = dto.depositPercent;
     if (dto.depositFixed !== undefined) FEE_CONFIG.deposit.fixed = dto.depositFixed;
     if (dto.clientMarketplacePercent !== undefined) {
@@ -379,34 +434,12 @@ export class RevenueService {
     if (dto.expertServicePercent !== undefined) FEE_CONFIG.expertService.percent = dto.expertServicePercent;
     if (dto.withdrawalPercent !== undefined) FEE_CONFIG.withdrawal.percent = dto.withdrawalPercent;
     if (dto.withdrawalFixed !== undefined) FEE_CONFIG.withdrawal.fixed = dto.withdrawalFixed;
-
-    if (dto.workerServicePercents) {
-      if (dto.workerServicePercents.length !== FEE_CONFIG.workerService.length) {
-        throw new BadRequestException(
-          `Expected ${FEE_CONFIG.workerService.length} worker service tiers, received ${dto.workerServicePercents.length}.`,
-        );
-      }
-      dto.workerServicePercents.forEach((p, i) => {
-        if (typeof p !== 'number' || p < 0 || p > 100) {
-          throw new BadRequestException(`Worker service tier ${i + 1} must be between 0 and 100.`);
-        }
-        FEE_CONFIG.workerService[i].percent = p;
-      });
-    }
-
-    if (dto.contractInitiationFees) {
-      if (dto.contractInitiationFees.length !== FEE_CONFIG.contractInitiation.length) {
-        throw new BadRequestException(
-          `Expected ${FEE_CONFIG.contractInitiation.length} initiation bands, received ${dto.contractInitiationFees.length}.`,
-        );
-      }
-      dto.contractInitiationFees.forEach((f, i) => {
-        if (typeof f !== 'number' || f < 0) {
-          throw new BadRequestException(`Initiation band ${i + 1} must be zero or greater.`);
-        }
-        FEE_CONFIG.contractInitiation[i].fee = f;
-      });
-    }
+    dto.workerServicePercents?.forEach((p, i) => { FEE_CONFIG.workerService[i].percent = p; });
+    dto.contractInitiationFees?.forEach((f, i) => { FEE_CONFIG.contractInitiation[i].fee = f; });
+    if (dto.cancellationFreeHours !== undefined) FEE_CONFIG.cancellation.freeHours = dto.cancellationFreeHours;
+    if (dto.cancellationEarlyDays !== undefined) FEE_CONFIG.cancellation.earlyDays = dto.cancellationEarlyDays;
+    if (dto.cancellationEarlyPercent !== undefined) FEE_CONFIG.cancellation.earlyPercent = dto.cancellationEarlyPercent;
+    if (dto.cancellationLatePercent !== undefined) FEE_CONFIG.cancellation.latePercent = dto.cancellationLatePercent;
 
     const after = this.getFeeConfig();
     this.audit.record({

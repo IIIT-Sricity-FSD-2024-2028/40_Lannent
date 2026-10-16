@@ -1,0 +1,8 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    // @nestjs/jwt v12 ships ES modules only; ts-jest compiles it to CommonJS
+    // for Jest, which cannot load ESM through require().
+    "allowJs": true
+  }
+}

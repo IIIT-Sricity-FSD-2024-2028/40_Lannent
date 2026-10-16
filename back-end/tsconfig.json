@@ -11,6 +11,11 @@
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
     "target": "ES2023",
+    // ES2022+ targets default this to true, which emits every declared DTO
+    // field as an own property set to `undefined`. A PATCH carrying only
+    // `{ title }` then spread `status: undefined, workerId: undefined` over
+    // the stored record and wiped them. Nest's legacy decorators expect false.
+    "useDefineForClassFields": false,
     "sourceMap": true,
     "outDir": "./dist",
     "baseUrl": "./",

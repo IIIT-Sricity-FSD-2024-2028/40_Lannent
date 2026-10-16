@@ -4,10 +4,10 @@
  * Rates follow published 2026 marketplace pricing:
  *   - client marketplace fee + contract initiation fee ...... Upwork
  *   - worker service fee, tiered by lifetime billings ....... Upwork
- *   - card processing on deposit ............................ Stripe (2.9% + $0.30)
- *   - payout fee on withdrawal ............................. Stripe Connect (0.25% + $0.25)
+ *   - card processing on deposit ............................ Stripe (2.9% + ₹0.30)
+ *   - payout fee on withdrawal ............................. Stripe Connect (0.25% + ₹0.25)
  *
- * Every amount in the system is USD and rounded to cents at the point a fee is
+ * Every amount in the system is INR (₹) and rounded to paise at the point a fee is
  * computed, so a fee and its net never disagree by a floating-point crumb.
  */
 
@@ -17,7 +17,8 @@ export type FeeType =
   | 'contract-initiation'
   | 'worker-service'
   | 'expert-service'
-  | 'withdrawal-processing';
+  | 'withdrawal-processing'
+  | 'cancellation';
 
 export interface AmountTier {
   /** Inclusive upper bound of this tier. */
@@ -57,6 +58,18 @@ export const FEE_CONFIG = {
 
   /** Payout fee when a user withdraws to an external account. */
   withdrawal: { percent: 0.25, fixed: 0.25, min: 0.25 },
+
+  /**
+   * Cancelling a project before anyone is hired. Charged on the project
+   * budget only — technical-audit and dispute escrow always comes back in
+   * full. The clock starts when the project goes live (a draft awaiting its
+   * audit has never been visible to workers, so cancelling it is free).
+   *
+   *   within `freeHours` of going live ...... free
+   *   up to `earlyDays` live ................ `earlyPercent` of the budget
+   *   after that ............................ `latePercent` of the budget
+   */
+  cancellation: { freeHours: 24, earlyDays: 7, earlyPercent: 2, latePercent: 5 },
 };
 
 /**
@@ -79,11 +92,12 @@ export function resetFeeConfig(): void {
   FEE_CONFIG.withdrawal.percent = restored.withdrawal.percent;
   FEE_CONFIG.withdrawal.fixed = restored.withdrawal.fixed;
   FEE_CONFIG.withdrawal.min = restored.withdrawal.min;
+  Object.assign(FEE_CONFIG.cancellation, restored.cancellation);
   FEE_CONFIG.workerService.forEach((t, i) => { t.percent = restored.workerService[i].percent; });
   FEE_CONFIG.contractInitiation.forEach((t, i) => { t.fee = restored.contractInitiation[i].fee; });
 }
 
-/** Rounds to whole cents. Every fee and net amount passes through this. */
+/** Rounds to whole paise. Every fee and net amount passes through this. */
 export function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
@@ -110,12 +124,20 @@ export function initiationFee(budget: number): number {
 }
 
 /** Percent rate a worker pays, given their prior lifetime billings with this client. */
-export function workerServiceRate(lifetimeBillings: number): number {
-  return pickTier(FEE_CONFIG.workerService, lifetimeBillings).percent ?? 0;
+export function workerServiceRate(lifetimeBillings: number, tiers: AmountTier[] = FEE_CONFIG.workerService): number {
+  return pickTier(tiers, lifetimeBillings).percent ?? 0;
 }
 
 export function workerServiceFee(amount: number, lifetimeBillings: number): number {
   return round2(amount * (workerServiceRate(lifetimeBillings) / 100));
+}
+
+/** The cancellation rate for a project that has been live this many hours. */
+export function cancellationRate(hoursLive: number): number {
+  const c = FEE_CONFIG.cancellation;
+  if (hoursLive < c.freeHours) return 0;
+  if (hoursLive < c.earlyDays * 24) return c.earlyPercent;
+  return c.latePercent;
 }
 
 export function expertServiceFee(amount: number): number {

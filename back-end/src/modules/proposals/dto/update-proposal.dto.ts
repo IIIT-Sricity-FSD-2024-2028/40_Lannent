@@ -1,10 +1,9 @@
-import { PartialType } from '@nestjs/swagger';
-import { CreateProposalDto } from './create-proposal.dto';
-import { IsOptional, IsString } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsIn } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
-export class UpdateProposalDto extends PartialType(CreateProposalDto) {
-  @ApiPropertyOptional({ example: 'pending', enum: ['pending', 'hired', 'rejected', 'completed'] })
-  @IsOptional() @IsString()
-  status?: string;
+/** The only edit: whoever sent a pending application or invitation withdraws it. */
+export class UpdateProposalDto {
+  @ApiProperty({ example: 'withdrawn', enum: ['withdrawn'] })
+  @IsIn(['withdrawn'])
+  status: string;
 }

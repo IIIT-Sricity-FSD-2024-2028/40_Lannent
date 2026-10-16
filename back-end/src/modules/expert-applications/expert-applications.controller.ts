@@ -6,6 +6,8 @@ import { UpdateExpertApplicationStatusDto } from './dto/update-expert-applicatio
 import { RoleGuard } from '../../common/guards/role.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { ROLES } from '../../common/constants/roles';
+import { CurrentActor } from '../../common/decorators/actor.decorator';
+import type { Actor } from '../../common/decorators/actor.decorator';
 
 @ApiTags('Expert Applications')
 @Controller('expert-applications')
@@ -18,12 +20,10 @@ export class ExpertApplicationsController {
    * the login page can explain a pending one. Returns only whether an
    * application exists and its status — never the applicant's details.
    */
-  @Get('status')
-  @ApiQuery({ name: 'email', required: true })
-  @ApiOperation({ summary: 'Check whether an application exists for an email' })
-  statusFor(@Query('email') email: string) {
-    return this.expertApplicationsService.statusFor(email);
-  }
+  // GET /expert-applications/status?email= was removed. It told anyone
+  // whether an address had applied and how the application went. An
+  // applicant now learns their status by signing in with the password they
+  // applied with (see AuthService.login).
 
   @Get()
   @ApiHeader({ name: 'role', required: true, description: 'Admin role required' })
@@ -55,7 +55,7 @@ export class ExpertApplicationsController {
   // alone. Compliance reads applications; it does not decide them.
   @Roles(ROLES.INTAKE_ADMIN)
   @ApiOperation({ summary: 'Approve or reject expert application (auto-creates user on approval)' })
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateExpertApplicationStatusDto) {
-    return this.expertApplicationsService.updateStatus(id, dto);
+  updateStatus(@Param('id') id: string, @Body() dto: UpdateExpertApplicationStatusDto, @CurrentActor() actor: Actor) {
+    return this.expertApplicationsService.updateStatus(id, dto, actor.id);
   }
 }

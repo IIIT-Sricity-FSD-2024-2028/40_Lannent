@@ -18,15 +18,15 @@ export class RoleGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest();
-    // A verified token wins over the header. AuthMiddleware has already put
-    // `req.user` in place when either was usable; the header read below stays
-    // for requests that reach a guard without passing that middleware.
-    const role = request.user?.role || request.headers['role'];
+    // Only the identity AuthMiddleware resolved counts. Reading the raw `role`
+    // header as a fallback let an unauthenticated request satisfy @Roles on
+    // any route that was not also behind RequireAuthMiddleware.
+    const role = request.user?.role;
 
     if (!role) {
       throw new ForbiddenException({
         success: false,
-        message: 'Missing "role" header. Please provide your role.',
+        message: 'This endpoint requires you to be signed in.',
         data: null,
       });
     }

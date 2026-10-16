@@ -1,4 +1,5 @@
-import { Module, NestModule, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer, RequestMethod, forwardRef } from '@nestjs/common';
+import { TasksModule } from '../tasks/tasks.module';
 import { TransactionsController } from './transactions.controller';
 import { TransactionsService } from './transactions.service';
 import { TransactionsRepository } from './transactions.repository';
@@ -7,6 +8,7 @@ import { RequireAuthMiddleware } from '../../common/middleware/require-auth.midd
 import { MoneyTrailMiddleware } from '../../common/middleware/money-trail.middleware';
 
 @Module({
+  imports: [forwardRef(() => TasksModule)],
   controllers: [TransactionsController],
   providers: [TransactionsRepository, TransactionsService],
   exports: [TransactionsService],

@@ -7,6 +7,7 @@ import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import { ValidationPipe, Logger } from '@nestjs/common';
@@ -30,10 +31,23 @@ async function bootstrap() {
   // origin, so those requests stop being cross-origin and stop preflighting.
   //
   // The API keeps the /api prefix, so nothing collides.
-  app.useStaticAssets(join(__dirname, '..', '..', 'front-end'), {
-    index: ['index.html'],
-    extensions: ['html'],
-  });
+  // It serves the React app's production build (`npm run build` in
+  // frontend-react/). The old static pages in front-end/ predate the current
+  // API and no longer work against it, so they are not served. The React app
+  // routes on the client, so any non-API GET that is not a file gets its
+  // index.html.
+  const webRoot = join(__dirname, '..', '..', 'frontend-react', 'dist');
+  const webIndex = join(webRoot, 'index.html');
+  if (existsSync(webIndex)) {
+    app.useStaticAssets(webRoot, { index: ['index.html'] });
+    app.use((req: any, res: any, next: any) => {
+      if (req.method !== 'GET' || req.path.startsWith('/api') || req.path.startsWith('/api-docs')) return next();
+      if (/\.[a-z0-9]+$/i.test(req.path)) return next();
+      res.sendFile(webIndex);
+    });
+  } else {
+    new Logger('Web').warn('frontend-react/dist not found — run `npm run build` in frontend-react to serve the app from here (or use `npm run dev` there).');
+  }
 
   // Rate limiting counts per client IP, and behind a load balancer every user
   // shares the proxy's address — one budget for everyone. TRUST_PROXY tells
@@ -153,7 +167,7 @@ async function bootstrap() {
     .setTitle('Lannent API')
     .setDescription(
       'Complete REST API for the Lannent freelance platform. ' +
-      'Supports Users, Tasks, Milestones, Proposals, Audit Requests, Audit Reports, ' +
+      'Supports Users, Tasks, Milestones, Invitations, Audit Requests, Audit Reports, ' +
       'Disputes, Transactions, Expert Applications, and Notifications. ' +
       'Uses in-memory storage with seed data. ' +
       'Include "role" and "user-id" headers for RBAC.',
@@ -185,7 +199,7 @@ async function bootstrap() {
   }
 
   console.log(`\n🚀 Lannent API running on http://localhost:${port}`);
-  console.log(`   The app is served here too — open http://localhost:${port}`);
+  console.log(`   The built React app is served here too (when frontend-react/dist exists) — open http://localhost:${port}`);
   console.log(`📚 Swagger UI: http://localhost:${port}/api-docs\n`);
 }
 

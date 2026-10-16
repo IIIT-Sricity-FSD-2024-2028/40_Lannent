@@ -6,7 +6,7 @@ export class CreateTransactionDto {
     example: 'escrow-lock',
     enum: [
       'escrow-lock', 'milestone-release', 'deposit', 'withdrawal', 'refund',
-      'dispute-release', 'audit-escrow-lock', 'audit-release', 'platform-fee',
+      'audit-escrow-lock', 'audit-release', 'dispute-escrow-lock', 'dispute-fee-release', 'platform-fee',
     ],
   })
   @IsString()
@@ -57,6 +57,10 @@ export class CreateTransactionDto {
   @ApiPropertyOptional({ example: 'worker-service' })
   @IsOptional() @IsString()
   feeType?: string;
+
+  @ApiPropertyOptional({ example: 'project', enum: ['project', 'audit', 'dispute'], description: 'Which escrow a refund came out of' })
+  @IsOptional() @IsString()
+  bucket?: string;
 
   @ApiPropertyOptional({ example: 'ar1', description: 'Set on audit escrow and payout rows' })
   @IsOptional() @IsString()

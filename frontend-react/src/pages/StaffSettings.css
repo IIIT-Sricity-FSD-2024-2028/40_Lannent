@@ -1,0 +1,11 @@
+    .ss-wrap { max-width:640px; }
+    .ss-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:26px; margin-bottom:18px; }
+    .ss-card h2 { font-size:15px; font-weight:700; margin:0 0 4px; }
+    .ss-card p.hint { font-size:13px; color:var(--muted-foreground); margin:0 0 18px; }
+    .ss-field { margin-bottom:16px; }
+    .ss-field label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; }
+    .ss-id { display:flex; align-items:center; gap:14px; margin-bottom:20px; }
+    .ss-avatar { width:52px; height:52px; border-radius:50%; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:16px; flex:none; }
+    .ss-role { display:inline-block; font-size:11px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; padding:4px 9px; border-radius:6px; background:var(--secondary); color:var(--muted-foreground); }
+    .ss-scope { font-size:13px; line-height:1.7; color:var(--muted-foreground); margin:0; padding-left:18px; }
+  

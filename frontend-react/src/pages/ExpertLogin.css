@@ -1,0 +1,11 @@
+    .remember-row { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; }
+    .remember-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--foreground); cursor: pointer; }
+    .remember-row label { font-size: 14px; color: var(--muted-foreground); cursor: pointer; font-weight: 400; }
+    .btn-google {
+      width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 12px; border-radius: 12px; border: 1px solid var(--border);
+      background: var(--card); font-size: 14px; font-weight: 500; font-family: inherit;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .btn-google:hover { background: var(--secondary); }
+  

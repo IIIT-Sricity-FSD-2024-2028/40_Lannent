@@ -1,0 +1,7 @@
+    .dispute-form { max-width:720px; margin:0 auto; }
+    .field-group { margin-bottom:16px; }
+    .field-group label { font-size:13px; font-weight:600; display:block; margin-bottom:6px; }
+    .field-input, .field-textarea, .field-select { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--secondary); font-size:14px; font-family:inherit; }
+    .field-textarea { min-height:120px; resize:vertical; }
+    .btn-action { margin-right:12px; }
+  

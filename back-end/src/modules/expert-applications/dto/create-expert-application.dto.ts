@@ -1,20 +1,23 @@
-import { IsString, IsOptional, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsOptional, IsEmail, MinLength, MaxLength, ValidateNested, IsUrl } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
+
+const blankToUndefined = ({ value }: any) => (typeof value === 'string' && value.trim() === '' ? undefined : value);
 import { FileRefDto } from '../../milestones/dto/update-milestone.dto';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateExpertApplicationDto {
   @ApiProperty({ example: 'Dr. Jane Smith' })
-  @IsString()
+  @IsString() @MinLength(2) @MaxLength(120)
   name: string;
 
   @ApiProperty({ example: 'jane@gmail.com' })
-  @IsString()
+  @IsEmail()
   email: string;
 
-  @ApiPropertyOptional({ example: 'Expert@123' })
-  @IsOptional() @IsString()
-  password?: string;
+  /** Becomes the reviewer's login on approval, so it is required. */
+  @ApiProperty({ example: 'Expert@123' })
+  @IsString() @MinLength(8)
+  password: string;
 
   @ApiPropertyOptional({ example: '9876543210' })
   @IsOptional() @IsString()
@@ -36,16 +39,17 @@ export class CreateExpertApplicationDto {
   @IsOptional() @IsString()
   experience?: string;
 
+  // Rendered as links on the intake desk, so only real web addresses.
   @ApiPropertyOptional({ example: 'https://linkedin.com/in/janesmith' })
-  @IsOptional() @IsString()
+  @IsOptional() @Transform(blankToUndefined) @IsUrl({ protocols: ['http', 'https'], require_protocol: true }, { message: 'linkedin must be a full https:// address' }) @MaxLength(300)
   linkedin?: string;
 
   @ApiPropertyOptional({ example: 'https://github.com/janesmith' })
-  @IsOptional() @IsString()
+  @IsOptional() @Transform(blankToUndefined) @IsUrl({ protocols: ['http', 'https'], require_protocol: true }, { message: 'github must be a full https:// address' }) @MaxLength(300)
   github?: string;
 
   @ApiPropertyOptional({ example: 'Passionate about code quality...' })
-  @IsOptional() @IsString()
+  @IsOptional() @IsString() @MaxLength(5000)
   motivation?: string;
 
   @ApiPropertyOptional({ example: 'marta-kovac-cv.pdf', description: 'Filename of the supplied resume' })

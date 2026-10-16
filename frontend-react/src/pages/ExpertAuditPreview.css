@@ -1,0 +1,21 @@
+    .pv-grid { display:grid; gap:18px; align-items:start; }
+    @media (min-width:1000px) { .pv-grid { grid-template-columns: minmax(0,1fr) 340px; } }
+    .pv-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:22px; margin-bottom:18px; }
+    .pv-card h2 { font-size:15px; font-weight:700; margin:0 0 12px; }
+    .pv-meta { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin-bottom:16px; }
+    .pv-meta div { background:var(--secondary); border-radius:10px; padding:11px 13px; }
+    .pv-meta .k { font-size:11px; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:3px; }
+    .pv-meta .v { font-size:14px; font-weight:700; }
+    .pv-ms { display:flex; justify-content:space-between; gap:12px; padding:11px 0; border-top:1px solid var(--border); font-size:13px; }
+    .pv-ms:first-of-type { border-top:none; }
+    .pv-ms .st { font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--muted-foreground); }
+    .pv-claim { background:#fef2f2; border:1px solid #fecaca; border-radius:12px; padding:16px; font-size:13px; line-height:1.6; color:#7f1d1d; }
+    .offer-row { display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--border); font-size:13px; }
+    .offer-who { font-weight:600; min-width:70px; }
+    .offer-amt { font-weight:700; font-variant-numeric:tabular-nums; }
+    .offer-tag { font-size:10px; text-transform:uppercase; letter-spacing:0.05em; padding:3px 7px; border-radius:4px; background:var(--secondary); color:var(--muted-foreground); }
+    .offer-tag.pending { background:#fffbeb; color:#b45309; }
+    .offer-tag.accepted { background:#ecfdf5; color:#047857; }
+    .pv-fee { font-size:12px; color:var(--muted-foreground); margin-top:8px; line-height:1.5; }
+    .pv-actions { display:flex; flex-direction:column; gap:10px; margin-top:16px; }
+  

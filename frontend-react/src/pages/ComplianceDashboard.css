@@ -1,0 +1,17 @@
+  .audit-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .audit-table th { text-align:left; padding:9px 12px; font-size:11px; font-weight:600;
+    text-transform:uppercase; letter-spacing:.06em; color:var(--muted-foreground);
+    border-bottom:1px solid var(--border); white-space:nowrap; }
+  .audit-table td { padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+  .audit-table tr:hover td { background:var(--input-bg); }
+  .mono { font-family:ui-monospace,Menlo,monospace; font-size:12px; }
+  .kind { font-size:11px; font-weight:600; padding:2px 7px; border-radius:5px; white-space:nowrap; }
+  .kind-money        { background:#ecfdf5; color:#047857; }
+  .kind-fee          { background:#fef3c7; color:#92400e; }
+  .kind-admin-change { background:#eef2ff; color:#4338ca; }
+  .kind-admin-read   { background:var(--secondary); color:var(--muted-foreground); }
+  .kind-account      { background:#fdf2f8; color:#9d174d; }
+  .outcome-refused   { color:#b91c1c; font-weight:600; }
+  .filters { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; align-items:center; }
+  .filters select, .filters input { padding:8px 10px; border:1px solid var(--border);
+    border-radius:9px; font-size:13px; background:var(--card); color:var(--foreground); }

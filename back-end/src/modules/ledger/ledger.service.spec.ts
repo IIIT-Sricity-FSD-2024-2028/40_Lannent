@@ -4,6 +4,8 @@ import { LedgerService } from './ledger.service';
 import { LoggingModule } from '../../common/logging/logging.module';
 import { LedgerRepository } from './ledger.repository';
 import { UsersModule } from '../users/users.module';
+import { AuthModule } from '../auth/auth.module';
+import { AuditModule } from '../audit/audit.module';
 import { TransactionsModule } from '../transactions/transactions.module';
 import { UsersService } from '../users/users.service';
 import { TransactionsService } from '../transactions/transactions.service';
@@ -29,7 +31,9 @@ describe('LedgerService', () => {
     const mod = await Test.createTestingModule({
       // LoggingModule is @Global, so importing it here registers AppLoggerService
       // for LedgerModule too — the same way AppModule does it at runtime.
-      imports: [LoggingModule, UsersModule, TransactionsModule],
+      // The users controller signs tokens and writes to the audit trail, so the
+      // two global modules it relies on are registered too.
+      imports: [LoggingModule, AuditModule, AuthModule, UsersModule, TransactionsModule],
       providers: [LedgerRepository, LedgerService],
     }).compile();
 
@@ -97,13 +101,13 @@ describe('LedgerService', () => {
 
   describe('escrow can never go negative', () => {
     it('refuses a milestone release larger than the held balance', () => {
-      ledger.fundProjectEscrow('t3', 'u1', 1200, 'test');
+      ledger.fundProjectEscrow('tnew', 'u1', 1200, 'test');
       expect(() =>
         ledger.releaseMilestone({
-          milestoneId: 'm13', taskId: 't3', clientId: 'u1', workerId: 'u5', amount: 5000,
+          milestoneId: 'mnew', taskId: 'tnew', clientId: 'u1', workerId: 'u5', amount: 5000,
         }),
       ).toThrow(BadRequestException);
-      expect(ledger.getEscrow('t3').projectHeld).toBe(1200);
+      expect(ledger.getEscrow('tnew').projectHeld).toBe(1200);
     });
 
     it('refuses a refund larger than the held balance', () => {
@@ -115,28 +119,28 @@ describe('LedgerService', () => {
 
     it('refuses to fund escrow the client cannot afford', () => {
       const before = users.findById('u8').walletBalance;
-      expect(() => ledger.fundProjectEscrow('t5', 'u8', 100000, 'test')).toThrow(BadRequestException);
+      expect(() => ledger.fundProjectEscrow('tnew', 'u8', 100000, 'test')).toThrow(BadRequestException);
       expect(users.findById('u8').walletBalance).toBe(before);
-      expect(ledger.getEscrow('t5').projectHeld).toBe(0);
+      expect(ledger.getEscrow('tnew').projectHeld).toBe(0);
     });
   });
 
   describe('releases are idempotent', () => {
     it('pays a milestone once even if approved twice', () => {
-      ledger.fundProjectEscrow('t3', 'u1', 1200, 'test');
+      ledger.fundProjectEscrow('tnew', 'u1', 1200, 'test');
       const first = ledger.releaseMilestone({
-        milestoneId: 'm13', taskId: 't3', clientId: 'u1', workerId: 'u5', amount: 500,
+        milestoneId: 'mnew', taskId: 'tnew', clientId: 'u1', workerId: 'u5', amount: 500,
       });
       const balanceAfterFirst = users.findById('u5').walletBalance;
 
       const second = ledger.releaseMilestone({
-        milestoneId: 'm13', taskId: 't3', clientId: 'u1', workerId: 'u5', amount: 500,
+        milestoneId: 'mnew', taskId: 'tnew', clientId: 'u1', workerId: 'u5', amount: 500,
       });
 
       expect(first.alreadyReleased).toBe(false);
       expect(second.alreadyReleased).toBe(true);
       expect(users.findById('u5').walletBalance).toBe(balanceAfterFirst);
-      expect(ledger.getEscrow('t3').projectHeld).toBe(700);
+      expect(ledger.getEscrow('tnew').projectHeld).toBe(700);
     });
 
     it('pays an expert once even if the report is submitted twice', () => {
@@ -154,13 +158,34 @@ describe('LedgerService', () => {
   describe('fee arithmetic', () => {
     it('charges the client budget plus marketplace and initiation fees', () => {
       const before = users.findById('u1').walletBalance;
-      const r = ledger.fundProjectEscrow('t3', 'u1', 2500, 'test');
+      const r = ledger.fundProjectEscrow('tnew', 'u1', 2500, 'test');
 
       expect(r.marketplace).toBe(125);   // 5%
       expect(r.initiation).toBe(9.99);   // $2,000–$10,000 band
       expect(r.totalCharged).toBe(2634.99);
       expect(users.findById('u1').walletBalance).toBe(round2(before - 2634.99));
-      expect(ledger.getEscrow('t3').projectHeld).toBe(2500); // only the budget is held
+      expect(ledger.getEscrow('tnew').projectHeld).toBe(2500); // only the budget is held
+    });
+
+    it('holds the budget when a project is posted and charges fees only at hire', () => {
+      const before = users.findById('u1').walletBalance;
+      ledger.fundProjectBudget('tnew', 'u1', 1000, 'posted');
+      expect(users.findById('u1').walletBalance).toBe(round2(before - 1000));
+      expect(ledger.getEscrow('tnew').projectHeld).toBe(1000);
+
+      const fees = ledger.chargeContractFees('tnew', 'u1', 1000, 'hired');
+      expect(fees.toppedUp).toBe(0); // the budget was already held — not charged twice
+      expect(fees.fees).toBe(round2(50 + 4.99));
+      expect(users.findById('u1').walletBalance).toBe(round2(before - 1000 - 54.99));
+      expect(ledger.getEscrow('tnew').projectHeld).toBe(1000);
+    });
+
+    it('returns every cent of an unhired project', () => {
+      const before = users.findById('u1').walletBalance;
+      ledger.fundProjectBudget('tnew', 'u1', 800, 'posted');
+      ledger.refundRemaining('tnew', 'u1', 'cancelled');
+      expect(users.findById('u1').walletBalance).toBe(before);
+      expect(ledger.getEscrow('tnew').projectHeld).toBe(0);
     });
 
     it('tiers the worker fee by lifetime billings with that client', () => {
@@ -200,12 +225,36 @@ describe('LedgerService', () => {
     });
   });
 
+  describe('reviewer escrow buckets', () => {
+    it('keeps a dispute fee apart from the audit fee and pays each from its own bucket', () => {
+      ledger.fundAuditEscrow('tnew', 'u1', 300, 'audit', 'audit');
+      ledger.fundAuditEscrow('tnew', 'u1', 1200, 'dispute', 'dispute');
+      expect(ledger.getEscrow('tnew')).toMatchObject({ auditHeld: 300, disputeHeld: 1200 });
+
+      const opening = systemTotal();
+      ledger.releaseAuditFee({ auditRequestId: 'arD', taskId: 'tnew', expertId: 'u3', amount: 1200, bucket: 'dispute' });
+      expect(ledger.getEscrow('tnew')).toMatchObject({ auditHeld: 300, disputeHeld: 0 });
+      expect(systemTotal()).toBe(opening);
+      expect(transactions.findAll().some((t: any) => t.type === 'dispute-fee-release' && t.taskId === 'tnew')).toBe(true);
+    });
+
+    it('refuses to pay a dispute fee out of audit escrow', () => {
+      ledger.fundAuditEscrow('tnew', 'u1', 300, 'audit', 'audit');
+      expect(() =>
+        ledger.releaseAuditFee({ auditRequestId: 'arD', taskId: 'tnew', expertId: 'u3', amount: 300, bucket: 'dispute' }),
+      ).toThrow(BadRequestException);
+    });
+  });
+
   describe('seeded state is internally consistent', () => {
     it('holds enough escrow to cover every unpaid milestone', () => {
       // t1: 2500 funded - 1800 released; t4: 3500 - 2800; t6: 2200 - 0
       expect(ledger.getEscrow('t1').projectHeld).toBe(700);
       expect(ledger.getEscrow('t4').projectHeld).toBe(700);
       expect(ledger.getEscrow('t6').projectHeld).toBe(2200);
+      // Open projects hold their budget from the day they were posted.
+      expect(ledger.getEscrow('t3').projectHeld).toBe(1200);
+      expect(ledger.getEscrow('t5').projectHeld).toBe(6000);
     });
 
     it('does not re-pay milestones the seed already released', () => {

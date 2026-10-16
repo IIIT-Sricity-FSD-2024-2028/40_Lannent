@@ -12,7 +12,7 @@ import { Request, Response, NextFunction } from 'express';
  *
  * It accepts header identity as well as a token, deliberately: the point of
  * this stage is to close the *anonymous* hole — twelve routes, including
- * `POST /proposals/:id/hire`, which funds escrow and moves money, answered
+ * the hiring route, which funded escrow and moved money, answered
  * with no credentials at all. Requiring a token outright is the one-line
  * change that follows once the frontend has fully moved over.
  */

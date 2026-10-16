@@ -2,8 +2,8 @@
 // EER Specialization: USERS split into base + role sub-tables
 // Base USERS: 10 shared columns (id, name, email, password, role, avatar, avatarColor, status, joinDate, walletBalance)
 // CLIENTS:  userId, company, location
-// WORKERS:  userId, location, skills, rating, completedProjects
-// EXPERTS:  userId, specialization, reviewsDone
+// WORKERS:  userId, location, skills   (project counts are derived, never stored)
+// EXPERTS:  userId, specialization      (reviews done is derived from paid engagements)
 // ============================================================================
 
 // ── Base USERS (shared attributes for ALL roles) ──────────────────────────────
@@ -31,17 +31,17 @@ export const SEED_CLIENTS = [
 
 // ── WORKERS (1:1 with USERS where role='worker') ──────────────────────────────
 export const SEED_WORKERS = [
-  { userId: 'u2', location: '', skills: ['React', 'Node.js', 'MongoDB'], rating: 4.8, completedProjects: 23 },
-  { userId: 'u5', location: '', skills: ['React', 'Figma', 'UI/UX Design'], rating: 4.9, completedProjects: 89 },
-  { userId: 'u6', location: '', skills: ['React', 'Node.js', 'MongoDB'], rating: 4.7, completedProjects: 65 },
-  { userId: 'u7', location: '', skills: ['Figma', 'CSS3', 'User Research'], rating: 4.8, completedProjects: 41 },
+  { userId: 'u2', location: '', skills: ['React', 'Node.js', 'MongoDB'] },
+  { userId: 'u5', location: '', skills: ['React', 'Figma', 'UI/UX Design'] },
+  { userId: 'u6', location: '', skills: ['React', 'Node.js', 'MongoDB'] },
+  { userId: 'u7', location: '', skills: ['Figma', 'CSS3', 'User Research'] },
 ];
 
 // ── EXPERTS (1:1 with USERS where role='expert') ──────────────────────────────
 export const SEED_EXPERTS = [
-  { userId: 'u3', specialization: 'Full-Stack & Security', reviewsDone: 47, hourlyRate: 120, domains: ['Web Development', 'Backend / API', 'Security'] },
-  { userId: 'u9', specialization: 'UI/UX & Design Systems', reviewsDone: 22, hourlyRate: 95, domains: ['UI/UX Design', 'Web Development'] },
-  { userId: 'u10', specialization: 'Mobile & Performance', reviewsDone: 15, hourlyRate: 105, domains: ['Mobile Development', 'AI / Machine Learning'] },
+  { userId: 'u3', specialization: 'Full-Stack & Security', hourlyRate: 120, domains: ['Web Development', 'Backend / API', 'Security'], approvedDomains: ['Web Development', 'Backend / API', 'Security'] },
+  { userId: 'u9', specialization: 'UI/UX & Design Systems', hourlyRate: 95, domains: ['UI/UX Design', 'Web Development'], approvedDomains: ['UI/UX Design', 'Web Development'] },
+  { userId: 'u10', specialization: 'Mobile & Performance', hourlyRate: 105, domains: ['Mobile Development', 'AI / Machine Learning'], approvedDomains: ['Mobile Development', 'AI / Machine Learning'] },
 ];
 
 // ============================================================================
@@ -49,18 +49,18 @@ export const SEED_EXPERTS = [
 // ============================================================================
 
 export const SEED_TASKS = [
-  { id: 't1', title: 'E-commerce Website Redesign', description: 'Need a complete redesign of our e-commerce platform with modern UI/UX. Must include product pages, cart, checkout flow, and admin panel.', category: 'Web Development', budget: 2500, currency: 'USD', deadline: '2026-04-15', skills: ['React', 'Figma', 'UI/UX Design'], clientId: 'u1', workerId: 'u5', status: 'in-progress', auditEnabled: false, progress: 75, createdAt: '2026-03-01' },
-  { id: 't2', title: 'Mobile App Development', description: 'Build a cross-platform mobile application for iOS and Android. Features include user auth, push notifications, and real-time data sync.', category: 'Mobile Development', budget: 4800, currency: 'USD', deadline: '2026-04-20', skills: ['React Native', 'Flutter'], clientId: 'u1', workerId: 'u6', status: 'in-progress', auditEnabled: true, progress: 45, createdAt: '2026-03-03' },
-  { id: 't3', title: 'API Integration Project', description: 'Integrate third-party payment and shipping APIs into existing platform. Documentation and testing required.', category: 'Backend / API', budget: 1200, currency: 'USD', deadline: '2026-04-18', skills: ['Node.js', 'REST API'], clientId: 'u1', workerId: null, status: 'open', auditEnabled: false, progress: 0, createdAt: '2026-03-05' },
-  { id: 't4', title: 'Content Management System', description: 'Build a custom CMS for managing blog posts, media files, and user permissions.', category: 'Web Development', budget: 3500, currency: 'USD', deadline: '2026-04-12', skills: ['React', 'Node.js', 'MongoDB'], clientId: 'u1', workerId: 'u7', status: 'in-progress', auditEnabled: false, progress: 90, createdAt: '2026-03-08' },
-  { id: 't5', title: 'AI Chatbot Integration', description: 'Integrate an AI-powered chatbot into customer support workflow. NLP and intent detection required.', category: 'AI / Machine Learning', budget: 6000, currency: 'USD', deadline: '2026-05-01', skills: ['Python', 'TensorFlow', 'NLP'], clientId: 'u8', workerId: null, status: 'open', auditEnabled: true, progress: 0, createdAt: '2026-03-10' },
-  { id: 't6', title: 'UI Design System', description: 'Create a comprehensive design system with components, tokens, and documentation.', category: 'UI/UX Design', budget: 2200, currency: 'USD', deadline: '2026-04-25', skills: ['Figma', 'Design Systems'], clientId: 'u8', workerId: 'u2', status: 'in-progress', auditEnabled: false, progress: 30, createdAt: '2026-03-12' },
+  { id: 't1', title: 'E-commerce Website Redesign', description: 'Need a complete redesign of our e-commerce platform with modern UI/UX. Must include product pages, cart, checkout flow, and admin panel.', category: 'Web Development', budget: 2500, currency: 'INR', deadline: '2026-04-15', skills: ['React', 'Figma', 'UI/UX Design'], clientId: 'u1', workerId: 'u5', status: 'in-progress', auditEnabled: false, progress: 75, createdAt: '2026-03-01' },
+  { id: 't2', title: 'Mobile App Development', description: 'Build a cross-platform mobile application for iOS and Android. Features include user auth, push notifications, and real-time data sync.', category: 'Mobile Development', budget: 4800, currency: 'INR', deadline: '2026-04-20', skills: ['React Native', 'Flutter'], clientId: 'u1', workerId: 'u6', status: 'in-progress', auditEnabled: true, progress: 45, createdAt: '2026-03-03' },
+  { id: 't3', title: 'API Integration Project', description: 'Integrate third-party payment and shipping APIs into existing platform. Documentation and testing required.', category: 'Backend / API', budget: 1200, currency: 'INR', deadline: '2026-04-18', skills: ['Node.js', 'REST API'], clientId: 'u1', workerId: null, status: 'open', auditEnabled: false, progress: 0, createdAt: '2026-03-05' },
+  { id: 't4', title: 'Content Management System', description: 'Build a custom CMS for managing blog posts, media files, and user permissions.', category: 'Web Development', budget: 3500, currency: 'INR', deadline: '2026-04-12', skills: ['React', 'Node.js', 'MongoDB'], clientId: 'u1', workerId: 'u7', status: 'in-progress', auditEnabled: false, progress: 90, createdAt: '2026-03-08' },
+  { id: 't5', title: 'AI Chatbot Integration', description: 'Integrate an AI-powered chatbot into customer support workflow. NLP and intent detection required.', category: 'AI / Machine Learning', budget: 6000, currency: 'INR', deadline: '2026-05-01', skills: ['Python', 'TensorFlow', 'NLP'], clientId: 'u8', workerId: null, status: 'open', auditEnabled: false, progress: 0, createdAt: '2026-03-10' },
+  { id: 't6', title: 'UI Design System', description: 'Create a comprehensive design system with components, tokens, and documentation.', category: 'UI/UX Design', budget: 2200, currency: 'INR', deadline: '2026-04-25', skills: ['Figma', 'Design Systems'], clientId: 'u8', workerId: 'u2', status: 'in-progress', auditEnabled: false, progress: 30, createdAt: '2026-03-12' },
 ];
 
 export const SEED_MILESTONES = [
   { id: 'm1', taskId: 't1', title: 'UI Design & Wireframes', description: 'Complete wireframes and high-fidelity designs for all pages', budget: 800, status: 'completed', submittedAt: '2026-03-10', approvedAt: '2026-03-12', deliverable: null, workerId: 'u5', dueDate: null, priority: 'High', progress: 100 },
   { id: 'm2', taskId: 't1', title: 'Frontend Development', description: 'Implement all pages in React with responsive design', budget: 1000, status: 'completed', submittedAt: '2026-03-18', approvedAt: '2026-03-20', deliverable: null, workerId: 'u5', dueDate: null, priority: 'High', progress: 100 },
-  { id: 'm3', taskId: 't1', title: 'Backend Integration', description: 'Connect frontend to APIs and set up data flow', budget: 500, status: 'in-progress', submittedAt: null, approvedAt: null, deliverable: null, workerId: 'u5', dueDate: null, priority: 'Medium', progress: 60 },
+  { id: 'm3', taskId: 't1', title: 'Backend Integration', description: 'Connect frontend to APIs and set up data flow', budget: 500, status: 'disputed', submittedAt: '2026-03-27', approvedAt: null, deliverable: { title: 'API integration', description: 'Payment and catalogue endpoints wired to the frontend.', link: 'https://github.com/example/ecommerce-api' }, workerId: 'u5', dueDate: null, priority: 'Medium', progress: 100 },
   { id: 'm4', taskId: 't1', title: 'Testing & Deployment', description: 'QA testing, bug fixes, and production deployment', budget: 200, status: 'pending', submittedAt: null, approvedAt: null, deliverable: null, workerId: 'u5', dueDate: null, priority: 'Low', progress: 0 },
   { id: 'm5', taskId: 't2', title: 'App Architecture & Setup', description: 'Project setup, architecture design, CI/CD pipeline', budget: 800, status: 'completed', submittedAt: '2026-03-08', approvedAt: '2026-03-10', deliverable: null, workerId: 'u6', dueDate: null, priority: 'High', progress: 100 },
   { id: 'm6', taskId: 't2', title: 'Core UI Implementation', description: 'Build all screens and navigation flows', budget: 1500, status: 'submitted', submittedAt: '2026-03-25', approvedAt: null, deliverable: { title: 'UI Implementation v1', description: 'All screens implemented with navigation', link: 'https://github.com/example/mobile-app' }, workerId: 'u6', dueDate: null, priority: 'High', progress: 80 },
@@ -82,17 +82,26 @@ export const SEED_MILESTONES = [
   { id: 'm22', taskId: 't6', title: 'Documentation & Handoff', description: 'Complete design system documentation, usage guidelines, and developer handoff assets', budget: 500, status: 'pending', submittedAt: null, approvedAt: null, deliverable: null, workerId: 'u2', dueDate: null, priority: 'Medium', progress: 0 },
 ];
 
+/**
+ * Applications and invitations, always at the posted budget (there is no
+ * bidding). A worker applies and the client accepts; a client invites and
+ * the worker accepts.
+ */
 export const SEED_PROPOSALS = [
-  { id: 'p1', taskId: 't3', workerId: 'u5', workerName: 'Sarah Johnson', avatar: 'SJ', avatarColor: 'linear-gradient(135deg,#6366f1,#4f46e5)', rating: 4.9, reviewCount: 127, location: 'San Francisco, CA', bidPrice: '$1,100', timeline: '1 week', coverLetter: 'Experienced in API integrations with Stripe, Twilio, and shipping providers. I can deliver clean, documented code within a week with full test coverage.', skills: ['Node.js', 'REST API', 'Testing'], completedProjects: 89, successRate: 98, hourlyRate: '$85/hr', responseTime: 'Within 2 hours', status: 'pending', type: 'proposal', createdAt: '2026-03-06' },
-  { id: 'p2', taskId: 't3', workerId: 'u6', workerName: 'Michael Chen', avatar: 'MC', avatarColor: 'linear-gradient(135deg,#ec4899,#be185d)', rating: 4.7, reviewCount: 83, location: 'New York, NY', bidPrice: '$1,000', timeline: '10 days', coverLetter: 'Full-stack developer with deep API experience. I have built payment integrations for Stripe, PayPal, and Square for multiple e-commerce clients.', skills: ['Node.js', 'Express', 'MongoDB'], completedProjects: 65, successRate: 96, hourlyRate: '$75/hr', responseTime: 'Within 4 hours', status: 'pending', type: 'proposal', createdAt: '2026-03-06' },
-  { id: 'p3', taskId: 't5', workerId: 'u2', workerName: 'Alex Worker', avatar: 'AW', avatarColor: 'linear-gradient(135deg,#10b981,#059669)', rating: 4.8, reviewCount: 56, location: 'Boston, MA', bidPrice: '$5,500', timeline: '4 weeks', coverLetter: 'ML engineer with production NLP chatbot experience. Built systems handling 10k+ daily conversations. Deep expertise in LangChain and OpenAI APIs.', skills: ['Python', 'TensorFlow', 'NLP'], completedProjects: 23, successRate: 100, hourlyRate: '$90/hr', responseTime: 'Within 1 hour', status: 'pending', type: 'proposal', createdAt: '2026-03-11' },
+  { id: 'p1', taskId: 't3', workerId: 'u5', workerName: 'Sarah Johnson', avatar: 'SJ', avatarColor: 'linear-gradient(135deg,#6366f1,#4f46e5)', skills: ['Node.js', 'REST API', 'Testing'], message: 'Experienced in API integrations with Stripe, Twilio, and shipping providers. I can deliver clean, documented code with full test coverage.', status: 'pending', type: 'application', createdAt: '2026-03-06' },
+  { id: 'p2', taskId: 't3', workerId: 'u6', workerName: 'Michael Chen', avatar: 'MC', avatarColor: 'linear-gradient(135deg,#ec4899,#be185d)', skills: ['Node.js', 'Express', 'MongoDB'], message: 'Full-stack developer with deep API experience — payment integrations for Stripe, PayPal, and Square.', status: 'pending', type: 'application', createdAt: '2026-03-06' },
+  { id: 'p3', taskId: 't5', workerId: 'u2', workerName: 'Alex Worker', avatar: 'AW', avatarColor: 'linear-gradient(135deg,#10b981,#059669)', skills: ['React', 'Node.js', 'MongoDB'], message: 'We would love your help integrating the support chatbot.', status: 'pending', type: 'invitation', createdAt: '2026-03-11' },
 ];
 
-export const SEED_AUDIT_REQUESTS = [
-  { id: 'ar1', kind: 'project-audit', taskId: 't2', milestoneId: 'm6', workerId: 'u6', clientId: 'u1', expertId: 'u3', disputeId: null, status: 'in-progress', feePaid: true, paidAt: '2026-03-28', agreedAmount: 350, offers: [{ id: 'of1', offeredBy: 'client', amount: 350, note: 'Standard rate for a milestone audit.', status: 'accepted', createdAt: '2026-03-25' }], severity: 'High', project: 'Mobile App Development', worker: 'Michael Chen', milestone: 'Core UI Implementation', createdAt: '2026-03-25', dueDate: '2026-04-01', auditedMilestoneIds: ['m6'] },
-  { id: 'ar2', kind: 'project-audit', taskId: 't1', milestoneId: 'm3', workerId: 'u5', clientId: 'u1', expertId: null, disputeId: null, status: 'preview-sent', agreedAmount: null, offers: [], severity: 'Medium', project: 'E-commerce Website Redesign', worker: 'Sarah Johnson', milestone: 'Backend Integration', createdAt: '2026-03-28', dueDate: '2026-04-05', auditedMilestoneIds: [] },
-  { id: 'ar3', kind: 'project-audit', taskId: 't4', milestoneId: 'm9', workerId: 'u7', clientId: 'u1', expertId: 'u3', disputeId: null, status: 'in-progress', feePaid: true, paidAt: '2026-03-26', agreedAmount: 280, offers: [{ id: 'of2', offeredBy: 'expert', amount: 280, note: 'Scoped to the permission model only.', status: 'accepted', createdAt: '2026-03-20' }], severity: 'Low', project: 'Content Management System', worker: 'Emily Rodriguez', milestone: 'User Permission System', createdAt: '2026-03-20', dueDate: '2026-03-27', auditedMilestoneIds: ['m9'] },
+export const SEED_AUDIT_REQUESTS: any[] = [
+  { id: 'ar1', kind: 'project-audit', taskId: 't2', milestoneId: 'm6', workerId: 'u6', clientId: 'u1', expertId: 'u3', disputeId: null, status: 'in-progress', feePaid: true, paidAt: '2026-03-28', agreedAmount: 350, offers: [{ id: 'of1', offeredBy: 'client', amount: 350, note: 'Standard rate for a milestone audit.', status: 'accepted', createdAt: '2026-03-25' }], severity: 'High', project: 'Mobile App Development', worker: 'Michael Chen', milestone: 'Core UI Implementation', createdAt: '2026-03-25', dueDate: '2026-04-01', auditedMilestoneIds: ['m6'], paidAmount: 350, milestonePayouts: { m6: { status: 'paid', amount: 350, net: 315, why: 'paid in full before per-milestone payouts', at: '2026-03-28' } } },
+  { id: 'ar3', kind: 'project-audit', taskId: 't4', milestoneId: 'm9', workerId: 'u7', clientId: 'u1', expertId: 'u3', disputeId: null, status: 'in-progress', feePaid: true, paidAt: '2026-03-26', agreedAmount: 280, offers: [{ id: 'of2', offeredBy: 'expert', amount: 280, note: 'Scoped to the permission model only.', status: 'accepted', createdAt: '2026-03-20' }], severity: 'Low', project: 'Content Management System', worker: 'Emily Rodriguez', milestone: 'User Permission System', createdAt: '2026-03-20', dueDate: '2026-03-27', auditedMilestoneIds: ['m9'], paidAmount: 280, milestonePayouts: { m9: { status: 'paid', amount: 280, net: 252, why: 'paid in full before per-milestone payouts', at: '2026-03-26' } } },
 ];
+
+// d1's arbitration: the client offered the reviewer ₹200 when raising it.
+SEED_AUDIT_REQUESTS.push(
+  { id: 'ar4', kind: 'dispute-audit', taskId: 't1', milestoneId: 'm3', workerId: 'u5', clientId: 'u1', payerId: 'u1', expertId: 'u3', disputeId: 'd1', status: 'negotiating', agreedAmount: null, offers: [{ id: 'of4', offeredBy: 'client', amount: 200, note: 'Opening offer', status: 'pending', createdAt: '2026-03-29' }], severity: 'High', project: 'E-commerce Website Redesign', worker: 'Sarah Johnson', milestone: 'Backend Integration', createdAt: '2026-03-29', dueDate: null, auditedMilestoneIds: [] } as any,
+);
 
 export const SEED_AUDIT_REPORTS = [
   { id: 'rep1', auditRequestId: 'ar3', taskId: 't4', milestoneId: 'm9', expertId: 'u3', verdict: 'pass', overall: 'Pass', findings: 'Code quality is excellent. Security implementation follows OWASP standards. Role-based access is properly implemented with no privilege escalation vulnerabilities detected.', codequality: 5, security: 5, performance: 4, documentation: 4, createdAt: '2026-03-26', milestoneTitle: 'User Permission System', projectTitle: 'Content Management System', workerName: 'Emily Rodriguez' },
@@ -100,8 +109,8 @@ export const SEED_AUDIT_REPORTS = [
 ];
 
 export const SEED_DISPUTES = [
-  { id: 'd1', taskId: 't1', milestoneId: 'm3', raisedBy: 'u1', raisedByName: 'James Client', againstId: 'u5', againstName: 'Sarah Johnson', status: 'open', reason: 'The backend integration milestone was submitted but the API endpoints return incorrect data formats. The payment gateway integration is also incomplete.', expertId: null, verdict: null, resolution: null, amount: '$500', project: 'E-commerce Website Redesign', milestone: 'Backend Integration', createdAt: '2026-03-29', resolvedAt: null },
-  { id: 'd2', taskId: 't6', milestoneId: null, raisedBy: 'u2', raisedByName: 'Alex Worker', againstId: 'u8', againstName: 'Bob Client', status: 'resolved', reason: 'Client has not responded to milestone submission for over 2 weeks. Payment is being unfairly withheld.', expertId: 'u3', verdict: 'worker-favour', resolution: 'After reviewing the submitted work and communication logs, the milestone is deemed complete. Escrow funds released to worker.', amount: '$660', project: 'UI Design System', milestone: 'Phase 1 Components', createdAt: '2026-03-15', resolvedAt: '2026-03-22' },
+  { id: 'd1', taskId: 't1', milestoneId: 'm3', raisedBy: 'u1', raisedByName: 'James Client', againstId: 'u5', againstName: 'Sarah Johnson', status: 'open', reason: 'Incomplete work', details: 'The backend integration milestone was submitted but the API endpoints return incorrect data formats. The payment gateway integration is also incomplete.', outcome: 'Revision of the API responses and the payment integration', expertId: 'u3', payerId: 'u1', reviewerFee: 200, auditRequestId: 'ar4', milestoneStatusBefore: 'submitted', verdict: null, resolution: null, amount: '₹500', project: 'E-commerce Website Redesign', milestone: 'Backend Integration', createdAt: '2026-03-29', resolvedAt: null },
+  { id: 'd2', taskId: 't6', milestoneId: null, raisedBy: 'u8', raisedByName: 'Bob Client', againstId: 'u2', againstName: 'Alex Worker', payerId: 'u8', status: 'resolved', reason: 'Components do not match the agreed design tokens', details: 'Several components use colours and spacing that differ from the design system brief.', expertId: 'u3', verdict: 'worker-favour', resolution: 'After reviewing the submitted work and communication logs, the milestone is deemed complete. Escrow funds released to worker.', amount: '₹660', project: 'UI Design System', milestone: 'Phase 1 Components', createdAt: '2026-03-15', resolvedAt: '2026-03-22' },
 ];
 
 export const SEED_TRANSACTIONS = [
@@ -120,13 +129,16 @@ export const SEED_TRANSACTIONS = [
   { id: 'tx11', type: 'escrow-lock', amount: 2200, fromId: 'u8', toId: 'escrow', taskId: 't6', milestoneId: null, description: 'Escrow funded for UI Design System', status: 'completed', createdAt: '2026-03-12' },
   // Audit escrow for the two historical audits that were completed and paid.
   { id: 'tx12', type: 'audit-escrow-lock', amount: 350, fromId: 'u1', toId: 'escrow', taskId: 't2', milestoneId: null, description: 'Escrow funded for technical audit', status: 'completed', createdAt: '2026-03-25' },
-  { id: 'tx13', type: 'audit-release', amount: 315, grossAmount: 350, feeAmount: 35, netAmount: 315, feeType: 'expert-service', fromId: 'escrow', toId: 'u3', taskId: 't2', milestoneId: null, auditRequestId: 'ar1', description: 'Audit fee released ($350 less 10% commission)', status: 'completed', createdAt: '2026-03-28' },
+  { id: 'tx13', type: 'audit-release', amount: 315, grossAmount: 350, feeAmount: 35, netAmount: 315, feeType: 'expert-service', fromId: 'escrow', toId: 'u3', taskId: 't2', milestoneId: null, auditRequestId: 'ar1', description: 'Audit fee released (₹350 less 10% commission)', status: 'completed', createdAt: '2026-03-28' },
   { id: 'tx14', type: 'audit-escrow-lock', amount: 280, fromId: 'u1', toId: 'escrow', taskId: 't4', milestoneId: null, description: 'Escrow funded for technical audit', status: 'completed', createdAt: '2026-03-20' },
-  { id: 'tx15', type: 'audit-release', amount: 252, grossAmount: 280, feeAmount: 28, netAmount: 252, feeType: 'expert-service', fromId: 'escrow', toId: 'u3', taskId: 't4', milestoneId: null, auditRequestId: 'ar3', description: 'Audit fee released ($280 less 10% commission)', status: 'completed', createdAt: '2026-03-26' },
+  // Open projects hold their budget from the day they are posted.
+  { id: 'tx16', type: 'escrow-lock', amount: 1200, grossAmount: 1200, feeAmount: 0, netAmount: 1200, fromId: 'u1', toId: 'escrow', taskId: 't3', milestoneId: null, description: 'Project budget held in escrow for API Integration Project', status: 'completed', createdAt: '2026-03-05' },
+  { id: 'tx17', type: 'escrow-lock', amount: 6000, grossAmount: 6000, feeAmount: 0, netAmount: 6000, fromId: 'u8', toId: 'escrow', taskId: 't5', milestoneId: null, description: 'Project budget held in escrow for AI Chatbot Integration', status: 'completed', createdAt: '2026-03-10' },
+  { id: 'tx15', type: 'audit-release', amount: 252, grossAmount: 280, feeAmount: 28, netAmount: 252, feeType: 'expert-service', fromId: 'escrow', toId: 'u3', taskId: 't4', milestoneId: null, auditRequestId: 'ar3', description: 'Audit fee released (₹280 less 10% commission)', status: 'completed', createdAt: '2026-03-26' },
 ];
 
 export const SEED_EXPERT_APPLICATIONS = [
   { id: 'ea1', name: 'Dr. Jane Smith', email: 'expert@gmail.com', phone: '9876543210', phoneCountry: '+1', country: 'United States', expertise: 'Full-Stack Development', experience: '10+', linkedin: 'https://linkedin.com/in/janesmith', github: 'https://github.com/janesmith', motivation: 'Passionate about code quality and helping teams deliver secure, scalable solutions.', status: 'approved', appliedAt: '2026-01-15', reviewedAt: '2026-01-18', reviewedBy: 'u4' },
 ];
 
-export const SEED_NOTIFICATIONS = [];
+export const SEED_NOTIFICATIONS: any[] = [];

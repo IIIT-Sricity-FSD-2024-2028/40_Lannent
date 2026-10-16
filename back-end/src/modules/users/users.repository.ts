@@ -16,6 +16,16 @@ export class UsersRepository {
   private workers: any[] = JSON.parse(JSON.stringify(SEED_WORKERS));
   private experts: any[] = JSON.parse(JSON.stringify(SEED_EXPERTS));
   private counter = 100;
+  /**
+   * Project counts (and an expert's reviews done) are facts about what happened on
+   * the platform, so they are worked out from projects and reviews (by
+   * TasksService) on every read — never typed in or stored.
+   */
+  private statsProvider: ((id: string, role: string) => Record<string, any>) | null = null;
+
+  setStatsProvider(fn: (id: string, role: string) => Record<string, any>) {
+    this.statsProvider = fn;
+  }
 
   generateId(): string {
     return 'u_' + Date.now() + '_' + (this.counter++);
@@ -24,53 +34,29 @@ export class UsersRepository {
   // ── Merge: base user + role-specific fields → flat object ─────────────────
   mergeUser(base: any): any {
     if (!base) return null;
-    const merged: any = { ...base };
+    // Every user has the same shape regardless of role, so pages never have to
+    // guess whether a field exists. Role tables fill in what they hold.
+    const merged: any = {
+      phone: '', phoneCountryCode: '', bio: '',
+      company: '', location: '', companyDetails: null,
+      skills: [], completedProjects: 0, activeProjects: 0,
+      jobTitle: '', experienceLevel: '', hourlyRate: 0, languages: [], portfolioProjects: [], availability: null,
+      specialization: '', reviewsDone: 0, domains: [],
+      ...base,
+    };
 
-    if (base.role === 'client') {
-      const sub = this.clients.find(c => c.userId === base.id);
-      merged.company = sub?.company ?? '';
-      merged.location = sub?.location ?? '';
-      merged.skills = [];
-      merged.rating = 0;
-      merged.completedProjects = 0;
-      merged.specialization = '';
-      merged.reviewsDone = 0;
-      merged.domains = [];
-    } else if (base.role === 'worker') {
-      const sub = this.workers.find(w => w.userId === base.id);
-      merged.location = sub?.location ?? '';
-      merged.skills = sub?.skills ?? [];
-      merged.rating = sub?.rating ?? 0;
-      merged.completedProjects = sub?.completedProjects ?? 0;
-      merged.company = '';
-      merged.specialization = '';
-      merged.reviewsDone = 0;
-      merged.domains = [];
-    } else if (base.role === 'expert') {
-      const sub = this.experts.find(e => e.userId === base.id);
-      merged.specialization = sub?.specialization ?? '';
-      merged.reviewsDone = sub?.reviewsDone ?? 0;
-      // Domains drive reviewer matching when a client enables an audit.
-      merged.domains = sub?.domains ?? [];
-      merged.hourlyRate = sub?.hourlyRate ?? 0;
-      merged.company = '';
-      merged.location = '';
-      merged.skills = [];
-      merged.rating = 0;
-      merged.completedProjects = 0;
-    } else {
-      // Staff roles (superuser, admin) have no sub-table — zero-fill so every
-      // user has the same shape regardless of role.
-      merged.company = '';
-      merged.location = '';
-      merged.skills = [];
-      merged.rating = 0;
-      merged.completedProjects = 0;
-      merged.specialization = '';
-      merged.reviewsDone = 0;
-      merged.domains = [];
+    const sub =
+      base.role === 'client' ? this.clients.find(c => c.userId === base.id) :
+      base.role === 'worker' ? this.workers.find(w => w.userId === base.id) :
+      base.role === 'expert' ? this.experts.find(e => e.userId === base.id) :
+      null;
+    if (sub) {
+      const { userId: _omit, ...fields } = sub;
+      for (const [k, v] of Object.entries(fields)) {
+        if (v !== undefined && v !== null) merged[k] = v;
+      }
     }
-
+    if (this.statsProvider) Object.assign(merged, this.statsProvider(base.id, base.role));
     return merged;
   }
 

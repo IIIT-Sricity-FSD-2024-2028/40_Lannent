@@ -59,7 +59,11 @@ export class AuditService {
   toCsv(rows: AuditEvent[]): string {
     const header = ['at', 'requestId', 'actorId', 'actorRole', 'kind', 'method', 'path', 'status', 'outcome', 'detail'];
     const escape = (v: any) => {
-      const s = v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+      let s = v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+      // A cell starting with = + - @ (or a tab/CR) is run as a formula by
+      // Excel and Sheets, and the path column is whatever URL the caller sent.
+      // A leading apostrophe makes the spreadsheet show it as text.
+      if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     return [header.join(','), ...rows.map(r => header.map(h => escape((r as any)[h])).join(','))].join('\n');

@@ -4,8 +4,9 @@ import { SEED_PROPOSALS } from '../seed/seed.data';
 /**
  * ProposalsRepository — In-Memory Data Access Layer
  *
- * Manages the PROPOSALS array and provides low-level CRUD operations.
- * Business logic (hiring, invitation acceptance) belongs in ProposalsService.
+ * Manages the PROPOSALS array (worker applications and client invitations)
+ * and provides low-level CRUD operations. Business logic (accepting, hiring)
+ * belongs in ProposalsService.
  */
 @Injectable()
 export class ProposalsRepository {
@@ -19,13 +20,8 @@ export class ProposalsRepository {
   findAll(query?: { taskId?: string; workerId?: string; type?: string }): any[] {
     let result = this.proposals;
     if (query?.taskId) result = result.filter(p => p.taskId === query.taskId);
-    if (query?.workerId) {
-      if (query?.type === 'invitation') {
-        result = result.filter(p => p.workerId === query.workerId && p.type === 'invitation');
-      } else {
-        result = result.filter(p => p.workerId === query.workerId && p.type !== 'invitation');
-      }
-    }
+    if (query?.workerId) result = result.filter(p => p.workerId === query.workerId);
+    if (query?.type) result = result.filter(p => p.type === query.type);
     return result;
   }
 
@@ -45,14 +41,6 @@ export class ProposalsRepository {
     return this.proposals[idx];
   }
 
-  /** Bulk-update all proposals for a given task (used during hiring). */
-  updateAllByTaskId(taskId: string, hiredProposalId: string): void {
-    this.proposals = this.proposals.map(p =>
-      p.taskId === taskId
-        ? { ...p, status: p.id === hiredProposalId ? 'hired' : 'rejected' }
-        : p,
-    );
-  }
 
   resetToSeed(): void {
     this.proposals = JSON.parse(JSON.stringify(SEED_PROPOSALS));
