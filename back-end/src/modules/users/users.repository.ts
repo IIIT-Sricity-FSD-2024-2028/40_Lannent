@@ -76,6 +76,13 @@ export class UsersRepository {
     return base ? this.mergeUser(base) : null;
   }
 
+  /** Phones are stored as "+<country code><number>", so they compare exactly. */
+  findByPhone(phone: string): any | null {
+    if (!phone) return null;
+    const base = this.users.find(u => u.phone && u.phone === phone);
+    return base ? this.mergeUser(base) : null;
+  }
+
   insertBase(baseUser: any): void {
     this.users.push(baseUser);
   }

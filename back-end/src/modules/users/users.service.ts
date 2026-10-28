@@ -33,12 +33,22 @@ export class UsersService {
     return this.usersRepository.findByEmail(email);
   }
 
-  login(email: string, password: string) {
-    // One answer for both failures. Distinct "no account" / "wrong password"
-    // messages told anyone which emails are registered.
-    const user = this.findByEmail(email);
+  findByPhone(phone: string) {
+    return this.usersRepository.findByPhone(phone);
+  }
+
+  /**
+   * `identifier` is an email, or a phone number ("+919876543210") the account
+   * saved in its profile — anything with an @ is treated as an email.
+   */
+  login(identifier: string, password: string) {
+    // One answer for every failure. Distinct "no account" / "wrong password"
+    // messages told anyone which emails (or phones) are registered.
+    const id = String(identifier || '').trim();
+    const byPhone = !id.includes('@');
+    const user = byPhone ? this.usersRepository.findByPhone(id) : this.findByEmail(id);
     if (!user || !verifyPassword(password, user.password)) {
-      throw new BadRequestException('Incorrect email or password.');
+      throw new BadRequestException(byPhone ? 'Incorrect phone number or password.' : 'Incorrect email or password.');
     }
     if (user.status === 'suspended') throw new BadRequestException('This account has been suspended. Contact support.');
 
@@ -70,6 +80,10 @@ export class UsersService {
       throw new ForbiddenException(
         `You cannot sign up as "${dto.role}". Public signup is for ${SELF_SERVICE_ROLES.join(' and ')} accounts.`,
       );
+    }
+    // Everyone who signs up gives a phone number — it signs in as well as the email.
+    if (!dto.phone) {
+      throw new BadRequestException('Enter your phone number with its country code.');
     }
     return this.insertUser(dto);
   }
@@ -104,6 +118,9 @@ export class UsersService {
     // already checked and hashed when they applied. Anything arriving from a
     // form is plaintext and must meet the rules.
     if (!opts.passwordIsHash) assertStrongPassword(dto.password);
+    if (dto.phone && this.usersRepository.findByPhone(dto.phone)) {
+      throw new BadRequestException('Another account already uses this phone number.');
+    }
     const initials = initialsOf(dto.name);
     const colors = [
       'linear-gradient(135deg,#6366f1,#4f46e5)',
@@ -126,6 +143,8 @@ export class UsersService {
       status: 'active',
       joinDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       walletBalance: 0,
+      phone: dto.phone || '',
+      phoneCountryCode: dto.phone ? (dto.phoneCountryCode || '') : '',
       // Bumped on every password change; tokens carry it, so changing a
       // password signs out every session that used the old one.
       tokenVersion: 0,
@@ -184,6 +203,11 @@ export class UsersService {
       const owner = this.usersRepository.findByEmail(email);
       if (owner && owner.id !== id) throw new BadRequestException('Another account already uses this email address.');
       baseUpdates.email = email;
+    }
+    if (dto.phone) {
+      // A phone signs in, so it can belong to one account only.
+      const owner = this.usersRepository.findByPhone(dto.phone);
+      if (owner && owner.id !== id) throw new BadRequestException('Another account already uses this phone number.');
     }
     for (const key of ['avatar', 'avatarColor', 'status', 'phone', 'phoneCountryCode', 'bio'] as const) {
       if ((dto as any)[key] !== undefined) baseUpdates[key] = (dto as any)[key];
@@ -258,6 +282,22 @@ export class UsersService {
     }
     base.password = hashPassword(newPassword);
     // Every token issued before this moment stops working.
+    base.tokenVersion = (base.tokenVersion || 0) + 1;
+    base.mustChangePassword = false;
+    return { changed: true };
+  }
+
+  /**
+   * Sets a new password for someone who proved they own the account's email
+   * (PasswordResetService checks the emailed link). Like a change, it ends
+   * every session — and it clears a temporary password, because the owner has
+   * now chosen their own.
+   */
+  resetPassword(id: string, newPassword: string) {
+    const base = this.usersRepository.getRawBase(id);
+    if (!base) throw new NotFoundException(`User with id "${id}" not found`);
+    assertStrongPassword(newPassword);
+    base.password = hashPassword(newPassword);
     base.tokenVersion = (base.tokenVersion || 0) + 1;
     base.mustChangePassword = false;
     return { changed: true };

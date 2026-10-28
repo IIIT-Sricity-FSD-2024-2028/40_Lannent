@@ -22,14 +22,16 @@ function createAuth(Store) {
   const TOKEN_KEY = 'lannent_token';
   const API = LANNENT_API;
 
-  function login(email, password) {
+  /** `identifier` is an email, or a phone number with its country code ("+919876543210"). */
+  function login(identifier, password) {
     // Synchronous wrapper: try API first, fall back to Store
     try {
       const xhr = new XMLHttpRequest();
       // /auth/login returns a bearer token alongside the session.
       xhr.open('POST', `${API}/auth/login`, false); // synchronous
       xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.send(JSON.stringify({ email, password }));
+      const who = String(identifier).startsWith('+') ? { phone: identifier } : { email: identifier };
+      xhr.send(JSON.stringify({ ...who, password }));
 
       if (xhr.status === 200 || xhr.status === 201) {
         const result = JSON.parse(xhr.responseText);

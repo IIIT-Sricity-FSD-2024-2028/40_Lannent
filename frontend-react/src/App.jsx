@@ -21,6 +21,8 @@ const Signup = lazy(() => import('./pages/Signup'));
 const ExpertLanding = lazy(() => import('./pages/ExpertLanding'));
 const ExpertLogin = lazy(() => import('./pages/ExpertLogin'));
 const ExpertSignup = lazy(() => import('./pages/ExpertSignup'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // ── Client pages ──
@@ -157,6 +159,8 @@ export default function App() {
           <Route path="/expert-landing" element={<ExpertLanding />} />
           <Route path="/expert-login" element={<ExpertLogin />} />
           <Route path="/expert-signup" element={<ExpertSignup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* ── CLIENT ── */}
           <Route path="/client-dashboard" element={guard(['client'], <ClientDashboard />)} />

@@ -37,7 +37,7 @@ export class UsersController {
   @Throttle({ default: { ttl: 60_000, limit: 10 } })
   @ApiOperation({ summary: 'Login with email and password' })
   login(@Body() dto: LoginDto) {
-    const { user, session } = this.usersService.login(dto.email, dto.password);
+    const { user, session } = this.usersService.login(dto.phone || dto.email || '', dto.password);
     return { user: redact(user), session };
   }
 

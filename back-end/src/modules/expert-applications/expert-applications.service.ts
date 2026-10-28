@@ -140,6 +140,12 @@ export class ExpertApplicationsService {
         // a working login anyone could guess for any approved reviewer.
         throw new BadRequestException('This application has no password, so no account can be created for it.');
       }
+      // The phone from the application comes along so the reviewer can sign in
+      // with it — unless it is malformed or already another account's, which
+      // must not hold up the approval.
+      const code = String(app.phoneCountry || '').trim();
+      const phone = code + String(app.phone || '').replace(/\D/g, '');
+      const usablePhone = /^\+\d{6,18}$/.test(phone) && !this.usersService.findByPhone(phone);
       this.usersService.createPrivileged(
         {
           name: app.name,
@@ -147,6 +153,7 @@ export class ExpertApplicationsService {
           password: app.password,
           role: 'expert',
           specialization: app.expertise || '',
+          ...(usablePhone ? { phone, phoneCountryCode: code } : {}),
         },
         { domains: DOMAINS_BY_EXPERTISE[app.expertise] || [] },
         // The applicant's own password, hashed when they applied.

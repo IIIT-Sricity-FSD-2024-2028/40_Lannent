@@ -44,6 +44,9 @@ export default function Signup() {
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  // Required: the phone signs in as well as the email.
+  const [countryCode, setCountryCode] = useState('+91');
+  const [phone, setPhone] = useState('');
   const [pw, setPw] = useState('');
   const [confirm, setConfirm] = useState('');
   const [selectedRole, setSelectedRole] = useState('');
@@ -84,6 +87,17 @@ export default function Signup() {
     setState('signupEmail', val.length > 0 && !Validate.email(val) ? 'success' : '');
   }
 
+  const PHONE_COUNTRIES = Validate.getPhoneCountries();
+  const phoneRule = Validate.getPhoneValidationRule(countryCode);
+  const phoneCheck = v => Validate.required(v, 'Phone number') || Validate.validatePhoneNumber(v, countryCode);
+
+  function onPhoneChange(value, code = countryCode) {
+    const digits = value.replace(/\D/g, '');
+    setPhone(digits);
+    clearError('signupPhone');
+    setState('signupPhone', digits && !Validate.validatePhoneNumber(digits, code) ? 'success' : '');
+  }
+
   function onPasswordChange(value) {
     setPw(value);
     clearError('signupPw');
@@ -106,6 +120,7 @@ export default function Signup() {
     const { valid, errors: formErrors } = validateForm([
       { fieldId: 'signupName', value: nameVal, checks: [Validate.fullName] },
       { fieldId: 'signupEmail', value: emailVal, checks: [Validate.email] },
+      { fieldId: 'signupPhone', value: phone.trim(), checks: [phoneCheck] },
       { fieldId: 'signupPw', value: pw, checks: [Validate.password] },
       { fieldId: 'signupConfirm', value: confirm, checks: [v => Validate.passwordMatch(pw, v)] },
     ]);
@@ -130,11 +145,14 @@ export default function Signup() {
     setTimeout(() => {
       const initials = nameVal.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
       try {
-        Store.createUser({ name: nameVal, email: emailVal, password: pw, role: selectedRole, avatar: initials, avatarColor: ROLE_COLORS[selectedRole] || '' });
+        Store.createUser({
+          name: nameVal, email: emailVal, phone: countryCode + phone.trim(), phoneCountryCode: countryCode,
+          password: pw, role: selectedRole, avatar: initials, avatarColor: ROLE_COLORS[selectedRole] || '',
+        });
       } catch (e) {
         // e.g. the email is taken. A refused signup used to create a
         // local-only account and then fail to sign in with no explanation.
-        showError('signupEmail', e.message);
+        showError(/phone/i.test(e.message) ? 'signupPhone' : 'signupEmail', e.message);
         setSubmitting(false);
         return;
       }
@@ -184,6 +202,20 @@ export default function Signup() {
               <input type="email" className={'form-input' + stateClass(fieldState.signupEmail)} placeholder="you@example.com" id="signupEmail"
                      value={email} onChange={e => onEmailChange(e.target.value)} style={errorStyle('signupEmail')} />
               <FieldError id="signupEmail" message={errors.signupEmail} />
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="signupPhone">Phone Number</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <select className="form-input" aria-label="Country code" value={countryCode} style={{ width: 'auto', flex: 'none', paddingRight: 8 }}
+                        onChange={e => { setCountryCode(e.target.value); onPhoneChange(phone, e.target.value); }}>
+                  {PHONE_COUNTRIES.map(c => <option key={c.code} value={c.code}>{`${c.flag} ${c.code}`}</option>)}
+                </select>
+                <input type="tel" inputMode="numeric" className={'form-input' + stateClass(fieldState.signupPhone)} placeholder={phoneRule.placeholder}
+                       id="signupPhone" autoComplete="tel-national" maxLength={phoneRule.length}
+                       value={phone} onChange={e => onPhoneChange(e.target.value)}
+                       style={{ ...(errorStyle('signupPhone') || {}), flex: 1, minWidth: 0 }} />
+              </div>
+              <FieldError id="signupPhone" message={errors.signupPhone} />
             </div>
             <div className="form-group">
               <label className="form-label">Password</label>

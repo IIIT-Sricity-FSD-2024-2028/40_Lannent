@@ -107,6 +107,7 @@ export default function ExpertLogin() {
               <div className="form-group">
                 <div className="form-label-row">
                   <label className="form-label" style={{ marginBottom: 0 }}>Password</label>
+                  <Link to="/forgot-password" style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Forgot password?</Link>
                 </div>
                 <PasswordInput
                   id="expertPw"

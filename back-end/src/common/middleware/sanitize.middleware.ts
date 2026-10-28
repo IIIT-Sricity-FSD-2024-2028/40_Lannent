@@ -20,7 +20,7 @@ const DANGEROUS_ATTRS = /<[^<>]*(?:\son\w+\s*=|(?:href|src|action|formaction|dat
  * Fields whose value must survive byte-for-byte. A password may legitimately
  * contain `<`, and rewriting one silently breaks the login it was chosen for.
  */
-const VERBATIM = new Set(['password', 'confirmPassword', 'token', 'authorization']);
+const VERBATIM = new Set(['password', 'confirmPassword', 'currentPassword', 'newPassword', 'token', 'authorization']);
 
 /**
  * Removes what can execute from incoming text, and leaves the rest alone.

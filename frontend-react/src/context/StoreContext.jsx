@@ -254,7 +254,10 @@ const Store = (() => {
     try { hadToken = !!localStorage.getItem('lannent_token'); } catch {}
     if (!hadToken) return;
     try { localStorage.removeItem('lannent_session'); localStorage.removeItem('lannent_token'); } catch {}
-    if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+    // The password-reset pages are for people who cannot sign in, so a dead
+    // token must not bounce them off the link they followed.
+    const stay = ['/login', '/forgot-password', '/reset-password'];
+    if (typeof window !== 'undefined' && !stay.includes(window.location.pathname)) {
       window.location.href = '/login';
     }
   }

@@ -1,3 +1,5 @@
+// The secret is read the moment this module loads, so .env must be in first.
+import './load-env';
 import { randomBytes } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 

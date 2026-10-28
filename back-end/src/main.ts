@@ -2,7 +2,7 @@
 // `export const JWT_SECRET = resolveSecret()` runs the moment jwt.config is
 // imported, which happens while the import graph below is still resolving. A
 // ConfigModule registered inside AppModule would arrive far too late.
-import 'dotenv/config';
+import './common/security/load-env';
 
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';

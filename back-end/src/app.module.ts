@@ -25,6 +25,7 @@ import { AuthMiddleware } from './common/middleware/auth.middleware';
 import { PayloadGuardMiddleware } from './common/middleware/payload-guard.middleware';
 import { SanitizeMiddleware } from './common/middleware/sanitize.middleware';
 import { LoggingModule } from './common/logging/logging.module';
+import { MailModule } from './common/mail/mail.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { LoggingModule } from './common/logging/logging.module';
       { name: 'default', ttl: 60_000, limit: Number(process.env.RATE_LIMIT_PER_MIN) || 2000 },
     ]),
     LoggingModule,
+    MailModule,
     UsersModule,
     TasksModule,
     MilestonesModule,

@@ -1,4 +1,4 @@
-import { IsEmail, IsString, IsOptional, IsNumber, IsArray, IsIn } from 'class-validator';
+import { IsEmail, IsString, IsOptional, IsArray, IsIn, Matches, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ALL_ROLES } from '../../../common/constants/roles';
 
@@ -14,6 +14,16 @@ export class CreateUserDto {
   @ApiProperty({ example: 'Password@123' })
   @IsString()
   password: string;
+
+  /** Required for public signup (UsersService.create); optional when staff create an account. */
+  @ApiPropertyOptional({ example: '+919876543210', description: 'Country code and number — also signs in' })
+  @IsOptional()
+  @Matches(/^\+\d{6,18}$/, { message: 'Enter the phone number with its country code, e.g. +919876543210.' })
+  phone?: string;
+
+  @ApiPropertyOptional({ example: '+91' })
+  @IsOptional() @IsString() @MaxLength(6)
+  phoneCountryCode?: string;
 
   @ApiProperty({ example: 'client', enum: ['client', 'worker', 'expert', 'superuser'] })
   @IsIn(ALL_ROLES)
