@@ -8,11 +8,13 @@
  */
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useSelector } from 'react-redux';
+import { selectAllTasks } from '../store/slices/tasksSlice';
+import { selectAllTransactions } from '../store/slices/transactionsSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './WorkerMyProjects.css?raw';
 
@@ -35,11 +37,11 @@ function StatusBadge({ status }) {
 }
 
 /** The worker's tasks, shaped as project cards. */
-function getProjects(Store, userId) {
-  const payouts = Store.getTransactionsByUser(userId).filter(tx => tx.type === 'milestone-release' && tx.toId === userId);
-  return Store.getTasksByWorker(userId).map(t => {
-    const client = t.clientId ? Store.getUserById(t.clientId) : null;
-    const milestones = Store.getMilestonesByTask(t.id);
+function getProjects({ tasks, transactions, userById, milestonesByTask }, userId) {
+  const payouts = transactions.filter(t => t.fromId === userId || t.toId === userId).filter(tx => tx.type === 'milestone-release' && tx.toId === userId);
+  return tasks.filter(t => t.workerId === userId).map(t => {
+    const client = t.clientId ? userById(t.clientId) : null;
+    const milestones = milestonesByTask(t.id);
     const doneList = milestones.filter(m => DONE_STATUSES.includes(m.status));
     const done = doneList.length;
     // What actually reached the wallet — milestone payouts net of the service fee.
@@ -120,13 +122,15 @@ function ProjectCard({ project: p }) {
 }
 
 export default function WorkerMyProjects() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById, milestonesByTask } = useLookups();
+  const tasks = useSelector(selectAllTasks);
+  const transactions = useSelector(selectAllTransactions);
+  const currentUser = useCurrentUser();
   usePageTitle('My Projects — Lannent');
-  const session = Auth.getCurrentUser();
+  const session = currentUser;
   const [activeTab, setActiveTab] = useState('all');
 
-  const all = getProjects(Store, session.userId);
+  const all = getProjects({ tasks, transactions, userById, milestonesByTask }, session.userId);
   const active = all.filter(p => p.category === 'active').length;
   const completed = all.filter(p => p.category === 'completed').length;
   const cancelled = all.filter(p => p.category === 'cancelled').length;

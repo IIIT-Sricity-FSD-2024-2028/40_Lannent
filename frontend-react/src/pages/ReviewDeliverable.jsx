@@ -9,13 +9,18 @@
  */
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useValidation } from '../context/ValidationContext';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectAllAuditRequests } from '../store/slices/auditRequestsSlice';
+import { approveDeliverable, updateMilestone } from '../store/slices/milestonesSlice';
+import { fileUrl } from '../store/slices/filesSlice';
+import { findAuditReport, selectAllAuditReports } from '../store/slices/auditReportsSlice';
+import { selectAllTasks } from '../store/slices/tasksSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import EmptyState from '../components/EmptyState';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ReviewDeliverable.css?raw';
 
@@ -40,8 +45,8 @@ const NOTES_STYLE = { background: 'var(--input-bg)', borderRadius: 12, padding: 
 const BUTTON_ICON_STYLE = { width: 16, height: 16, display: 'inline', verticalAlign: 'middle', marginRight: 6 };
 
 /** Finds the milestone to review: from the URL, the workroom's selection, or the first submitted one. */
-function findMilestone(Store, milestoneId, userId) {
-  let milestone = milestoneId ? Store.getMilestoneById(milestoneId) : null;
+function findMilestone({ tasks, milestoneById, milestonesByTask }, milestoneId, userId) {
+  let milestone = milestoneId ? milestoneById(milestoneId) : null;
 
   // The workroom records the milestone the client actually selected before
   // sending them here. Honour it before guessing — the scan below picks the
@@ -50,14 +55,14 @@ function findMilestone(Store, milestoneId, userId) {
   if (!milestone) {
     try {
       const stored = JSON.parse(localStorage.getItem('selectedMilestone') || 'null');
-      if (stored && stored.id) milestone = Store.getMilestoneById(stored.id);
+      if (stored && stored.id) milestone = milestoneById(stored.id);
     } catch (e) { /* nothing usable stored */ }
   }
 
   // Last resort: the first submitted milestone for the client's tasks.
   if (!milestone) {
-    for (const t of Store.getTasksByClient(userId)) {
-      const ms = Store.getMilestonesByTask(t.id).find(m => m.status === 'submitted' || m.status === 'review');
+    for (const t of tasks.filter(t => t.clientId === userId)) {
+      const ms = milestonesByTask(t.id).find(m => m.status === 'submitted' || m.status === 'review');
       if (ms) { milestone = ms; break; }
     }
   }
@@ -134,7 +139,6 @@ function AuditPanel({ engagement, report, reviewer }) {
 
 /** The submitted files (with a download link when the file was stored). */
 function SubmittedFiles({ files }) {
-  const Store = useStore();
   if (!files || !files.length) {
     return (
       <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted-foreground)' }}>
@@ -148,7 +152,7 @@ function SubmittedFiles({ files }) {
     // and nothing to fetch, so the control says so instead of being a
     // button that does nothing.
     const name = typeof f === 'string' ? f : (f && f.name) || 'File';
-    const href = typeof f === 'object' ? Store.fileUrl(f) : '';
+    const href = typeof f === 'object' ? fileUrl(f) : '';
     const size = typeof f === 'object' && f.size ? (Number(f.size) / 1024).toFixed(0) + ' KB' : 'Submitted file';
     return (
       <div key={i} className="file-row">
@@ -170,13 +174,17 @@ function SubmittedFiles({ files }) {
 }
 
 export default function ReviewDeliverable() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const tasks = useSelector(selectAllTasks);
+  const { userById, taskById, milestoneById, milestonesByTask } = useLookups();
+  const auditRequests = useSelector(selectAllAuditRequests);
+  const auditReports = useSelector(selectAllAuditReports);
+  const dispatch = useDispatch();
+  const currentUser = useCurrentUser();
   const Validate = useValidation();
   usePageTitle('Review Deliverable — Lannent');
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const session = Auth.getCurrentUser();
+  const session = currentUser;
   const milestoneId = searchParams.get('milestoneId') || searchParams.get('id');
   // The layout follows who is signed in. It came from `?role=`, defaulting
   // to client, so a link without the parameter (the worker sidebar's "Reports")
@@ -191,7 +199,7 @@ export default function ReviewDeliverable() {
   const [openedAt] = useState(() => Date.now());
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const milestone = findMilestone(Store, milestoneId, session.userId);
+  const milestone = findMilestone({ tasks, milestoneById, milestonesByTask }, milestoneId, session.userId);
   if (!milestone) {
     return (
       <>
@@ -202,8 +210,8 @@ export default function ReviewDeliverable() {
     );
   }
 
-  const task = Store.getTaskById(milestone.taskId);
-  const worker = milestone.workerId ? Store.getUserById(milestone.workerId) : null;
+  const task = taskById(milestone.taskId);
+  const worker = milestone.workerId ? userById(milestone.workerId) : null;
 
   // The Expert Reviewer's verdict on this work. The client releases escrow
   // from this page, and previously had no sight of the audit at all — the
@@ -211,14 +219,14 @@ export default function ReviewDeliverable() {
   // Match this milestone specifically, or a project-wide audit not yet
   // pointed at one. Falling back to any engagement on the task showed
   // another milestone's verdict on this page.
-  const engagements = (Store.getAuditRequests() || []).filter(a => a.taskId === milestone.taskId && a.kind !== 'dispute-audit'
+  const engagements = (auditRequests || []).filter(a => a.taskId === milestone.taskId && a.kind !== 'dispute-audit'
     && !['declined', 'cancelled'].includes(a.status));
   const engagement = engagements.find(a => a.expertId) || engagements[0] || null;
   const reviewable = ['submitted', 'review'].includes(milestone.status);
   // The report for THIS milestone — the engagement covers the whole project,
   // and its first report is usually about a different milestone.
-  const auditReport = engagement ? Store.getAuditReportByRequest(engagement.id, milestone.id) : null;
-  const reviewer = engagement && engagement.expertId ? Store.getUserById(engagement.expertId) : null;
+  const auditReport = engagement ? findAuditReport(auditReports, engagement.id, milestone.id) : null;
+  const reviewer = engagement && engagement.expertId ? userById(engagement.expertId) : null;
 
   const deliverable = {
     project: task ? task.title : 'Unknown Project',
@@ -258,11 +266,11 @@ export default function ReviewDeliverable() {
     setConfirmOpen(true);
   }
 
-  function confirmRelease() {
+  async function confirmRelease() {
     setConfirmOpen(false);
     let result;
     try {
-      result = Store.approveDeliverable(milestone.id);
+      result = await dispatch(approveDeliverable(milestone.id)).unwrap();
     } catch (e) {
       // e.g. escrow cannot cover it, or the milestone is under dispute. This
       // used to be logged and then reported as "released".
@@ -274,7 +282,7 @@ export default function ReviewDeliverable() {
     setTimeout(() => navigate('/client-my-projects'), 2000);
   }
 
-  function handleRequestChanges() {
+  async function handleRequestChanges() {
     if (comments.trim().length < 10) { setCommentsError('Tell the worker what to change (at least 10 characters).'); return; }
     if (revisionsLeft <= 0) { Validate.toast('You have asked for changes 3 times on this milestone. Approve it, or raise a dispute and let a reviewer decide.', 'error'); return; }
     setCommentsError('');
@@ -283,7 +291,7 @@ export default function ReviewDeliverable() {
     if (!reviewable) { Validate.toast('This milestone is not waiting for your review.', 'error'); return; }
     try {
       // The comments go with the request — they are what the worker revises against.
-      Store.updateMilestone(milestone.id, { status: 'revision-needed', revisionNote: comments.trim() });
+      await dispatch(updateMilestone({ id: milestone.id, updates: { status: 'revision-needed', revisionNote: comments.trim() } })).unwrap();
     } catch (e) {
       Validate.toast((e.message), 'error');
       return;

@@ -8,17 +8,17 @@
  */
 import ExpertApplicationsReview from '../components/ExpertApplicationsReview';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './AdminExpertApplications.css?raw';
+import { useCurrentUser } from '../store/hooks';
 
 export default function AdminExpertApplications() {
-  const Auth = useAuth();
+  const currentUser = useCurrentUser();
   usePageTitle('Expert Applications — Lannent Admin');
   return (
     <>
       <PageStyle css={pageCss} />
-      <ExpertApplicationsReview role={(Auth.getCurrentUser() || {}).role} activePath="/admin-expert-applications" showDocuments />
+      <ExpertApplicationsReview role={(currentUser || {}).role} activePath="/admin-expert-applications" showDocuments />
     </>
   );
 }

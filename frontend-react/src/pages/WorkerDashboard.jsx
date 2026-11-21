@@ -6,36 +6,42 @@
  * and a few open tasks they could apply for.
  */
 import { Link, useNavigate } from 'react-router-dom';
+import { hoverBackground } from '../utils/helpers';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useSelector } from 'react-redux';
+import { selectAllProposals } from '../store/slices/proposalsSlice';
+import { selectAllTasks } from '../store/slices/tasksSlice';
+import { selectAllTransactions } from '../store/slices/transactionsSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import StatCard from '../components/StatCard';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { hoverBackground } from '../utils/helpers';
 import usePageTitle from '../hooks/usePageTitle';
 
 const DONE_STATUSES = ['completed', 'approved', 'audit-passed', 'done'];
 const STATUS_BADGES = { 'in-progress': 'badge-blue', 'review': 'badge-purple', 'pending': 'badge-orange', 'completed': 'badge-green', 'open': 'badge-orange' };
 
 export default function WorkerDashboard() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById, milestonesByTask } = useLookups();
+  const proposals = useSelector(selectAllProposals);
+  const tasks = useSelector(selectAllTasks);
+  const transactions = useSelector(selectAllTransactions);
+  const currentUser = useCurrentUser();
   usePageTitle('Worker Dashboard — Lannent');
   const navigate = useNavigate();
 
   // Live stats from store
-  const session = Auth.getCurrentUser();
+  const session = currentUser;
   const userId = session.userId;
-  const myTasks = Store.getTasksByWorker(userId);
+  const myTasks = tasks.filter(t => t.workerId === userId);
   const activeProjects = myTasks.filter(t => t.status === 'in-progress').length;
   const completedProjects = myTasks.filter(t => t.status === 'completed').length;
-  const earned = Store.getTransactions().filter(t => t.type === 'milestone-release' && t.toId === userId)
+  const earned = transactions.filter(t => t.type === 'milestone-release' && t.toId === userId)
     .reduce((s, t) => s + (t.netAmount != null ? t.netAmount : t.amount || 0), 0);
-  const applications = Store.getApplicationsByWorker(userId);
+  const applications = proposals.filter(p => p.workerId === userId && p.type === 'application');
   const pendingApplications = applications.filter(p => p.status === 'pending').length;
 
   const activeTasks = myTasks.filter(t => !['completed', 'cancelled'].includes(t.status)).slice(0, 3);
-  const recommendedTasks = Store.getTasks().filter(t => t.status === 'open' && t.workerId !== userId && t.clientId !== userId).slice(0, 3);
+  const recommendedTasks = tasks.filter(t => t.status === 'open' && t.workerId !== userId && t.clientId !== userId).slice(0, 3);
 
   return (
     <DashboardLayout role="worker" activePath="/worker-dashboard" pageTitle="Worker Dashboard" pageSubtitle="Track your active projects and find new opportunities">
@@ -103,10 +109,10 @@ export default function WorkerDashboard() {
           </div>
           <div style={{ padding: '8px 0' }}>
             {activeTasks.length ? activeTasks.map(t => {
-              const client = Store.getUserById(t.clientId);
+              const client = userById(t.clientId);
               const clientName = client ? client.name : 'Unknown Client';
               const dueText = t.deadline ? new Date(t.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'TBD';
-              const ms = Store.getMilestonesByTask(t.id);
+              const ms = milestonesByTask(t.id);
               const msCount = ms.length;
               const msDone = ms.filter(m => DONE_STATUSES.includes(m.status)).length;
               const prog = msCount ? Math.round((msDone / msCount) * 100) : 0;

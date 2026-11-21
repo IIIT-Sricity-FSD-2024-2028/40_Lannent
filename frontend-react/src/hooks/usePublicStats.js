@@ -1,21 +1,16 @@
 /**
- * Live platform figures for the public landing pages (GET /api/stats/public).
- * Returns null until they arrive, or if the API cannot be reached — callers
- * then show no number rather than an invented one.
+ * Live platform figures for the public landing pages, from the Redux store
+ * (stats slice). Returns null until they arrive, or if the API cannot be
+ * reached — callers then show no number rather than an invented one.
  */
-import { useEffect, useState } from 'react';
-import { LANNENT_API } from '../context/StoreContext';
+import { useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchPublicStats, selectPublicStats } from '../store/slices/statsSlice';
 
 export default function usePublicStats() {
-  const [stats, setStats] = useState(null);
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`${LANNENT_API}/stats/public`)
-      .then(r => (r.ok ? r.json() : null))
-      .then(json => { if (!cancelled && json) setStats(json.data || json); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
+  const dispatch = useDispatch();
+  const stats = useSelector(selectPublicStats);
+  useEffect(() => { dispatch(fetchPublicStats()); }, [dispatch]);
   return stats;
 }
 

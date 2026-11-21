@@ -6,14 +6,17 @@
  * skills, availability) and a search box. Open a full profile, or
  * invite a worker to one of your open projects.
  */
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { useValidation } from '../context/ValidationContext';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectAllTasks } from '../store/slices/tasksSlice';
+import { selectAllUsers } from '../store/slices/usersSlice';
+import { sendInvitation } from '../store/slices/proposalsSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './HireGigWorkers.css?raw';
 
@@ -24,8 +27,8 @@ const SECTION_TITLE_STYLE = { fontWeight: 700, fontSize: 13, color: '#111827', m
 const sectionIconStyle = bg => ({ width: 20, height: 20, background: bg, borderRadius: 5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 11 });
 
 /** Active workers, shaped for the cards and the profile. */
-function loadWorkersFromStore(Store) {
-  return Store.getUsers()
+function loadWorkersFromStore({ users }) {
+  return users
     .filter(u => u.role === 'worker' && u.status !== 'suspended')
     .map(u => ({
       id: u.id,
@@ -223,11 +226,14 @@ const MAX_RATE = 500;
 const DEFAULT_FILTERS = { search: '', experience: '', maxRate: String(MAX_RATE), skills: [], availability: [] };
 
 export default function HireGigWorkers() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const users = useSelector(selectAllUsers);
+  const { taskById } = useLookups();
+  const tasks = useSelector(selectAllTasks);
+  const currentUser = useCurrentUser();
+  const dispatch = useDispatch();
   const Validate = useValidation();
   usePageTitle('Hire Gig Workers — Lannent');
-  const [workers] = useState(() => loadWorkersFromStore(Store));
+  const workers = useMemo(() => loadWorkersFromStore({ users }), [users]);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [selectedWorker, setSelectedWorker] = useState(null);
   const [profileWorker, setProfileWorker] = useState(null);   // worker shown in the profile panel
@@ -237,8 +243,8 @@ export default function HireGigWorkers() {
   const [inviteMessage, setInviteMessage] = useState('');
 
   // Open projects that can still take an invitation
-  const session = Auth.getCurrentUser();
-  const [openTasks] = useState(() => (session ? Store.getTasksByClient(session.userId).filter(t => t.status === 'open') : null));
+  const session = currentUser;
+  const openTasks = useMemo(() => (session ? tasks.filter(t => t.clientId === session.userId && t.status === 'open') : null), [tasks, session]);
   const [projectId, setProjectId] = useState(() => (openTasks && openTasks.length ? openTasks[0].id : ''));
 
   const setFilter = (key, value) => setFilters(f => ({ ...f, [key]: value }));
@@ -273,14 +279,14 @@ export default function HireGigWorkers() {
     setInviteOpen(true);
   }
 
-  function sendInvite() {
+  async function sendInvite() {
     // Validate: a project must be selected
     if (!projectId) {
       Validate.toast('Please select a project to invite the worker to.', 'error');
       return;
     }
     // Guard: only open tasks accept invitations
-    const task = Store.getTaskById(projectId);
+    const task = taskById(projectId);
     if (task && task.status !== 'open') {
       Validate.toast('This project is no longer open — cannot send invitations.', 'error');
       return;
@@ -288,7 +294,7 @@ export default function HireGigWorkers() {
     // The invitation is at the project's posted budget; the worker accepts or declines it.
     if (selectedWorker) {
       try {
-        Store.sendInvitation({ taskId: projectId, workerId: selectedWorker.id, message: inviteMessage });
+        await dispatch(sendInvitation({ taskId: projectId, workerId: selectedWorker.id, message: inviteMessage })).unwrap();
       } catch (e) {
         Validate.toast((e.message), 'error');
         return;

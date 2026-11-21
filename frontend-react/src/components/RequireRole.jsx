@@ -1,16 +1,16 @@
 /**
  * LANNENT — RequireRole
- * Route guard that replaces `Auth.requireRole(...)` at the top of each page.
- * Not signed in → /login. Wrong role → that user's own dashboard.
+ * Route guard. Not signed in → /login. Wrong role → that user's own dashboard.
  *
  *   <RequireRole roles={['client']}><ClientDashboard /></RequireRole>
  */
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useSelector } from 'react-redux';
+import { getRoleRedirect, selectCurrentUser } from '../store/slices/authSlice';
 
 export default function RequireRole({ roles, children }) {
-  const Auth = useAuth();
-  const redirectTo = Auth.getRoleRedirect(roles);
+  const session = useSelector(selectCurrentUser);
+  const redirectTo = getRoleRedirect(session, roles);
   if (redirectTo) return <Navigate to={redirectTo} replace />;
   return children;
 }

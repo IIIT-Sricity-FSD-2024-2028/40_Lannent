@@ -8,17 +8,20 @@
  * quote — fee by time live, audit and dispute escrow refunded in full — is
  * shown first). Once a worker is hired it cannot be cancelled.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
+import { useValidation } from '../context/ValidationContext';
+import { hoverBackground } from '../utils/helpers';
+import { CATEGORIES as CATEGORY_OPTIONS } from '../utils/categories';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { cancelTask, deleteTask, fetchCancellationQuote, selectAllTasks, updateTask } from '../store/slices/tasksSlice';
+import { fetchMyEscrow, selectMyEscrow } from '../store/slices/ledgerSlice';
+import { selectAllTransactions } from '../store/slices/transactionsSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
-import { hoverBackground } from '../utils/helpers';
-import useRerender from '../hooks/useRerender';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ClientMyProjects.css?raw';
 
@@ -31,7 +34,6 @@ const STATUS_BADGES = {
   'draft': ['badge-amber', 'Draft — awaiting audit'],
   'cancelled': ['badge-gray', 'Cancelled'],
 };
-import { CATEGORIES as CATEGORY_OPTIONS } from '../utils/categories';
 const CARD_BUTTON_STYLE = { padding: 10, border: '1px solid var(--border)', borderRadius: 10, background: 'white', color: 'var(--foreground)', fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1 };
 /** Small icon button (edit / delete) in a card header. */
 const iconButtonStyle = color => ({ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color, borderRadius: 6 });
@@ -55,15 +57,15 @@ function fmtDate(d) {
 }
 
 /** The client's tasks, shaped as project cards. */
-function getProjects(Store, userId) {
-  const escrow = Store.getMyEscrow().projects;
-  const txs = Store.getTransactions();
-  return Store.getTasksByClient(userId).map(t => {
+function getProjects({ tasks, transactions, escrowProjects, userById, milestonesByTask }, userId) {
+  const escrow = escrowProjects;
+  const txs = transactions;
+  return tasks.filter(t => t.clientId === userId).map(t => {
     const held = escrow.find(e => e.taskId === t.id);
     const paidOut = txs.filter(x => x.type === 'milestone-release' && x.taskId === t.id)
       .reduce((a, x) => a + (x.grossAmount != null ? x.grossAmount : x.amount || 0), 0);
-    const worker = t.workerId ? Store.getUserById(t.workerId) : null;
-    const milestones = Store.getMilestonesByTask(t.id);
+    const worker = t.workerId ? userById(t.workerId) : null;
+    const milestones = milestonesByTask(t.id);
     const done = milestones.filter(m => DONE_STATUSES.includes(m.status)).length;
     const calculatedProgress = milestones.length > 0 ? Math.round((done / milestones.length) * 100) : (t.progress || 0);
     return {
@@ -191,12 +193,15 @@ function ProjectCard({ p, onEdit, onDelete, onCancel }) {
 const EMPTY_EDIT = { title: '', category: 'Web Development', deadline: '', status: 'open' };
 
 export default function ClientMyProjects() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const tasks = useSelector(selectAllTasks);
+  const transactions = useSelector(selectAllTransactions);
+  const { taskById, userById, milestonesByTask } = useLookups();
+  const currentUser = useCurrentUser();
   const Validate = useValidation();
   usePageTitle('My Projects — Lannent');
-  const session = Auth.getCurrentUser();
-  const refreshView = useRerender();
+  const session = currentUser;
+  const dispatch = useDispatch();
+  const myEscrow = useSelector(selectMyEscrow);
   const [activeTab, setActiveTab] = useState('all');
 
   // Edit dialog
@@ -204,8 +209,12 @@ export default function ClientMyProjects() {
   const [edit, setEdit] = useState(EMPTY_EDIT);
   const [editErrors, setEditErrors] = useState({});
 
-  const all = getProjects(Store, session.userId);
-  const editingTask = editingTaskId ? Store.getTaskById(editingTaskId) : null;
+  // Escrow held per project, from the server's ledger.
+  useEffect(() => { dispatch(fetchMyEscrow()); }, [dispatch]);
+
+  const escrowProjects = (myEscrow && myEscrow.projects) || [];
+  const all = getProjects({ tasks, transactions, escrowProjects, userById, milestonesByTask }, session.userId);
+  const editingTask = editingTaskId ? taskById(editingTaskId) : null;
   /** The category can change only before anyone is hired. The budget never changes once posted. */
   const editable = task => !!task && ['open', 'draft'].includes(task.status) && !task.workerId;
   const count = cat => all.filter(p => p.category === cat).length;
@@ -213,7 +222,7 @@ export default function ClientMyProjects() {
   const tabClass = tab => 'tab-btn' + (activeTab === tab ? ' active' : '');
 
   function openEditModal(id) {
-    const task = Store.getTaskById(id);
+    const task = taskById(id);
     if (!task) return;
     setEditingTaskId(id);
     setEdit({ title: task.title || '', category: task.category || 'Web Development', deadline: task.deadline || '', status: task.status || 'open' });
@@ -224,24 +233,23 @@ export default function ClientMyProjects() {
     setEditErrors({});
   }
 
-  function saveEdit() {
+  async function saveEdit() {
     const title = edit.title.trim();
     const errors = {};
     if (!title || title.length < 3) errors.title = 'Title must be at least 3 characters.';
     setEditErrors(errors);
     if (Object.keys(errors).length) return;
 
-    const task = Store.getTaskById(editingTaskId);
+    const task = taskById(editingTaskId);
     const patch = { title, deadline: edit.deadline || undefined };
     if (editable(task)) patch.category = edit.category;
     try {
-      Store.updateTask(editingTaskId, patch);
+      await dispatch(updateTask({ id: editingTaskId, updates: patch })).unwrap();
     } catch (e) {
       setEditErrors({ title: e.message });
       return;
     }
     closeEditModal();
-    refreshView();
     Validate.toast('Project updated.', 'success');
   }
 
@@ -258,54 +266,54 @@ export default function ClientMyProjects() {
     return parts.join(' ');
   }
 
-  function quoteFor(id) {
+  async function quoteFor(id) {
     try {
-      return Store.getCancellationQuote(id);
+      return (await dispatch(fetchCancellationQuote(id)).unwrap()).quote;
     } catch (e) {
       Validate.toast(e.message, 'error');
       return null;
     }
   }
 
-  function cancelProject(id) {
-    const task = Store.getTaskById(id);
+  async function cancelProject(id) {
+    const task = taskById(id);
     if (!task) return;
-    const q = quoteFor(id);
+    const q = await quoteFor(id);
     if (!q) return;
     if (!q.cancellable) { Validate.toast(q.reason, 'error'); return; }
-    Validate.confirm(`Cancel "${task.title}"? ${quoteText(q)} Pending applications and invitations are closed. This cannot be undone.`, () => {
+    Validate.confirm(`Cancel "${task.title}"? ${quoteText(q)} Pending applications and invitations are closed. This cannot be undone.`, async () => {
       let result;
       try {
-        result = Store.cancelTask(id);
+        ({ result } = await dispatch(cancelTask(id)).unwrap());
       } catch (e) {
         Validate.toast(e.message, 'error');
         return;
       }
-      refreshView();
+      dispatch(fetchMyEscrow());
       const fee = result?.cancellation?.fee?.fee || 0;
       Validate.toast(fee ? `Project cancelled. ₹${fee} fee kept; the rest is back in your wallet.` : 'Project cancelled and your money returned.', 'success');
     });
   }
 
-  function deleteTask(id) {
-    const task = Store.getTaskById(id);
+  async function handleDelete(id) {
+    const task = taskById(id);
     if (!task) return;
     if (task.workerId) {
       Validate.toast('A worker has been hired, so this project can no longer be cancelled or deleted.', 'error');
       return;
     }
     // Deleting a live project is a cancellation too, so it carries the same fee.
-    const q = task.status === 'open' ? quoteFor(id) : null;
+    const q = task.status === 'open' ? await quoteFor(id) : null;
     if (task.status === 'open' && !q) return;
     const detail = q ? quoteText(q) : 'Anything still held in escrow for it is returned to your wallet.';
-    Validate.confirm(`Delete "${task.title}"? ${detail} This cannot be undone.`, () => {
+    Validate.confirm(`Delete "${task.title}"? ${detail} This cannot be undone.`, async () => {
       try {
-        Store.deleteTask(id);
+        await dispatch(deleteTask(id)).unwrap();
       } catch (e) {
         Validate.toast((e.message), 'error');
         return;
       }
-      refreshView();
+      dispatch(fetchMyEscrow());
       Validate.toast('Project deleted and its escrow returned to your wallet.', 'success');
     });
   }
@@ -348,7 +356,7 @@ export default function ClientMyProjects() {
             </div>
           ) : (
             <div className="projects-grid">
-              {list.map(p => <ProjectCard key={p.id} p={p} onEdit={openEditModal} onDelete={deleteTask} onCancel={cancelProject} />)}
+              {list.map(p => <ProjectCard key={p.id} p={p} onEdit={openEditModal} onDelete={handleDelete} onCancel={cancelProject} />)}
             </div>
           )}
         </div>

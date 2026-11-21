@@ -12,7 +12,8 @@ import Icon from '../components/Icon';
 import AuthBranding from '../components/AuthBranding';
 import PasswordInput from '../components/PasswordInput';
 import FieldError from '../components/FieldError';
-import { useAuth } from '../context/AuthContext';
+import { useDispatch, useSelector } from 'react-redux';
+import { getDashboardUrl, login, selectCurrentUser } from '../store/slices/authSlice';
 import { useValidation } from '../context/ValidationContext';
 import useFieldErrors from '../hooks/useFieldErrors';
 import usePageTitle from '../hooks/usePageTitle';
@@ -21,7 +22,8 @@ import usePageTitle from '../hooks/usePageTitle';
 const codeStyle = { background: '#e2e8f0', padding: '1px 5px', borderRadius: 4 };
 
 export default function Login() {
-  const Auth = useAuth();
+  const dispatch = useDispatch();
+  const session = useSelector(selectCurrentUser);
   const Validate = useValidation();
   usePageTitle('Login — Lannent');
   const navigate = useNavigate();
@@ -35,8 +37,8 @@ export default function Login() {
   const { errors, showError, clearError, clearAllErrors, validateForm, errorStyle } = useFieldErrors();
 
   // If already logged in, redirect
-  if (Auth.isLoggedIn()) {
-    return <Navigate to={Auth.getDashboardUrl(Auth.getCurrentUser().role)} replace />;
+  if (session) {
+    return <Navigate to={getDashboardUrl(session.role)} replace />;
   }
 
   const PHONE_COUNTRIES = Validate.getPhoneCountries();
@@ -63,14 +65,16 @@ export default function Login() {
     if (!valid) return;
 
     setSubmitting(true);
-    setTimeout(() => {
-      const result = Auth.login(method === 'email' ? emailVal : countryCode + digits, password);
-      if (!result.success) {
-        showError(idField, result.error);
+    setTimeout(async () => {
+      let result;
+      try {
+        result = await dispatch(login({ identifier: method === 'email' ? emailVal : countryCode + digits, password })).unwrap();
+      } catch (err) {
+        showError(idField, err.message || 'Login failed. Please try again.');
         setSubmitting(false);
         return;
       }
-      navigate(Auth.getDashboardUrl(result.user.role));
+      navigate(getDashboardUrl(result.user.role));
     }, 400);
   }
 

@@ -1,28 +1,27 @@
 /**
  * LANNENT — React entry point
- * Loads the global stylesheet (copied unchanged from front-end/css/styles.css)
- * and mounts <App /> inside the context providers:
- *   StoreProvider       → useStore()       (the data store)
- *   AuthProvider        → useAuth()        (session, login, logout, role guards)
- *   ValidationProvider  → useValidation()  (validators, toast, confirm)
+ * Loads the global stylesheet and mounts <App /> inside:
+ *   <Provider store>    → the Redux store (all app data and the session; see src/store)
+ *   ValidationProvider  → useValidation()  (validators, toast, confirm — UI helpers, not data)
  *
- * StrictMode is intentionally not used: the Store fills its cache with
- * blocking requests (as the original store.js did), and StrictMode's double
- * rendering would fire every one of them twice.
+ * StrictMode stays off as before: every navigation re-reads the API, and
+ * StrictMode's double effects would fire every one of those requests twice.
  */
 import { createRoot } from 'react-dom/client';
+import { Provider } from 'react-redux';
 import App from './App.jsx';
-import { StoreProvider } from './context/StoreContext';
-import { AuthProvider } from './context/AuthContext';
+import { store } from './store';
+import { installFileLinkInterceptor } from './store/api';
 import { ValidationProvider } from './context/ValidationContext';
 import './styles/styles.css';
 
+// File links (<a href="/api/files/...">) need credentials; download them through fetch.
+installFileLinkInterceptor();
+
 createRoot(document.getElementById('root')).render(
-  <StoreProvider>
-    <AuthProvider>
-      <ValidationProvider>
-        <App />
-      </ValidationProvider>
-    </AuthProvider>
-  </StoreProvider>,
+  <Provider store={store}>
+    <ValidationProvider>
+      <App />
+    </ValidationProvider>
+  </Provider>,
 );

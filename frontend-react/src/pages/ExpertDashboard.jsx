@@ -6,32 +6,38 @@
  * requests and dispute cases they can pick up.
  */
 import { Link, useNavigate } from 'react-router-dom';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useSelector } from 'react-redux';
+import { selectAllAuditRequests } from '../store/slices/auditRequestsSlice';
+import { selectAllDisputes } from '../store/slices/disputesSlice';
+import { selectAllTransactions } from '../store/slices/transactionsSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
 import StatCard from '../components/StatCard';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ExpertDashboard.css?raw';
 
 export default function ExpertDashboard() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById, taskById, milestoneById } = useLookups();
+  const auditRequests = useSelector(selectAllAuditRequests);
+  const disputes = useSelector(selectAllDisputes);
+  const transactions = useSelector(selectAllTransactions);
+  const currentUser = useCurrentUser();
   usePageTitle('Expert Dashboard — Lannent');
   const navigate = useNavigate();
 
   // Live stats from store
-  const session = Auth.getCurrentUser();
+  const session = currentUser;
   const userId = session.userId;
   const LIVE = ['preview-sent', 'negotiating', 'agreed', 'escrow-funded', 'in-progress'];
-  const mine = Store.getAuditRequests().filter(a => a.expertId === userId);
+  const mine = auditRequests.filter(a => a.expertId === userId);
   const liveAudits = mine.filter(a => a.kind !== 'dispute-audit' && LIVE.includes(a.status));
-  const myDisputeList = Store.getDisputes().filter(d => d.expertId === userId || d.resolvedBy === userId);
+  const myDisputeList = disputes.filter(d => d.expertId === userId || d.resolvedBy === userId);
   const openDisputes = myDisputeList.filter(d => d.status === 'open');
-  const expert = Store.getUserById(userId);
+  const expert = userById(userId);
   // What actually reached this reviewer's wallet: audit and dispute fees, net.
-  const earned = Store.getTransactions()
+  const earned = transactions
     .filter(t => ['audit-release', 'dispute-fee-release'].includes(t.type) && t.toId === userId)
     .reduce((s, t) => s + (t.netAmount != null ? t.netAmount : t.amount || 0), 0);
   const feeOf = a => a.agreedAmount || (a.offers || []).filter(o => o.status === 'pending').map(o => o.amount)[0] || null;
@@ -59,8 +65,8 @@ export default function ExpertDashboard() {
               <Link to="/expert-audit-requests" className="btn-outline" style={{ fontSize: 13, padding: '5px 12px' }}>View All</Link>
             </div>
             {myAudits.length ? myAudits.map(a => {
-              const task = Store.getTaskById(a.taskId);
-              const cl = task ? Store.getUserById(task.clientId) : null;
+              const task = taskById(a.taskId);
+              const cl = task ? userById(task.clientId) : null;
               const clName = cl ? cl.name : 'Client';
               const pTitle = task ? task.title : a.project || 'Audit Request';
               const fee = feeOf(a);
@@ -101,11 +107,11 @@ export default function ExpertDashboard() {
               <Link to="/expert-dispute-cases" className="btn-outline" style={{ fontSize: 13, padding: '5px 12px' }}>View All</Link>
             </div>
             {myDisputes.length ? myDisputes.map(d => {
-              const ms = Store.getMilestoneById(d.milestoneId);
-              const task = Store.getTaskById(d.taskId);
+              const ms = milestoneById(d.milestoneId);
+              const task = taskById(d.taskId);
               const eng = mine.filter(a => a.disputeId === d.id).pop();
-              const cl = task ? Store.getUserById(task.clientId) : null;
-              const wkr = task && task.workerId ? Store.getUserById(task.workerId) : null;
+              const cl = task ? userById(task.clientId) : null;
+              const wkr = task && task.workerId ? userById(task.workerId) : null;
               const clName = cl ? cl.name.split(' ')[0] : 'Client';
               const wName = wkr ? wkr.name.split(' ')[0] : 'Worker';
               const pTitle = ms ? ms.title : 'Dispute Case';

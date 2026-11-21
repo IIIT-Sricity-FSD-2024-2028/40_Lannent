@@ -5,14 +5,15 @@
  * Project audits open to (or assigned to) the expert, with counts, search
  * and status filters. Each card opens the engagement preview or the report.
  */
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useSelector } from 'react-redux';
+import { selectAllAuditRequests } from '../store/slices/auditRequestsSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
 import StatCard from '../components/StatCard';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ExpertAuditRequests.css?raw';
 
@@ -73,24 +74,23 @@ function auditUiStatus(a) {
 }
 
 /** Project audits for this reviewer, shaped for the cards. */
-function getAuditRequests(Store, Auth) {
-  const session = Auth.getCurrentUser();
-  return Store.getAuditRequests()
+function toAuditCards({ session, auditRequests, taskById, userById, milestoneById }) {
+  return auditRequests
     // Project audits only — a dispute engagement belongs on Dispute Cases,
     // and used to appear on both pages because kind was never filtered.
     .filter(a => a.kind !== 'dispute-audit')
     // And only what this reviewer is assigned to, or is still open to them.
     .filter(a => !a.expertId || a.expertId === session.userId)
     .map(a => {
-      const task = a.taskId ? Store.getTaskById(a.taskId) : null;
+      const task = a.taskId ? taskById(a.taskId) : null;
       const workerId = a.workerId || task?.workerId;
-      const workerName = workerId ? Store.getUserById(workerId)?.name : null;
+      const workerName = workerId ? userById(workerId)?.name : null;
       return {
       id: a.id,
       milestoneId: a.milestoneId,
       project: a.project || task?.title || 'Project',
       worker: workerName || (typeof a.worker === 'string' ? a.worker : '') || 'No worker hired yet',
-      milestone: a.milestone || (a.milestoneId ? Store.getMilestoneById(a.milestoneId)?.title : '') || 'Every milestone on the project',
+      milestone: a.milestone || (a.milestoneId ? milestoneById(a.milestoneId)?.title : '') || 'Every milestone on the project',
       submitted: a.createdAt,
       status: auditUiStatus(a),
       rawStatus: a.status,
@@ -177,10 +177,14 @@ function AuditCard({ a }) {
 }
 
 export default function ExpertAuditRequests() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const currentUser = useCurrentUser();
   usePageTitle('Audit Requests — Lannent');
-  const [auditRequests] = useState(() => getAuditRequests(Store, Auth));
+  const { taskById, userById, milestoneById } = useLookups();
+  const allAudits = useSelector(selectAllAuditRequests);
+  const auditRequests = useMemo(
+    () => toAuditCards({ session: currentUser, auditRequests: allAudits, taskById, userById, milestoneById }),
+    [currentUser, allAudits, taskById, userById, milestoneById],
+  );
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 

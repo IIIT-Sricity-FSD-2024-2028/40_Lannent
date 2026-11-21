@@ -7,10 +7,11 @@
  * per-project table with a full money-flow breakdown.
  */
 import { useEffect, useRef, useState } from 'react';
+import { useCurrentUser } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchProjectBreakdown, fetchRevenueByFeeType, fetchRevenueByProject, fetchRevenueByUser, fetchRevenueDistribution, fetchRevenueSummary, fetchRevenueTimeseries, selectProjectBreakdown, selectRevenueByFeeType, selectRevenueByProject, selectRevenueByUser, selectRevenueDistribution, selectRevenueSummary, selectRevenueTimeseries } from '../store/slices/revenueSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './AdminRevenue.css?raw';
 
@@ -317,28 +318,44 @@ function TableToggle({ id, style, children }) {
 }
 
 export default function AdminRevenue() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const currentUser = useCurrentUser();
   usePageTitle('Revenue — Lannent');
-  const [data] = useState(() => ({
-    summary: Store.getRevenueSummary(),
-    byFeeType: Store.getRevenueByFeeType(),
-    distribution: Store.getRevenueDistribution(),
-    byProject: Store.getRevenueByProject(),
-    byUser: Store.getRevenueByUser(),
-  }));
+  const dispatch = useDispatch();
+  // Every report comes from the revenue slice.
+  const data = {
+    summary: useSelector(selectRevenueSummary),
+    byFeeType: useSelector(selectRevenueByFeeType),
+    distribution: useSelector(selectRevenueDistribution),
+    byProject: useSelector(selectRevenueByProject),
+    byUser: useSelector(selectRevenueByUser),
+  };
   const [period, setPeriod] = useState('month');
-  const [timeseries, setTimeseries] = useState(() => Store.getRevenueTimeseries('month'));
-  const [breakdown, setBreakdown] = useState(null);   // { b } once a project is opened
+  const timeseries = useSelector(st => selectRevenueTimeseries(st, period));
+  const [breakdownTaskId, setBreakdownTaskId] = useState(null);   // set once a project is opened
+  const breakdownData = useSelector(st => (breakdownTaskId ? selectProjectBreakdown(st, breakdownTaskId) : undefined));
+  // { b } once the opened project's breakdown has arrived (b is null when unavailable)
+  const breakdown = breakdownTaskId && breakdownData !== undefined ? { b: breakdownData } : null;
   const detailRef = useRef(null);
+
+  // Read the reports when the page opens.
+  useEffect(() => {
+    dispatch(fetchRevenueSummary());
+    dispatch(fetchRevenueByFeeType());
+    dispatch(fetchRevenueDistribution());
+    dispatch(fetchRevenueByProject());
+    dispatch(fetchRevenueByUser());
+  }, [dispatch]);
+
+  // The chart's period: read its series whenever it changes.
+  useEffect(() => { dispatch(fetchRevenueTimeseries(period)); }, [dispatch, period]);
 
   // The tooltip lives on <body>; remove it when leaving the page.
   useEffect(() => () => document.getElementById('vizTip')?.remove(), []);
 
   // Bring the breakdown into view when it opens
   useEffect(() => {
-    if (breakdown && detailRef.current) detailRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [breakdown]);
+    if (breakdownTaskId && breakdownData !== undefined && detailRef.current) detailRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [breakdownTaskId, breakdownData]);
 
   const s = data.summary || {};
   const d = data.distribution || { segments: [], totalFunded: 0 };
@@ -348,17 +365,17 @@ export default function AdminRevenue() {
 
   function changePeriod(p) {
     setPeriod(p);
-    setTimeseries(Store.getRevenueTimeseries(p));
   }
 
   function showProject(taskId) {
-    setBreakdown({ b: Store.getProjectBreakdown(taskId) });
+    setBreakdownTaskId(taskId);
+    dispatch(fetchProjectBreakdown(taskId));
   }
 
   return (
     <>
       <PageStyle css={pageCss} />
-      <DashboardLayout role={(Auth.getCurrentUser() || {}).role} activePath="/admin-revenue" pageTitle="Revenue" pageSubtitle="How the platform earns, and what every user receives">
+      <DashboardLayout role={(currentUser || {}).role} activePath="/admin-revenue" pageTitle="Revenue" pageSubtitle="How the platform earns, and what every user receives">
         <div className="viz">
           <div className="rev-tiles">
             <div className="rev-tile">
@@ -496,7 +513,7 @@ export default function AdminRevenue() {
             </div>
             <div id="projectDetail" ref={detailRef}>
               {breakdown && (breakdown.b
-                ? <ProjectBreakdown b={breakdown.b} onClose={() => setBreakdown(null)} />
+                ? <ProjectBreakdown b={breakdown.b} onClose={() => setBreakdownTaskId(null)} />
                 : <div style={{ padding: 18, color: 'var(--muted-foreground)' }}>Could not load that project.</div>)}
             </div>
           </div>

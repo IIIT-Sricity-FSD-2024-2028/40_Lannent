@@ -10,12 +10,15 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useValidation } from '../context/ValidationContext';
+import { useLookups } from '../store/hooks';
+import { useDispatch } from 'react-redux';
+import { deleteFile, uploadFile } from '../store/slices/filesSlice';
+import { submitDeliverable } from '../store/slices/milestonesSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import EmptyState from '../components/EmptyState';
 import PageStyle from '../components/PageStyle';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './SubmitDeliverable.css?raw';
 
@@ -95,12 +98,12 @@ function resolveMilestoneId(searchParams) {
 }
 
 /** Banner details for the milestone being submitted, or null when there is none. */
-function loadMilestone(Store, searchParams) {
+function loadMilestone({ userById, taskById, milestoneById }, searchParams) {
   const mId = resolveMilestoneId(searchParams);
-  const mData = mId ? Store.getMilestoneById(mId) : null;
+  const mData = mId ? milestoneById(mId) : null;
   if (!mData) return null;
-  const tData = Store.getTaskById(mData.taskId);
-  const cUser = tData ? Store.getUserById(tData.clientId) : null;
+  const tData = taskById(mData.taskId);
+  const cUser = tData ? userById(tData.clientId) : null;
   return {
     id: mData.id,
     status: mData.status,
@@ -125,11 +128,13 @@ function FieldErrorLine({ id, visible, text, style }) {
 }
 
 export default function SubmitDeliverable() {
-  const Store = useStore();
+  const { milestoneById, userById, taskById } = useLookups();
   const Validate = useValidation();
   usePageTitle('Submit Deliverable — Lannent');
   const [searchParams] = useSearchParams();
-  const [milestone] = useState(() => loadMilestone(Store, searchParams));
+  const dispatch = useDispatch();
+  // Read once when the page opens; submitting changes the milestone's status.
+  const [milestone] = useState(() => loadMilestone({ userById, taskById, milestoneById }, searchParams));
 
   // ── Form state ──
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -236,11 +241,11 @@ export default function SubmitDeliverable() {
     // visible only to its uploader and staff, so the client reviewing the
     // milestone was refused access to the very files under review.
     const msId = resolveMilestoneId(searchParams);
-    const ms = msId ? Store.getMilestoneById(msId) : null;
+    const ms = msId ? milestoneById(msId) : null;
     const update = (id, patch) => setUploadedFiles(list => list.map(f => (f.id === id ? { ...f, ...patch } : f)));
 
     pending.forEach(({ row, file }) => {
-      Store.uploadFile(file, { taskId: ms ? ms.taskId : '', milestoneId: msId, purpose: 'deliverable' })
+      dispatch(uploadFile({ file, meta: { taskId: ms ? ms.taskId : '', milestoneId: msId, purpose: 'deliverable' } })).unwrap()
         .then(ref => update(row.id, { ref, uploading: false }))
         // The server is the authority on type and size; surface its reason
         // rather than leaving a row that looks uploaded and is not.
@@ -254,7 +259,8 @@ export default function SubmitDeliverable() {
     // Removing it from the form deletes the stored copy too. Until submitted,
     // nobody else can open it, but it should not be left on the server.
     if (row && row.ref && row.ref.id) {
-      try { Store.deleteFile(row.ref.id); } catch (e) { console.warn('[SubmitDeliverable] could not delete', e.message); }
+      dispatch(deleteFile(row.ref.id)).unwrap()
+        .catch(e => console.warn('[SubmitDeliverable] could not delete', e.message));
     }
   }
 
@@ -279,7 +285,7 @@ export default function SubmitDeliverable() {
     setOverlays(list => [...list, { id: Date.now() + Math.random(), type: 'error', message }]);
   }
 
-  function submitDeliverable() {
+  async function handleSubmit() {
     if (!allValid) return;
     const t = title.trim();
     const repoLink = repoUrl.trim();
@@ -308,12 +314,12 @@ export default function SubmitDeliverable() {
       };
       if (repoLink) deliverable.link = repoLink;
       if (branch.trim()) deliverable.branch = branch.trim();
-      Store.submitDeliverable(milestoneId, deliverable);
+      await dispatch(submitDeliverable({ milestoneId, deliverable })).unwrap();
       // The audit hand-off is the server's job now: it points the project's
       // one engagement at this milestone and notifies the reviewer the
       // client assigned — and only that reviewer.
     } catch (e) {
-      console.warn('Store save failed', e);
+      console.warn('Submitting the deliverable failed', e);
       showSubmitError(e && e.message ? e.message : 'The submission could not be saved. Your entries are still on this page — try again.');
       return;
     }
@@ -324,7 +330,7 @@ export default function SubmitDeliverable() {
     // Resolve taskId for workroom link
     let taskId = searchParams.get('taskId') || '';
     if (!taskId) {
-      try { const m = Store.getMilestoneById(milestoneId); if (m) taskId = m.taskId || ''; } catch (e) { /* ignore */ }
+      try { const m = milestoneById(milestoneId); if (m) taskId = m.taskId || ''; } catch (e) { /* ignore */ }
     }
 
     setConfirmOpen(false);
@@ -546,7 +552,7 @@ export default function SubmitDeliverable() {
             <p style={{ fontSize: 14, color: 'var(--muted-foreground)', textAlign: 'center', marginBottom: 24 }}>Once submitted, the client will be notified to review your work. You can still message them directly in the workroom.</p>
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={() => setConfirmOpen(false)} className="btn-outline" style={{ flex: 1, padding: 12, borderRadius: 12 }}>Cancel</button>
-              <button onClick={submitDeliverable} className="btn-primary" style={{ flex: 2, padding: 12, borderRadius: 12 }}>Confirm Submit</button>
+              <button onClick={handleSubmit} className="btn-primary" style={{ flex: 2, padding: 12, borderRadius: 12 }}>Confirm Submit</button>
             </div>
           </div>
         </div>

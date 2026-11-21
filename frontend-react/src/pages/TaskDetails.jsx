@@ -9,16 +9,17 @@
  */
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useValidation } from '../context/ValidationContext';
+import { getSavedTaskIds, toggleSavedTask } from '../utils/helpers';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectAllProposals, applyToTask, withdrawProposal } from '../store/slices/proposalsSlice';
+import { selectAllTasks } from '../store/slices/tasksSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import EmptyState from '../components/EmptyState';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
-import { getSavedTaskIds, toggleSavedTask } from '../utils/helpers';
 import usePageTitle from '../hooks/usePageTitle';
-import useRerender from '../hooks/useRerender';
 import pageCss from './TaskDetails.css?raw';
 
 const MILESTONE_STATUS_TEXT = {
@@ -42,21 +43,23 @@ const STATUS_BOX_COLORS = {
 };
 
 export default function TaskDetails() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById, taskById, milestonesByTask } = useLookups();
+  const proposals = useSelector(selectAllProposals);
+  const tasks = useSelector(selectAllTasks);
+  const currentUser = useCurrentUser();
   const Validate = useValidation();
   usePageTitle('Task Details — Lannent');
   const [searchParams] = useSearchParams();
   const urlId = searchParams.get('id');
-  const role = Auth.getCurrentUser()?.role;
+  const role = currentUser?.role;
 
   // "Save Task" bookmark — the button had no handler at all.
-  const userId = Auth.getCurrentUser()?.userId;
+  const userId = currentUser?.userId;
   const [saved, setSaved] = useState(() => !!urlId && getSavedTaskIds(userId).includes(urlId));
   // Apply dialog: an optional note to the client. There is no price to name.
   const [applyOpen, setApplyOpen] = useState(false);
   const [note, setNote] = useState('');
-  const rerender = useRerender();
+  const dispatch = useDispatch();
   function toggleSave() {
     if (!userId || !urlId) { Validate.toast('Please log in to save tasks.', 'error'); return; }
     const nowSaved = toggleSavedTask(userId, urlId);
@@ -64,7 +67,7 @@ export default function TaskDetails() {
     Validate.toast(nowSaved ? 'Task saved.' : 'Task removed from saved.', nowSaved ? 'success' : 'info');
   }
 
-  const task = urlId ? Store.getTaskById(urlId) : null;
+  const task = urlId ? taskById(urlId) : null;
 
   // A missing task used to fall back to a fabricated one — five hardcoded
   // fixtures plus a default — so a wrong or stale id rendered an invented
@@ -88,43 +91,41 @@ export default function TaskDetails() {
     );
   }
 
-  const clientInfo = task.clientId ? Store.getUserById(task.clientId) : null;
+  const clientInfo = task.clientId ? userById(task.clientId) : null;
   const clientName = clientInfo ? clientInfo.name : (task.clientName || 'Unknown Client');
   const clientInitials = clientInfo ? clientInfo.avatar : (task.clientInitials || '??');
   const clientMemberDate = clientInfo ? ('Member since ' + clientInfo.joinDate) : '';
-  const clientProjects = clientInfo ? (Store.getTasksByClient(task.clientId)?.length || 0) : 0;
+  const clientProjects = clientInfo ? (tasks.filter(t => t.clientId === task.clientId)?.length || 0) : 0;
   const budgetDisplay = task.budget && typeof task.budget === 'number' ? ('₹' + task.budget.toLocaleString('en-IN')) : (task.budget || '₹0');
   const budgetNum = task.numBudget || (typeof task.budget === 'number' ? task.budget : parseInt(budgetDisplay.replace(/[^0-9]/g, '')) || 0);
-  const taskMilestones = Store.getMilestonesByTask(task.id);
+  const taskMilestones = milestonesByTask(task.id);
   const taskStatus = task.status || 'open';
   const statusLabel = taskStatus.charAt(0).toUpperCase() + taskStatus.slice(1).replace('-', ' ');
   const statusBadgeClass = taskStatus === 'open' ? 'badge-green' : taskStatus === 'in-progress' ? 'badge-blue' : taskStatus === 'completed' ? 'badge-purple' : taskStatus === 'cancelled' ? 'badge-red' : 'badge-orange';
 
   // This worker's most recent application or invitation here, if any.
   const mine = role === 'worker'
-    ? Store.getProposalsByTask(task.id).filter(p => p.workerId === userId).slice(-1)[0] || null
+    ? proposals.filter(p => p.taskId === task.id).filter(p => p.workerId === userId).slice(-1)[0] || null
     : null;
   const pendingApplication = mine && mine.type === 'application' && mine.status === 'pending' ? mine : null;
   const pendingInvitation = mine && mine.type === 'invitation' && mine.status === 'pending' ? mine : null;
-  const rejected = Store.getProposalsByTask(task.id).some(p => p.workerId === userId && p.type === 'application' && p.status === 'rejected');
+  const rejected = proposals.filter(p => p.taskId === task.id).some(p => p.workerId === userId && p.type === 'application' && p.status === 'rejected');
 
-  function apply() {
+  async function apply() {
     try {
-      Store.applyToTask(task.id, note.trim());
+      await dispatch(applyToTask({ taskId: task.id, message: note.trim() })).unwrap();
     } catch (e) {
       Validate.toast(e.message, 'error');
       return;
     }
     setApplyOpen(false);
     setNote('');
-    rerender();
     Validate.toast('✓ Application sent. The client will accept or decline it.', 'success');
   }
 
   function withdraw() {
-    Validate.confirm('Withdraw your application? You can apply again later.', () => {
-      try { Store.withdrawProposal(pendingApplication.id); } catch (e) { Validate.toast(e.message, 'error'); return; }
-      rerender();
+    Validate.confirm('Withdraw your application? You can apply again later.', async () => {
+      try { await dispatch(withdrawProposal(pendingApplication.id)).unwrap(); } catch (e) { Validate.toast(e.message, 'error'); return; }
       Validate.toast('Application withdrawn.', 'success');
     });
   }

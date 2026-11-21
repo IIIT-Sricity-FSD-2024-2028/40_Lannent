@@ -13,13 +13,14 @@ import { useState } from 'react';
 import DashboardLayout from '../components/DashboardLayout';
 import EmptyState from '../components/EmptyState';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import { useValidation } from '../context/ValidationContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './StaffSettings.css?raw';
-import { syncSessionFromUser } from '../utils/helpers';
 import ChangePasswordCard from '../components/ChangePasswordCard';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { getDashboardUrl } from '../store/slices/authSlice';
+import { useDispatch } from 'react-redux';
+import { updateUser } from '../store/slices/usersSlice';
 
 // What each staff role can do (read-only list).
 const SCOPES = {
@@ -36,12 +37,13 @@ const SCOPES = {
 };
 
 export default function StaffSettings() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById } = useLookups();
+  const currentUser = useCurrentUser();
+  const dispatch = useDispatch();
   const Validate = useValidation();
   usePageTitle('Settings — Lannent');
-  const session = Auth.getCurrentUser();
-  const user = Store.getUserById(session.userId);
+  const session = currentUser;
+  const user = userById(session.userId);
   const [name, setName] = useState(user ? user.name : '');
   const [email, setEmail] = useState(user ? user.email : '');
 
@@ -54,7 +56,7 @@ export default function StaffSettings() {
           activePath="/staff-settings"
           pageTitle="Settings"
           message="Your account could not be loaded. Check that the API is running, then reload."
-          linkHref={Auth.getDashboardUrl(session.role)}
+          linkHref={getDashboardUrl(session.role)}
           linkLabel="Back to Dashboard"
         />
       </>
@@ -63,7 +65,7 @@ export default function StaffSettings() {
 
   const scope = SCOPES[user.role] || [];
 
-  function saveStaffProfile() {
+  async function saveStaffProfile() {
     const nameVal = name.trim();
     const emailVal = email.trim();
 
@@ -72,14 +74,13 @@ export default function StaffSettings() {
 
     let saved;
     try {
-      saved = Store.updateUser(session.userId, { name: nameVal, email: emailVal });
+      saved = await dispatch(updateUser({ id: session.userId, syncSession: true, updates: { name: nameVal, email: emailVal } })).unwrap();
     } catch (e) {
       Validate.toast(e.message, 'error');
       return;
     }
 
     // Keep the session in step so the top bar does not show a stale name.
-    syncSessionFromUser(saved);
     Validate.toast('Settings saved.', 'success');
     setTimeout(() => window.location.reload(), 700);
   }

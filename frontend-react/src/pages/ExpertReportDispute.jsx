@@ -5,15 +5,17 @@
  * Read-only dispute resolution report (?id=<disputeId>&role=expert|client|worker).
  * Falls back to the first resolved dispute when no id is given.
  */
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { downloadPdf } from '../utils/pdf';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useSelector } from 'react-redux';
+import { selectAllDisputes } from '../store/slices/disputesSlice';
+import { selectAllAuditRequests } from '../store/slices/auditRequestsSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import EmptyState from '../components/EmptyState';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useStore } from '../context/StoreContext';
-import { downloadPdf } from '../utils/pdf';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ExpertReportDispute.css?raw';
 
@@ -23,19 +25,19 @@ const fmtDate = d => new Date(d).toLocaleDateString('en-US', { month: 'short', d
 const NOTE_STYLE = { fontSize: 13, color: 'var(--muted-foreground)', padding: 12 };
 
 /** Builds everything the report shows from the stored dispute. */
-function buildReport(Store, rawDispute) {
-  const _task = Store.getTaskById(rawDispute.taskId);
-  const _raiser = Store.getUserById(rawDispute.raisedBy);
-  const _respondent = Store.getUserById(rawDispute.againstId);
-  const _expert = rawDispute.expertId ? Store.getUserById(rawDispute.expertId) : null;
+function buildReport({ taskById, userById, milestoneById, auditRequests }, rawDispute) {
+  const _task = taskById(rawDispute.taskId);
+  const _raiser = userById(rawDispute.raisedBy);
+  const _respondent = userById(rawDispute.againstId);
+  const _expert = rawDispute.expertId ? userById(rawDispute.expertId) : null;
 
   // Severity is set on the audit engagement the dispute opened.
-  const _engagement = (Store.getAuditRequests() || []).filter(a => a.disputeId === rawDispute.id && !a.replacedBy).pop();
+  const _engagement = (auditRequests || []).filter(a => a.disputeId === rawDispute.id && !a.replacedBy).pop();
   const _severity = _engagement ? _engagement.severity : 'Medium';
 
   // What the reviewer actually examines: the claim, and the disputed
   // milestone's submission.
-  const _milestone = rawDispute.milestoneId ? Store.getMilestoneById(rawDispute.milestoneId) : null;
+  const _milestone = rawDispute.milestoneId ? milestoneById(rawDispute.milestoneId) : null;
   const _deliverable = _milestone ? _milestone.deliverable : null;
 
   const _evidence = [
@@ -162,8 +164,10 @@ function PartyCard({ color, initials, name, role, tag, tagClass }) {
 }
 
 export default function ExpertReportDispute() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const disputes = useSelector(selectAllDisputes);
+  const auditRequests = useSelector(selectAllAuditRequests);
+  const { taskById, userById, milestoneById } = useLookups();
+  const currentUser = useCurrentUser();
   usePageTitle('Dispute Resolution Report — Lannent');
   const [searchParams] = useSearchParams();
   const rid = searchParams.get('id') || searchParams.get('disputeId') || '';
@@ -171,14 +175,14 @@ export default function ExpertReportDispute() {
   // to expert, so a link without the parameter (the worker sidebar's "Reports")
   // drew another role's sidebar — whose Settings link then bounced the user
   // to their dashboard.
-  const role = Auth.getCurrentUser()?.role || searchParams.get('role') || 'expert';
+  const role = currentUser?.role || searchParams.get('role') || 'expert';
 
   // Only the dispute in the link — falling back to "some resolved dispute"
   // showed a stranger's case under the wrong title.
-  const [r] = useState(() => {
-    const rawDispute = rid ? Store.getDisputeById(rid) : null;
-    return rawDispute ? buildReport(Store, rawDispute) : null;
-  });
+  const r = useMemo(() => {
+    const rawDispute = rid ? (disputes.find(x => x.id === rid) || null) : null;
+    return rawDispute ? buildReport({ taskById, userById, milestoneById, auditRequests }, rawDispute) : null;
+  }, [rid, disputes, auditRequests, taskById, userById, milestoneById]);
 
   function downloadReport() {
     downloadPdf(`dispute-report-${rid}.pdf`, {

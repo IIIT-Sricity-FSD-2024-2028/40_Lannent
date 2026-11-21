@@ -8,11 +8,12 @@
  * holds in escrow goes back to the client.
  */
 import { useState } from 'react';
+import { useValidation } from '../context/ValidationContext';
+import { useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectAllTasks, deleteTask } from '../store/slices/tasksSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import PageStyle from '../components/PageStyle';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
-import useRerender from '../hooks/useRerender';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './SuperuserTasks.css?raw';
 
@@ -22,8 +23,8 @@ const DELETABLE = ['open', 'draft', 'cancelled'];
 const canDelete = t => DELETABLE.includes(t.status) && !t.workerId;
 
 /** Share of the project's milestones that are approved. */
-function progressOf(Store, t) {
-  const ms = Store.getMilestonesByTask(t.id);
+function progressOf({ milestonesByTask }, t) {
+  const ms = milestonesByTask(t.id);
   if (!ms.length) return t.status === 'completed' ? 100 : 0;
   return Math.round((ms.filter(m => ['completed', 'approved'].includes(m.status)).length / ms.length) * 100);
 }
@@ -46,31 +47,32 @@ function DetailField({ label, id, style, children }) {
 }
 
 export default function SuperuserTasks() {
-  const Store = useStore();
+  const { userById, taskById, milestonesByTask } = useLookups();
+  const tasks = useSelector(selectAllTasks);
   const Validate = useValidation();
   usePageTitle('Manage Tasks — Lannent');
-  const rerender = useRerender();
+  const dispatch = useDispatch();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [detailTask, setDetailTask] = useState(null);   // last task shown in the dialog
+  const [detailTaskId, setDetailTaskId] = useState(null);   // last task shown in the dialog
   const [detailOpen, setDetailOpen] = useState(false);
 
   const q = search.trim().toLowerCase();
-  const filtered = Store.getTasks().filter(t => {
-    const matchSearch = !q || [t.title, t.category, Store.getUserById(t.clientId)?.name].some(v => String(v || '').toLowerCase().includes(q));
+  const filtered = tasks.filter(t => {
+    const matchSearch = !q || [t.title, t.category, userById(t.clientId)?.name].some(v => String(v || '').toLowerCase().includes(q));
     const matchStatus = statusFilter === 'all' || t.status === statusFilter;
     return matchSearch && matchStatus;
   });
 
   function viewTaskDetails(id) {
-    const task = Store.getTaskById(id);
+    const task = taskById(id);
     if (!task) return;
-    setDetailTask(task);
+    setDetailTaskId(id);
     setDetailOpen(true);
   }
 
-  function deleteTask(id) {
-    const task = Store.getTaskById(id);
+  function handleDelete(id) {
+    const task = taskById(id);
     if (!task) return;
     if (!canDelete(task)) {
       Validate.toast('Only a project that never started (no worker hired) can be deleted.', 'error');
@@ -78,25 +80,24 @@ export default function SuperuserTasks() {
     }
     Validate.confirm(
       `Permanently delete "${task.title}"? Anything still held in its escrow is returned to the client's wallet. This cannot be undone.`,
-      () => {
+      async () => {
         // The server refunds the project's escrow (budget held since posting,
         // and any reviewer fees) to the client before removing it.
         try {
-          Store.deleteTask(id);
+          await dispatch(deleteTask(id)).unwrap();
         } catch (e) {
           Validate.toast((e.message), 'error');
           return;
         }
-        rerender();
         Validate.toast('Task deleted and its escrow returned to the client.', 'success');
       }
     );
   }
 
   // Values shown in the details dialog ("—" until a task has been opened)
-  const d = detailTask;
-  const dClient = d ? Store.getUserById(d.clientId) : null;
-  const dWorker = d && d.workerId ? Store.getUserById(d.workerId) : null;
+  const d = taskById(detailTaskId);
+  const dClient = d ? userById(d.clientId) : null;
+  const dWorker = d && d.workerId ? userById(d.workerId) : null;
 
   return (
     <>
@@ -136,9 +137,9 @@ export default function SuperuserTasks() {
               {!filtered.length ? (
                 <tr className="empty-row"><td colSpan="7">No tasks found.</td></tr>
               ) : filtered.map(t => {
-                const client = Store.getUserById(t.clientId);
-                const worker = t.workerId ? Store.getUserById(t.workerId) : null;
-                const progress = progressOf(Store, t);
+                const client = userById(t.clientId);
+                const worker = t.workerId ? userById(t.workerId) : null;
+                const progress = progressOf({ milestonesByTask }, t);
                 return (
                   <tr key={t.id} id={`taskRow_${t.id}`}>
                     <td>
@@ -156,7 +157,7 @@ export default function SuperuserTasks() {
                     <td>
                       <div className="action-btns">
                         <button className="btn-edit" onClick={() => viewTaskDetails(t.id)}>View</button>
-                        {canDelete(t) ? <button className="btn-delete" onClick={() => deleteTask(t.id)}>Delete</button> : ''}
+                        {canDelete(t) ? <button className="btn-delete" onClick={() => handleDelete(t.id)}>Delete</button> : ''}
                       </div>
                     </td>
                   </tr>
@@ -185,7 +186,7 @@ export default function SuperuserTasks() {
               <DetailField label="Worker" id="detailWorker">{d ? (dWorker ? dWorker.name : 'Unassigned') : '—'}</DetailField>
             </div>
             <div className="grid-2">
-              <DetailField label="Progress" id="detailProgress">{d ? progressOf(Store, d) + '%' : '—'}</DetailField>
+              <DetailField label="Progress" id="detailProgress">{d ? progressOf({ milestonesByTask }, d) + '%' : '—'}</DetailField>
               <DetailField label="Created" id="detailCreated">{d ? d.createdAt || '—' : '—'}</DetailField>
             </div>
             <DetailField label="Description" id="detailDesc" style={{ ...FIELD_STYLE, lineHeight: 1.6, maxHeight: 120, overflowY: 'auto' }}>

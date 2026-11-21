@@ -14,9 +14,11 @@ import FieldError from '../components/FieldError';
 import { useValidation } from '../context/ValidationContext';
 import useFieldErrors from '../hooks/useFieldErrors';
 import usePageTitle from '../hooks/usePageTitle';
-import { postPublic } from '../utils/publicApi';
+import { useDispatch } from 'react-redux';
+import { requestPasswordReset } from '../store/slices/authSlice';
 
 export default function ForgotPassword() {
+  const dispatch = useDispatch();
   const Validate = useValidation();
   usePageTitle('Forgot Password — Lannent');
   const [email, setEmail] = useState('');
@@ -32,7 +34,7 @@ export default function ForgotPassword() {
     if (!valid) return;
     setSubmitting(true);
     try {
-      const result = await postPublic('/auth/forgot-password', { email: value });
+      const result = await dispatch(requestPasswordReset(value)).unwrap();
       if (result && result.expiresInMinutes) setMinutes(result.expiresInMinutes);
       setSentTo(value);
     } catch (err) {

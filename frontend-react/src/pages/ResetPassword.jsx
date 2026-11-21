@@ -14,7 +14,8 @@ import PasswordInput from '../components/PasswordInput';
 import { useValidation } from '../context/ValidationContext';
 import useFieldErrors from '../hooks/useFieldErrors';
 import usePageTitle from '../hooks/usePageTitle';
-import { postPublic } from '../utils/publicApi';
+import { useDispatch } from 'react-redux';
+import { checkResetToken, resetPassword } from '../store/slices/authSlice';
 
 /** The token from #token=… (or ?token=… from an older link). */
 function readToken() {
@@ -23,6 +24,7 @@ function readToken() {
 }
 
 export default function ResetPassword() {
+  const dispatch = useDispatch();
   const Validate = useValidation();
   usePageTitle('Reset Password — Lannent');
   const [token] = useState(readToken);
@@ -41,11 +43,11 @@ export default function ResetPassword() {
     }
     if (!token) return;
     let live = true;
-    postPublic('/auth/reset-password/check', { token })
+    dispatch(checkResetToken(token)).unwrap()
       .then(() => { if (live) setStage('valid'); })
       .catch(err => { if (live) { setInvalidReason(err.message); setStage('invalid'); } });
     return () => { live = false; };
-  }, [token]);
+  }, [dispatch, token]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -56,9 +58,8 @@ export default function ResetPassword() {
     if (!valid) return;
     setSubmitting(true);
     try {
-      await postPublic('/auth/reset-password', { token, password: pw });
-      // Every session was signed out by the reset, this browser's included.
-      try { localStorage.removeItem('lannent_session'); localStorage.removeItem('lannent_token'); } catch (err) { /* storage unavailable */ }
+      // Every session was signed out by the reset; the thunk clears this browser's too.
+      await dispatch(resetPassword({ token, password: pw })).unwrap();
       setStage('done');
     } catch (err) {
       if (/invalid or has expired/i.test(err.message)) {
