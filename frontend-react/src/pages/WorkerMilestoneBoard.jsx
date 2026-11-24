@@ -9,29 +9,31 @@
  * until the reviewer's verdict settles it.
  */
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useValidation } from '../context/ValidationContext';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchMyEscrow, selectMyEscrow } from '../store/slices/ledgerSlice';
+import { selectAllTasks } from '../store/slices/tasksSlice';
+import { updateMilestone } from '../store/slices/milestonesSlice';
+import { useEffect } from 'react';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import KanbanColumn from '../components/KanbanColumn';
 import PageStyle from '../components/PageStyle';
 import StatCard from '../components/StatCard';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
-import useRerender from '../hooks/useRerender';
-import { useValidation } from '../context/ValidationContext';
 import pageCss from './WorkerMilestoneBoard.css?raw';
 
 const PRIORITY_COLORS = { High: '#ef4444', Medium: '#f59e0b', Low: '#10b981' };
 const DONE_STATUSES = ['done', 'approved', 'completed', 'audit-passed'];
 
 /** The worker's milestones grouped into the four board columns. */
-function loadWorkerMilestones(Store, Auth, taskId) {
-  const session = Auth.getCurrentUser();
+function loadWorkerMilestones({ tasks, taskById, milestonesByTask }, session, taskId) {
   if (!session) return { todo: [], inprogress: [], review: [], disputed: [], done: [] };
-  const workerTasks = taskId ? [Store.getTaskById(taskId)].filter(Boolean) : Store.getTasksByWorker(session.userId);
+  const workerTasks = taskId ? [taskById(taskId)].filter(Boolean) : tasks.filter(t => t.workerId === session.userId);
   const colMap = { todo: [], inprogress: [], review: [], disputed: [], done: [] };
   workerTasks.forEach(t => {
-    Store.getMilestonesByTask(t.id).forEach(m => {
+    milestonesByTask(t.id).forEach(m => {
       const card = {
         id: m.id, rawId: m.id, taskId: m.taskId,
         title: m.title, desc: m.description || '',
@@ -59,26 +61,24 @@ function loadWorkerMilestones(Store, Auth, taskId) {
 const sumAmounts = cards => cards.filter(m => !m.cancelled).reduce((s, m) => s + parseFloat((m.amount || '₹0').replace(/[^0-9.]/g, '') || 0), 0);
 
 /** One milestone card; `col` decides the action at the bottom. */
-function MilestoneCard({ m, col, onChange }) {
-  const Store = useStore();
+function MilestoneCard({ m, col }) {
+  const dispatch = useDispatch();
   const Validate = useValidation();
   const navigate = useNavigate();
   const pc = PRIORITY_COLORS[m.priority] || '#6366f1';
 
-  function submitDeliverable() {
+  function goToSubmit() {
     navigate('/submit-deliverable?milestoneId=' + m.rawId + (m.taskId ? '&taskId=' + m.taskId : ''));
   }
 
-  function startWorking() {
-    // Only the status changes. Sending the whole cached record (and mutating
-    // it first) asked the server to rewrite fields a worker does not own.
+  async function startWorking() {
+    // Only the status changes; the updated milestone lands in the store and
+    // the board re-renders from it.
     try {
-      Store.updateMilestone(m.rawId, { status: 'in-progress' });
+      await dispatch(updateMilestone({ id: m.rawId, updates: { status: 'in-progress' } })).unwrap();
     } catch (e) {
       Validate.toast(e.message, 'error');
-      return;
     }
-    onChange();
   }
 
   return (
@@ -131,7 +131,7 @@ function MilestoneCard({ m, col, onChange }) {
         </div>
       ) : col === 'inprogress' ? (
         <div style={{ marginTop: 10 }}>
-          <button onClick={e => { e.stopPropagation(); submitDeliverable(); }} style={{ width: '100%', padding: 7, borderRadius: 8, background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: 'white', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+          <button onClick={e => { e.stopPropagation(); goToSubmit(); }} style={{ width: '100%', padding: 7, borderRadius: 8, background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: 'white', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
             <Icon name="send" style={{ width: 12, height: 12, display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
             Submit Deliverable
           </button>
@@ -142,7 +142,7 @@ function MilestoneCard({ m, col, onChange }) {
             {m.status === 'revision-needed' ? 'Start revising' : 'Start Working'}
           </button>
           {m.status === 'revision-needed' && (
-            <button onClick={e => { e.stopPropagation(); submitDeliverable(); }} style={{ flex: 1, padding: 7, borderRadius: 8, background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: 'white', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Resubmit</button>
+            <button onClick={e => { e.stopPropagation(); goToSubmit(); }} style={{ flex: 1, padding: 7, borderRadius: 8, background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: 'white', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Resubmit</button>
           )}
         </div>
       ) : ''}
@@ -151,16 +151,19 @@ function MilestoneCard({ m, col, onChange }) {
 }
 
 export default function WorkerMilestoneBoard() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const tasks = useSelector(selectAllTasks);
+  const { taskById, milestonesByTask } = useLookups();
+  const currentUser = useCurrentUser();
   usePageTitle('Milestone Board — Lannent');
   const [searchParams] = useSearchParams();
   const taskId = searchParams.get('id');
-  const task = taskId ? Store.getTaskById(taskId) : null;
+  const task = taskId ? taskById(taskId) : null;
   const taskTitle = task ? task.title : 'Milestone Board';
 
-  const rerender = useRerender();
-  const milestones = loadWorkerMilestones(Store, Auth, taskId);
+  const dispatch = useDispatch();
+  const myEscrow = useSelector(selectMyEscrow);
+  useEffect(() => { if (taskId) dispatch(fetchMyEscrow()); }, [dispatch, taskId]);
+  const milestones = loadWorkerMilestones({ tasks, taskById, milestonesByTask }, currentUser, taskId);
   const allMs = [...milestones.todo, ...milestones.inprogress, ...milestones.review, ...milestones.disputed, ...milestones.done];
   // The badge said "In Progress" whatever the project's state.
   const badge = milestones.disputed.length
@@ -171,7 +174,7 @@ export default function WorkerMilestoneBoard() {
   const doneMs = milestones.done.length;
   const totalBudget = sumAmounts(allMs);
   const earnedAmt = sumAmounts(milestones.done);
-  const escrowAmt = taskId ? (Store.getMyEscrow().projects.find(p => p.taskId === taskId)?.projectHeld || 0) : totalBudget - earnedAmt;
+  const escrowAmt = taskId ? (((myEscrow && myEscrow.projects) || []).find(p => p.taskId === taskId)?.projectHeld || 0) : totalBudget - earnedAmt;
   const taskDeadline = task && task.deadline ? new Date(task.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
   const progressPct = allMs.length ? Math.round((doneMs / allMs.length) * 100) : 0;
   const progressDone = doneMs + milestones.inprogress.length;
@@ -236,10 +239,10 @@ export default function WorkerMilestoneBoard() {
           ) : (
             <>
               <KanbanColumn title="To Do" count={milestones.todo.length} dot="#94a3b8" titleColor="#64748b" countBg="#f1f5f9" countColor="#64748b">
-                {milestones.todo.map(m => <MilestoneCard key={m.id} m={m} col="todo" onChange={rerender} />)}
+                {milestones.todo.map(m => <MilestoneCard key={m.id} m={m} col="todo" />)}
               </KanbanColumn>
               <KanbanColumn title="In Progress" count={milestones.inprogress.length} dot="#6366f1" dotAnimation="pulse 2s infinite" titleColor="#6366f1" countBg="#e0e7ff" countColor="#4f46e5" background="#eef2ff">
-                {milestones.inprogress.map(m => <MilestoneCard key={m.id} m={m} col="inprogress" onChange={rerender} />)}
+                {milestones.inprogress.map(m => <MilestoneCard key={m.id} m={m} col="inprogress" />)}
               </KanbanColumn>
               <KanbanColumn title="In Review" count={milestones.review.length} dot="#f59e0b" titleColor="#d97706" countBg="#fef9c3" countColor="#b45309" background="#fffbeb">
                 {milestones.review.map(m => <MilestoneCard key={m.id} m={m} col="review" />)}

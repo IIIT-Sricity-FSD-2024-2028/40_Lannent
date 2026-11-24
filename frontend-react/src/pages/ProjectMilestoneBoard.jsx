@@ -7,34 +7,36 @@
  * milestones in five columns, with a "Review Deliverable" action on
  * submitted work.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useValidation } from '../context/ValidationContext';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectAllTasks, endForNonDelivery, fetchNonDeliveryStatus, selectNonDeliveryStatus } from '../store/slices/tasksSlice';
+import { createMilestone, deleteMilestone, updateMilestone } from '../store/slices/milestonesSlice';
+import { fetchMyEscrow, selectMyEscrow } from '../store/slices/ledgerSlice';
+import { refreshEntities } from '../store/thunks/loadAppData';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import KanbanColumn from '../components/KanbanColumn';
 import PageStyle from '../components/PageStyle';
 import StatCard from '../components/StatCard';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
-import useRerender from '../hooks/useRerender';
-import { useValidation } from '../context/ValidationContext';
 import pageCss from './ProjectMilestoneBoard.css?raw';
 
 const PRIORITY_COLORS = { High: '#ef4444', Medium: '#f59e0b', Low: '#10b981', Normal: '#6366f1' };
 
 /** The project's milestones grouped into the five board columns. */
-function loadMilestonesFromStore(Store, Auth, taskId) {
+function loadMilestonesFromStore({ tasks, userById, milestonesByTask }, session, taskId) {
   if (!taskId) {
     // fallback: use the client's first project
-    const session = Auth.getCurrentUser();
     if (!session) return { todo: [], inProgress: [], review: [], disputed: [], done: [] };
-    taskId = Store.getTasksByClient(session.userId)[0]?.id;
+    taskId = tasks.filter(t => t.clientId === session.userId)[0]?.id;
   }
-  const all = taskId ? Store.getMilestonesByTask(taskId) : [];
+  const all = taskId ? milestonesByTask(taskId) : [];
   const colMap = { todo: [], inProgress: [], review: [], disputed: [], done: [] };
   all.forEach(m => {
-    const worker = m.workerId ? Store.getUserById(m.workerId) : null;
+    const worker = m.workerId ? userById(m.workerId) : null;
     const card = {
       id: m.id,
       title: m.title,
@@ -72,31 +74,31 @@ const money = n => '₹' + (Number(n) || 0).toLocaleString('en-IN', { maximumFra
  * client changes amounts and removes milestones here.
  */
 function PlanEditor({ task }) {
-  const Store = useStore();
+  const { milestonesByTask } = useLookups();
   const Validate = useValidation();
-  const rerender = useRerender();
+  const dispatch = useDispatch();
   const [draft, setDraft] = useState({});
   const [adding, setAdding] = useState({ title: '', budget: '' });
-  const list = Store.getMilestonesByTask(task.id);
+  const list = milestonesByTask(task.id);
   const total = list.reduce((a, m) => a + (Number(m.budget) || 0), 0);
 
-  const attempt = (fn, ok) => {
-    try { fn(); } catch (e) { Validate.toast(e.message, 'error'); return; }
+  // Runs one milestone thunk, then re-reads the plan (the server may adjust the task too).
+  const attempt = async (thunk, ok) => {
+    try { await dispatch(thunk).unwrap(); } catch (e) { Validate.toast(e.message, 'error'); return; }
     if (ok) Validate.toast(ok, 'success');
-    Store.refresh('milestones', 'tasks');
-    rerender();
+    dispatch(refreshEntities(['milestones', 'tasks']));
   };
   const save = m => {
     const v = draft[m.id];
     if (v === undefined || Number(v) === m.budget) return;
-    attempt(() => Store.updateMilestone(m.id, { budget: Number(v) }), `"${m.title}" is now ${money(v)}.`);
+    attempt(updateMilestone({ id: m.id, updates: { budget: Number(v) } }), `"${m.title}" is now ${money(v)}.`);
     setDraft(d => { const { [m.id]: _drop, ...rest } = d; return rest; });
   };
-  const remove = m => Validate.confirm(`Remove "${m.title}" from the plan?`, () => attempt(() => Store.deleteMilestone(m.id), 'Milestone removed.'));
+  const remove = m => Validate.confirm(`Remove "${m.title}" from the plan?`, () => attempt(deleteMilestone(m.id), 'Milestone removed.'));
   const add = () => {
     const budget = Number(adding.budget);
     if (adding.title.trim().length < 3 || !(budget >= 1)) { Validate.toast('Give the milestone a title (3+ characters) and an amount.', 'error'); return; }
-    attempt(() => Store.createMilestone({ taskId: task.id, title: adding.title.trim(), budget }), 'Milestone added.');
+    attempt(createMilestone({ taskId: task.id, title: adding.title.trim(), budget }), 'Milestone added.');
     setAdding({ title: '', budget: '' });
   };
 
@@ -137,15 +139,17 @@ function PlanEditor({ task }) {
  * has nothing waiting for review and the deadline (or 30 days) has long passed.
  */
 function NonDeliveryPanel({ task }) {
-  const Store = useStore();
   const Validate = useValidation();
   const navigate = useNavigate();
-  const status = Store.getNonDeliveryStatus(task.id);
+  const dispatch = useDispatch();
+  const fetched = useSelector(s => selectNonDeliveryStatus(s, task.id));
+  useEffect(() => { dispatch(fetchNonDeliveryStatus(task.id)); }, [dispatch, task.id]);
+  const status = fetched || { eligible: false, reason: 'Checking whether the contract can be ended…' };
   const from = status.eligibleFrom ? new Date(status.eligibleFrom).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
   const end = () => Validate.confirm(
     'End this contract? Milestones already paid stay paid. Every milestone not delivered is cancelled and its money returned to your wallet. This cannot be undone.',
-    () => {
-      try { Store.endForNonDelivery(task.id); } catch (e) { Validate.toast(e.message, 'error'); return; }
+    async () => {
+      try { await dispatch(endForNonDelivery(task.id)).unwrap(); } catch (e) { Validate.toast(e.message, 'error'); return; }
       Validate.toast('Contract ended. The undelivered milestones were refunded to your wallet.', 'success');
       navigate('/client-my-projects');
     },
@@ -221,19 +225,24 @@ function MilestoneCard({ m, col }) {
 }
 
 export default function ProjectMilestoneBoard() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { taskById, userById, milestonesByTask } = useLookups();
+  const tasks = useSelector(selectAllTasks);
+  const currentUser = useCurrentUser();
   usePageTitle('Milestone Board — Lannent');
   const [searchParams] = useSearchParams();
   const taskId = searchParams.get('id');
-  const milestones = loadMilestonesFromStore(Store, Auth, taskId);
+  const dispatch = useDispatch();
+  const myEscrow = useSelector(selectMyEscrow);
+  // Escrow held on the project, from the server's ledger.
+  useEffect(() => { dispatch(fetchMyEscrow()); }, [dispatch]);
+  const milestones = loadMilestonesFromStore({ tasks, userById, milestonesByTask }, currentUser, taskId);
   const allMs = [...milestones.todo, ...milestones.inProgress, ...milestones.review, ...milestones.disputed, ...milestones.done];
   const doneMs = milestones.done.length;
-  const boardTaskId = taskId || Store.getTasksByClient(Auth.getCurrentUser()?.userId)[0]?.id;
-  const boardTask = boardTaskId ? Store.getTaskById(boardTaskId) : null;
+  const boardTaskId = taskId || tasks.filter(t => t.clientId === currentUser?.userId)[0]?.id;
+  const boardTask = boardTaskId ? taskById(boardTaskId) : null;
   const releasedAmt = sumAmounts(milestones.done);
   const released = '₹' + releasedAmt.toLocaleString('en-IN');
-  const heldNow = boardTaskId ? (Store.getMyEscrow().projects.find(p => p.taskId === boardTaskId)?.projectHeld || 0) : 0;
+  const heldNow = boardTaskId ? (((myEscrow && myEscrow.projects) || []).find(p => p.taskId === boardTaskId)?.projectHeld || 0) : 0;
   const pending = '₹' + heldNow.toLocaleString('en-IN');
   const daysLeft = boardTask && boardTask.deadline ? Math.ceil((new Date(boardTask.deadline) - new Date()) / 86400000) : null;
   const statusLabel = boardTask ? boardTask.status.replace(/-/g, ' ') : '';
