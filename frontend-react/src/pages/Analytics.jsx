@@ -6,13 +6,17 @@
  * milestone velocity and revenue charts, worker performance, project health
  * and a timeline of recent events.
  */
-import { useState } from 'react';
+import { useMemo } from 'react';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useSelector } from 'react-redux';
+import { selectAllAuditReports } from '../store/slices/auditReportsSlice';
+import { selectAllDisputes } from '../store/slices/disputesSlice';
+import { selectAllTasks } from '../store/slices/tasksSlice';
+import { selectAllTransactions } from '../store/slices/transactionsSlice';
 import ChartCanvas from '../components/ChartCanvas';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './Analytics.css?raw';
 
@@ -42,14 +46,14 @@ function riskBadge(risk) {
 const healthColor = s => (s >= 90 ? '#16a34a' : s >= 70 ? '#ca8a04' : '#dc2626');
 const healthBarColor = s => (s >= 90 ? '#22c55e' : s >= 70 ? '#eab308' : '#ef4444');
 
-/** Everything on the page, derived from the Store — not hardcoded. */
-function buildInsights(Store, clientId) {
-  const myTasks = Store.getTasksByClient(clientId);
+/** Everything on the page, derived from the Redux store — not hardcoded. */
+function buildInsights({ auditReports, disputes, tasks, transactions, userById, milestonesByTask }, clientId) {
+  const myTasks = tasks.filter(t => t.clientId === clientId);
   const myTaskIds = {};
   myTasks.forEach(t => { myTaskIds[t.id] = true; });
   let myMilestones = [];
-  myTasks.forEach(t => { myMilestones = myMilestones.concat(Store.getMilestonesByTask(t.id)); });
-  const myTxs = Store.getTransactions().filter(t => myTaskIds[t.taskId]);
+  myTasks.forEach(t => { myMilestones = myMilestones.concat(milestonesByTask(t.id)); });
+  const myTxs = transactions.filter(t => myTaskIds[t.taskId]);
 
   // Last six calendar months, oldest first — the buckets both charts share.
   const months = [];
@@ -82,7 +86,7 @@ function buildInsights(Store, clientId) {
     if (t.status === 'completed') byWorker[t.workerId].done++;
   });
   const workerPerformance = Object.keys(byWorker).map(wid => {
-    const u = Store.getUserById(wid) || {};
+    const u = userById(wid) || {};
     const msForWorker = myMilestones.filter(ms => ms.workerId === wid);
     const doneMs = msForWorker.filter(ms => DONE_MS.indexOf(ms.status) !== -1).length;
     const rate = msForWorker.length ? Math.round((doneMs / msForWorker.length) * 100) : 0;
@@ -109,11 +113,11 @@ function buildInsights(Store, clientId) {
   // flagged "High Risk".
   const todayStr = new Date().toISOString().slice(0, 10);
   const openDisputeTaskIds = {};
-  Store.getDisputes().forEach(d => { if (d.status === 'open') openDisputeTaskIds[d.taskId] = true; });
+  disputes.forEach(d => { if (d.status === 'open') openDisputeTaskIds[d.taskId] = true; });
   const projectHealth = myTasks
     .filter(t => t.status !== 'completed' && t.status !== 'cancelled')
     .map(t => {
-      const ms = Store.getMilestonesByTask(t.id);
+      const ms = milestonesByTask(t.id);
       const done = ms.filter(m => DONE_MS.indexOf(m.status) !== -1).length;
       const pct = ms.length ? Math.round((done / ms.length) * 100) : 0;
       const overdue = ms.filter(m => m.dueDate && m.dueDate < todayStr && DONE_MS.indexOf(m.status) === -1).length;
@@ -124,7 +128,7 @@ function buildInsights(Store, clientId) {
       score -= Math.min(overdue * 15, 30);
       score -= Math.min(revisions * 10, 20);
       score = Math.max(score, 0);
-      const worker = t.workerId ? Store.getUserById(t.workerId) : null;
+      const worker = t.workerId ? userById(t.workerId) : null;
       return {
         id: t.id,
         name: t.title,
@@ -147,7 +151,7 @@ function buildInsights(Store, clientId) {
   myMilestones.forEach(ms => {
     if (ms.submittedAt) events.push({ at: ms.submittedAt, icon: 'check-circle', title: 'Milestone Submitted', desc: ms.title, time: ago(ms.submittedAt), color: '#16a34a', bg: '#f0fdf4' });
   });
-  Store.getAuditReports().forEach(r => {
+  auditReports.forEach(r => {
     if (!myTaskIds[r.taskId]) return;
     events.push({ at: r.createdAt, icon: 'shield', title: 'Expert Audit Completed', desc: (r.milestoneTitle || 'Milestone') + ' — verdict: ' + (r.verdict || 'n/a'), time: ago(r.createdAt), color: '#d97706', bg: '#fffbeb' });
   });
@@ -255,11 +259,15 @@ function KpiTile({ icon, iconColor, bg, border, label, value }) {
 }
 
 export default function Analytics() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById, milestonesByTask } = useLookups();
+  const auditReports = useSelector(selectAllAuditReports);
+  const disputes = useSelector(selectAllDisputes);
+  const tasks = useSelector(selectAllTasks);
+  const transactions = useSelector(selectAllTransactions);
+  const currentUser = useCurrentUser();
   usePageTitle('Project Insights — Lannent');
-  const session = Auth.getCurrentUser();
-  const [data] = useState(() => buildInsights(Store, session.userId));
+  const session = currentUser;
+  const data = useMemo(() => buildInsights({ auditReports, disputes, tasks, transactions, userById, milestonesByTask }, session.userId), [auditReports, disputes, milestonesByTask, session.userId, tasks, transactions, userById]);
   const { kpi } = data;
 
   return (
