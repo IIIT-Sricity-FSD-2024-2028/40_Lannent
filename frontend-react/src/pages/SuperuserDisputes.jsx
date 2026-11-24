@@ -7,14 +7,15 @@
  * to their dashboard (signed-out visitors go to login), exactly as before.
  */
 import { useState } from 'react';
+import { useValidation } from '../context/ValidationContext';
+import { useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectAllDisputes, resolveDispute } from '../store/slices/disputesSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import FieldError from '../components/FieldError';
 import PageStyle from '../components/PageStyle';
 import StatCard from '../components/StatCard';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
 import useFieldErrors from '../hooks/useFieldErrors';
-import useRerender from '../hooks/useRerender';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './SuperuserDisputes.css?raw';
 
@@ -24,9 +25,9 @@ const VERDICT_LABELS = {
 };
 
 /** Applies a verdict as an operations override. The server notifies both parties. */
-function resolveAsOperations(Store, Validate, disputeId, verdict, resolution) {
+async function resolveAsOperations(dispatch, Validate, disputeId, verdict, resolution) {
   try {
-    Store.resolveDispute(disputeId, { verdict, resolution });
+    await dispatch(resolveDispute({ id: disputeId, verdict, resolution })).unwrap();
     return true;
   } catch (e) {
     Validate.toast(e.message, 'error');
@@ -35,12 +36,12 @@ function resolveAsOperations(Store, Validate, disputeId, verdict, resolution) {
 }
 
 export default function SuperuserDisputes() {
-  const Store = useStore();
+  const { userById } = useLookups();
+  const allDisputes = useSelector(selectAllDisputes);
+  const dispatch = useDispatch();
   const Validate = useValidation();
   usePageTitle('All Disputes — Lannent');
-  const rerender = useRerender();
 
-  const allDisputes = Store.getDisputes();
   const stats = {
     total: allDisputes.length,
     open: allDisputes.filter(d => d.status === 'open').length,
@@ -58,22 +59,21 @@ export default function SuperuserDisputes() {
   const { errors, clearError, clearAllErrors, validateForm, errorStyle } = useFieldErrors();
 
 
-  const disputes = Store.getDisputes().filter(d => statusFilter === 'all' || d.status === statusFilter
+  const disputes = allDisputes.filter(d => statusFilter === 'all' || d.status === statusFilter
     || (statusFilter === 'no-verdict' && ['withdrawn', 'expired'].includes(d.status)));
 
   function quickResolve(disputeId, verdict) {
     Validate.confirm(
       `Override with "${verdict.replace(/-/g, ' ')}"? ${VERDICT_LABELS[verdict]}. Any reviewer fee held for this dispute goes back to whoever paid it.`,
-      () => {
-        if (!resolveAsOperations(Store, Validate, disputeId, verdict, `Operations override: ${VERDICT_LABELS[verdict]}.`)) return;
+      async () => {
+        if (!(await resolveAsOperations(dispatch, Validate, disputeId, verdict, `Operations override: ${VERDICT_LABELS[verdict]}.`))) return;
         Validate.toast('Dispute settled.', 'success');
-        rerender();
       }
     );
   }
 
   function openOverrideModal(disputeId) {
-    const d = Store.getDisputeById(disputeId);
+    const d = (allDisputes.find(x => x.id === disputeId) || null);
     setActiveDisputeId(disputeId);
     setOverrideTitle('Override: ' + d.project);
     setOverrideVerdict('');
@@ -85,7 +85,7 @@ export default function SuperuserDisputes() {
     clearAllErrors();
   }
 
-  function submitOverride() {
+  async function submitOverride() {
     const resolution = overrideResolution.trim();
     const { valid } = validateForm([
       { fieldId: 'overrideVerdict', value: overrideVerdict, checks: [v => Validate.selected(v, 'verdict')] },
@@ -93,10 +93,9 @@ export default function SuperuserDisputes() {
     ]);
     if (!valid) return;
 
-    if (!resolveAsOperations(Store, Validate, activeDisputeId, overrideVerdict, resolution)) return;
+    if (!(await resolveAsOperations(dispatch, Validate, activeDisputeId, overrideVerdict, resolution))) return;
     closeOverrideModal();
     Validate.toast('Dispute override applied.', 'success');
-    rerender();
   }
 
   return (
@@ -139,7 +138,7 @@ export default function SuperuserDisputes() {
                 <span><strong>Raised by:</strong>{' ' + d.raisedByName}</span>
                 <span><strong>Against:</strong>{' ' + d.againstName}</span>
                 <span><strong>Amount:</strong>{' ' + d.amount}</span>
-                <span><strong>Reviewer:</strong>{' ' + (d.expertId ? (Store.getUserById(d.expertId)?.name || d.expertId) : 'none assigned')}</span>
+                <span><strong>Reviewer:</strong>{' ' + (d.expertId ? (userById(d.expertId)?.name || d.expertId) : 'none assigned')}</span>
                 {d.milestone ? <span><strong>Milestone:</strong>{' ' + d.milestone}</span> : ''}
               </div>
               <div className="dispute-reason">{[d.reason, d.details].filter(Boolean).join(' — ')}</div>

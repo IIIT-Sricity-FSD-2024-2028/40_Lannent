@@ -9,11 +9,13 @@
  */
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectAllDisputes, createDispute } from '../store/slices/disputesSlice';
+import { selectFees } from '../store/slices/feesSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import ExpertPicker from '../components/ExpertPicker';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './Dispute.css?raw';
 
@@ -47,11 +49,11 @@ function readSavedTarget() {
  * copy rather than the milestone. The id now travels in the URL
  * (/dispute?milestoneId=…), and everything else is read from the store.
  */
-function loadTarget(Store, milestoneId) {
+function loadTarget({ taskById, milestoneById }, milestoneId) {
   const id = milestoneId || readSavedTarget()?.id;
-  const ms = id ? Store.getMilestoneById(id) : null;
+  const ms = id ? milestoneById(id) : null;
   if (!ms) return null;
-  const task = Store.getTaskById(ms.taskId);
+  const task = taskById(ms.taskId);
   return {
     id: ms.id,
     taskId: ms.taskId,
@@ -66,18 +68,22 @@ function loadTarget(Store, milestoneId) {
 const READONLY_FIELD_STYLE = { padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--secondary)', fontWeight: 600 };
 
 export default function Dispute() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { taskById, milestoneById } = useLookups();
+  const disputes = useSelector(selectAllDisputes);
+  const currentUser = useCurrentUser();
   usePageTitle('Raise Dispute — Lannent');
   const navigate = useNavigate();
-  const session = Auth.getCurrentUser();
+  const dispatch = useDispatch();
+  const Fees = useSelector(selectFees);
+  const session = currentUser;
   // Only clients raise disputes (the route is client-only too).
   const userRole = session?.role || 'client';
   const workroomURL = '/project-workroom';
 
   const [searchParams] = useSearchParams();
-  const [target] = useState(() => loadTarget(Store, searchParams.get('milestoneId')));
-  const openDispute = target ? Store.getDisputes().find(d => d.milestoneId === target.id && d.status === 'open') : null;
+  // Read once when the page opens (submitting changes the milestone's status).
+  const [target] = useState(() => loadTarget({ taskById, milestoneById }, searchParams.get('milestoneId')));
+  const openDispute = target ? disputes.find(d => d.milestoneId === target.id && d.status === 'open') : null;
   const settled = target && ['completed', 'approved'].includes(target.status);
   // There is only something to dispute once the worker has handed work in.
   const notSubmitted = target && !['submitted', 'review'].includes(target.status);
@@ -94,7 +100,7 @@ export default function Dispute() {
   const [showExpertError, setShowExpertError] = useState(false);
   // The client pays the reviewer, so only the client proposes a fee.
 
-  function submitDispute() {
+  async function submitDispute() {
     if (!target) {
       showToast('No milestone selected for dispute.', 'warn');
       return;
@@ -133,7 +139,7 @@ export default function Dispute() {
     }
 
     try {
-      Store.createDispute(disputeData);
+      await dispatch(createDispute(disputeData)).unwrap();
     } catch (e) {
       // The server's reason (already disputed, already paid, …), not a
       // generic "try again".
@@ -230,7 +236,7 @@ export default function Dispute() {
                 <div style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 6 }}>
                   You pay the reviewer to arbitrate the dispute. This is your offer — the reviewer can accept it or
                   counter, and nothing is charged until you both agree and you fund it under Audit &amp; Dispute Fees. The platform keeps
-                  {` ${Store.Fees.rates().expertService.percent}%`} of the reviewer&apos;s fee.
+                  {` ${Fees.rates().expertService.percent}%`} of the reviewer&apos;s fee.
                 </div>
                 <div style={{ position: 'relative', maxWidth: 220 }}>
                   <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: 'var(--muted-foreground)' }}>₹</span>
