@@ -6,15 +6,16 @@
  * the project, the dispute (for dispute audits), the milestones, the people
  * involved and the fee negotiation — quote, accept, start or decline.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useValidation } from '../context/ValidationContext';
+import { useCurrentUser } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { acceptAuditEngagement, acceptAuditOffer, declineAuditEngagement, fetchAuditPreview, makeAuditOffer, selectAuditPreview } from '../store/slices/auditRequestsSlice';
+import { selectFees } from '../store/slices/feesSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import EmptyState from '../components/EmptyState';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
-import useRerender from '../hooks/useRerender';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ExpertAuditPreview.css?raw';
 
@@ -102,36 +103,42 @@ function PersonAvatar({ background, children }) {
 }
 
 /**
- * Runs a Store write, returning its result or null. A refusal is shown with
+ * Dispatches a write thunk; true if it went through. A refusal is shown with
  * the server's own reason (e.g. "Insufficient wallet balance…").
  */
-function attempt(Validate, fn) {
+async function attempt(Validate, dispatch, thunk) {
   try {
-    return fn();
+    await dispatch(thunk).unwrap();
+    return true;
   } catch (e) {
     Validate.toast(e.message, 'error');
-    return null;
+    return false;
   }
 }
 
 export default function ExpertAuditPreview() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const currentUser = useCurrentUser();
   const Validate = useValidation();
   usePageTitle('Review Before Accepting — Lannent');
   const navigate = useNavigate();
-  const reload = useRerender();
+  const dispatch = useDispatch();
+  const Fees = useSelector(selectFees);
   const [searchParams] = useSearchParams();
   const arId = searchParams.get('id');
   const [quoteValue, setQuoteValue] = useState('');
+  // undefined while loading, null if the server refused it
+  const pv = useSelector(st => (arId ? selectAuditPreview(st, arId) : null));
+  useEffect(() => { if (arId) dispatch(fetchAuditPreview(arId)); }, [dispatch, arId]);
+  // The preview is the server's view of the engagement; re-read it after each action.
+  const reload = () => dispatch(fetchAuditPreview(arId));
 
   const emptyStateProps = { role: 'expert', activePath: '/expert-audit-requests', pageTitle: 'Review before accepting', linkHref: '/expert-audit-requests', linkLabel: 'Back to Audit Requests' };
   if (!arId) return <PageWithStyle><EmptyState {...emptyStateProps} message="No audit request selected." /></PageWithStyle>;
 
-  const pv = Store.getAuditPreview(arId);
+  if (pv === undefined) return <PageWithStyle><EmptyState {...emptyStateProps} message="Loading the audit request…" /></PageWithStyle>;
   if (!pv) return <PageWithStyle><EmptyState {...emptyStateProps} message="This audit request could not be loaded." /></PageWithStyle>;
 
-  const session = Auth.getCurrentUser();
+  const session = currentUser;
   const a = pv.auditRequest;
   const p = pv.project;
   // Disputes and technical audits share this page, so the sidebar tab (and
@@ -142,40 +149,40 @@ export default function ExpertAuditPreview() {
   const payerLabel = 'Client'; // only clients pay reviewers
   const negotiating = ['preview-sent', 'negotiating'].includes(a.status);
 
-  function quote() {
+  async function quote() {
     const amount = parseFloat(quoteValue);
     if (!amount || amount < 1) { Validate.toast('Enter a price greater than zero.', 'error'); return; }
-    const r = attempt(Validate, () => Store.makeAuditOffer(arId, { amount, note: 'Quote from reviewer' }));
+    const r = await attempt(Validate, dispatch, makeAuditOffer({ id: arId, amount, note: 'Quote from reviewer' }));
     if (!r) return;
     Validate.toast(`Quote of ₹${amount.toLocaleString('en-IN')} sent to the client.`, 'success');
     setQuoteValue('');
     reload();
   }
 
-  function acceptOffer(offerId) {
-    const r = attempt(Validate, () => Store.acceptAuditOffer(arId, offerId));
+  async function acceptOffer(offerId) {
+    const r = await attempt(Validate, dispatch, acceptAuditOffer({ id: arId, offerId }));
     if (!r) return;
     Validate.toast('Fee agreed. The client now funds escrow.', 'success');
     reload();
   }
 
-  function takeJob() {
-    const r = attempt(Validate, () => Store.acceptAuditEngagement(arId));
+  async function takeJob() {
+    const r = await attempt(Validate, dispatch, acceptAuditEngagement(arId));
     if (!r) return;
     Validate.toast('Engagement accepted. You can now file your report.', 'success');
     reload();
   }
 
   function decline() {
-    Validate.confirm('Decline this audit? The client will need to find another reviewer.', () => {
-      const r = attempt(Validate, () => Store.declineAuditEngagement(arId, 'Declined by reviewer'));
+    Validate.confirm('Decline this audit? The client will need to find another reviewer.', async () => {
+      const r = await attempt(Validate, dispatch, declineAuditEngagement({ id: arId, reason: 'Declined by reviewer' }));
       if (!r) return;
       Validate.toast('Audit declined.', 'info');
       navigate(home);
     });
   }
 
-  const payout = Store.Fees.expertPayout(a.agreedAmount);
+  const payout = Fees.expertPayout(a.agreedAmount);
 
   return (
     <PageWithStyle>
@@ -275,7 +282,7 @@ export default function ExpertAuditPreview() {
                     <button className="btn-outline" onClick={quote}>Send</button>
                   </div>
                   <div className="pv-fee">
-                    {`The platform keeps ${Store.Fees.rates().expertService.percent}% of the agreed fee. Nothing is committed until the ${payerLabel.toLowerCase()} funds escrow.`}
+                    {`The platform keeps ${Fees.rates().expertService.percent}% of the agreed fee. Nothing is committed until the ${payerLabel.toLowerCase()} funds escrow.`}
                   </div>
                 </>
               ) : ''}

@@ -9,16 +9,18 @@
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useValidation } from '../context/ValidationContext';
+import { money } from '../utils/transactions';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { acceptAuditOffer, cancelAuditRequest, fundAuditEscrow, makeAuditOffer, reassignAudit, selectAllAuditRequests } from '../store/slices/auditRequestsSlice';
+import { cancelDraftTask, selectAllTasks } from '../store/slices/tasksSlice';
+import { selectAllDisputes, withdrawDispute } from '../store/slices/disputesSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import ExpertPicker from '../components/ExpertPicker';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
-import useRerender from '../hooks/useRerender';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ClientAuditOffers.css?raw';
-import { money } from '../utils/transactions';
 
 const STATUS_TEXT = {
   'preview-sent': 'waiting for the reviewer',
@@ -32,10 +34,8 @@ const STATUS_TEXT = {
 };
 
 /** Engagements this client pays for, newest first. */
-function loadEngagements(Store, userId) {
-  const tasks = Store.getTasks();
-  const disputes = Store.getDisputes();
-  return Store.getAuditRequests()
+function loadEngagements({ auditRequests, disputes, tasks }, userId) {
+  return auditRequests
     .filter(a => a.clientId === userId)
     .filter(a => a.status !== 'cancelled')
     // A declined one stays only while it can still be replaced.
@@ -48,29 +48,31 @@ function loadEngagements(Store, userId) {
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)) || String(b.id).localeCompare(String(a.id)));
 }
 
-/** Runs a Store write, showing the server's reason if it is refused. */
-function attempt(Validate, fn) {
+/** Dispatches a write thunk; true if it went through, else shows the server's reason. */
+async function attempt(Validate, dispatch, thunk) {
   try {
-    return fn();
+    await dispatch(thunk).unwrap();
+    return true;
   } catch (e) {
     Validate.toast(e.message, 'error');
-    return null;
+    return false;
   }
 }
 
 function ReassignPanel({ engagement, task, onDone }) {
-  const Store = useStore();
+  const { userById } = useLookups();
   const Validate = useValidation();
+  const dispatch = useDispatch();
   const [expertId, setExpertId] = useState(null);
   const [offer, setOffer] = useState(String(engagement.agreedAmount || engagement.offers?.[0]?.amount || ''));
 
-  function send() {
+  async function send() {
     const amount = parseFloat(offer);
     if (!expertId) { Validate.toast('Choose a reviewer first.', 'error'); return; }
     if (!(amount >= 1)) { Validate.toast('Enter an opening offer of at least ₹1.', 'error'); return; }
-    const r = attempt(Validate, () => Store.reassignAudit(engagement.id, expertId, amount));
+    const r = await attempt(Validate, dispatch, reassignAudit({ id: engagement.id, expertId, openingOffer: amount }));
     if (!r) return;
-    Validate.toast(`Request sent to ${Store.getUserById(expertId)?.name || 'the reviewer'}.`, 'success');
+    Validate.toast(`Request sent to ${userById(expertId)?.name || 'the reviewer'}.`, 'success');
     onDone();
   }
 
@@ -89,42 +91,42 @@ function ReassignPanel({ engagement, task, onDone }) {
 }
 
 export default function AuditOffers() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const auditRequests = useSelector(selectAllAuditRequests);
+  const disputes = useSelector(selectAllDisputes);
+  const tasks = useSelector(selectAllTasks);
+  const { userById, taskById } = useLookups();
+  const currentUser = useCurrentUser();
   const Validate = useValidation();
   usePageTitle('Audit & Dispute Fees — Lannent');
-  const session = Auth.getCurrentUser();
-  const reload = useRerender();
+  const session = currentUser;
+  const dispatch = useDispatch();
   const [counterValues, setCounterValues] = useState({});
   const [reassigning, setReassigning] = useState(null);
 
-  const engagements = loadEngagements(Store, session.userId);
+  const engagements = loadEngagements({ auditRequests, disputes, tasks }, session.userId);
 
-  function counter(id) {
+  async function counter(id) {
     const amount = parseFloat(counterValues[id]);
     if (!amount || amount < 1) { Validate.toast('Enter a price of at least ₹1.', 'error'); return; }
-    const r = attempt(Validate, () => Store.makeAuditOffer(id, { amount, note: 'Counter-offer' }));
+    const r = await attempt(Validate, dispatch, makeAuditOffer({ id, amount, note: 'Counter-offer' }));
     if (!r) return;
     Validate.toast(`Offer of ${money(amount)} sent to the reviewer.`, 'success');
     setCounterValues(v => ({ ...v, [id]: '' }));
-    reload();
   }
 
-  function acceptOffer(id, offerId) {
-    const r = attempt(Validate, () => Store.acceptAuditOffer(id, offerId));
+  async function acceptOffer(id, offerId) {
+    const r = await attempt(Validate, dispatch, acceptAuditOffer({ id, offerId }));
     if (!r) return;
     Validate.toast('Fee agreed. Fund the escrow so the reviewer can start.', 'success');
-    reload();
   }
 
   function fundEscrow(a) {
     Validate.confirm(
       `Move ${money(a.agreedAmount)} from your wallet into escrow? The reviewer is paid from it when the work is done; if they decline, it comes back to you.`,
-      () => {
-        const r = attempt(Validate, () => Store.fundAuditEscrow(a.id));
+      async () => {
+        const r = await attempt(Validate, dispatch, fundAuditEscrow(a.id));
         if (!r) return;
         Validate.toast('Escrow funded. The reviewer can now start.', 'success');
-        reload();
       },
     );
   }
@@ -140,25 +142,23 @@ export default function AuditOffers() {
       isDispute
         ? 'Withdraw this dispute? Any fee you funded comes back, and the milestone returns to your review — approve it, ask for changes or dispute it again. It will be approved automatically in 2 days if you do nothing.'
         : 'Withdraw this audit request? Any fee you funded comes back to your wallet.',
-      () => {
-        const r = attempt(Validate, () => (isDispute ? Store.withdrawDispute(a.disputeId) : Store.cancelAuditRequest(a.id)));
+      async () => {
+        const r = await attempt(Validate, dispatch, isDispute ? withdrawDispute(a.disputeId) : cancelAuditRequest(a.id));
         if (!r) return;
         Validate.toast(isDispute ? 'Dispute withdrawn.' : 'Audit request withdrawn.', 'success');
-        reload();
       },
     );
   }
 
   function cancelDraft(taskId) {
-    Validate.confirm('Cancel this draft project? Its budget and any audit escrow are returned to your wallet.', () => {
-      const r = attempt(Validate, () => Store.cancelDraftTask(taskId));
+    Validate.confirm('Cancel this draft project? Its budget and any audit escrow are returned to your wallet.', async () => {
+      const r = await attempt(Validate, dispatch, cancelDraftTask(taskId));
       if (!r) return;
       Validate.toast('Draft cancelled and your money returned.', 'success');
-      reload();
     });
   }
 
-  const wallet = Store.getUserById(session.userId)?.walletBalance || 0;
+  const wallet = userById(session.userId)?.walletBalance || 0;
 
   return (
     <>
@@ -178,9 +178,9 @@ export default function AuditOffers() {
               <Link to="/post-task" className="btn-primary" style={{ textDecoration: 'none' }}>Post a Task</Link>
             </div>
           ) : engagements.map(a => {
-            const task = Store.getTaskById(a.taskId);
-            const expert = a.expertId ? Store.getUserById(a.expertId) : null;
-            const declinedBy = a.declinedBy ? Store.getUserById(a.declinedBy) : null;
+            const task = taskById(a.taskId);
+            const expert = a.expertId ? userById(a.expertId) : null;
+            const declinedBy = a.declinedBy ? userById(a.declinedBy) : null;
             const live = (a.offers || []).find(o => o.status === 'pending');
             const canAccept = live && live.offeredBy === 'expert';
             const negotiating = ['preview-sent', 'negotiating'].includes(a.status);
@@ -249,7 +249,7 @@ export default function AuditOffers() {
                 </div>
 
                 {reassigning === a.id && a.status === 'declined' && (
-                  <ReassignPanel engagement={a} task={task} onDone={() => { setReassigning(null); reload(); }} />
+                  <ReassignPanel engagement={a} task={task} onDone={() => setReassigning(null)} />
                 )}
               </div>
             );

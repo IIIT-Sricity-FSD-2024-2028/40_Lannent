@@ -5,14 +5,17 @@
  * Every technical-audit report and dispute resolution the expert has filed,
  * with counts, a type filter, a search box and a link to each report.
  */
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useCurrentUser } from '../store/hooks';
+import { useSelector } from 'react-redux';
+import { selectAllAuditRequests } from '../store/slices/auditRequestsSlice';
+import { selectAllAuditReports } from '../store/slices/auditReportsSlice';
+import { selectAllDisputes } from '../store/slices/disputesSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
 import StatCard from '../components/StatCard';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ExpertReports.css?raw';
 
@@ -25,8 +28,8 @@ const DISPUTE_VERDICT = { 'worker-favour': 'Worker Favour', 'client-favour': 'Cl
 const clip = (text, n = 100) => (text.length > n ? text.substring(0, n) + '…' : text);
 
 /** The expert's audit reports and resolved disputes, as table rows. */
-function loadReports(Store, userId) {
-  const auditReports = Store.getAuditReports().filter(r => r.verdict && r.expertId === userId).map(r => ({
+function toReportRows({ auditReports: allAuditReports, disputes }, userId) {
+  const auditReports = allAuditReports.filter(r => r.verdict && r.expertId === userId).map(r => ({
     id: r.id,
     auditRequestId: r.auditRequestId,
     type: 'Technical Audit',
@@ -43,7 +46,7 @@ function loadReports(Store, userId) {
   }));
 
   // A dispute settled by an operations override was not this reviewer's verdict.
-  const disputeReports = Store.getDisputes().filter(d => d.status === 'resolved' && d.expertId === userId && !d.overriddenBy).map(d => ({
+  const disputeReports = disputes.filter(d => d.status === 'resolved' && d.expertId === userId && !d.overriddenBy).map(d => ({
     id: 'dr-' + d.id,
     type: 'Dispute Resolution',
     project: d.project || 'Unknown Project',
@@ -102,11 +105,16 @@ function ReportRow({ r }) {
 }
 
 export default function ExpertReports() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const auditRequests = useSelector(selectAllAuditRequests);
+  const currentUser = useCurrentUser();
   usePageTitle('Reports — Lannent');
-  const session = Auth.getCurrentUser();
-  const [reports] = useState(() => loadReports(Store, session.userId));
+  const session = currentUser;
+  const allAuditReports = useSelector(selectAllAuditReports);
+  const disputes = useSelector(selectAllDisputes);
+  const reports = useMemo(
+    () => toReportRows({ auditReports: allAuditReports, disputes }, session.userId),
+    [allAuditReports, disputes, session.userId],
+  );
   const [activeFilter, setActiveFilter] = useState('All');
   // "Reports so far" / "View Reports" on an audit request open this page
   // showing every report filed on that one audit (?audit=<auditRequestId>).
@@ -115,7 +123,7 @@ export default function ExpertReports() {
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '');
   const auditReports = auditFilter ? reports.filter(r => r.auditRequestId === auditFilter) : [];
   const auditProject = auditReports[0]?.project
-    || (auditFilter ? Store.getAuditRequestById(auditFilter)?.project : '') || 'this project';
+    || (auditFilter ? (auditRequests.find(x => x.id === auditFilter) || null)?.project : '') || 'this project';
   const showAll = () => setSearchParams({});
 
   const q = searchQuery.trim().toLowerCase();
