@@ -6,15 +6,15 @@
  * add, edit, suspend / activate and delete accounts.
  */
 import { useState } from 'react';
+import { useValidation } from '../context/ValidationContext';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectAllUsers, createUser, deleteUser, updateUser } from '../store/slices/usersSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import FieldError from '../components/FieldError';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
 import useFieldErrors from '../hooks/useFieldErrors';
-import useRerender from '../hooks/useRerender';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './SuperuserUsers.css?raw';
 
@@ -33,15 +33,16 @@ const ROLE_COLORS = { client: 'linear-gradient(135deg,#6366f1,#4f46e5)', worker:
 const EMPTY_FORM = { name: '', email: '', password: '', role: '', status: 'active' };
 
 export default function SuperuserUsers() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById } = useLookups();
+  const users = useSelector(selectAllUsers);
+  const currentUser = useCurrentUser();
   const Validate = useValidation();
   usePageTitle('Manage Users — Lannent');
-  const rerender = useRerender();
+  const dispatch = useDispatch();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   // After "Delete" the row fades out for 300ms before the table redraws, so the
-  // rows as they were are kept on screen meanwhile (the Store already dropped it).
+  // rows as they were are kept on screen meanwhile (the store already dropped it).
   const [fadingId, setFadingId] = useState(null);
   const [frozenRows, setFrozenRows] = useState(null);
 
@@ -53,7 +54,7 @@ export default function SuperuserUsers() {
   const { errors, showError, clearError, clearAllErrors, validateForm, errorStyle } = useFieldErrors();
 
   const q = search.toLowerCase();
-  const filtered = Store.getUsers().filter(u => {
+  const filtered = users.filter(u => {
     const matchSearch = !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
     const matchRole = roleFilter === 'all' || u.role === roleFilter;
     return matchSearch && matchRole;
@@ -70,7 +71,7 @@ export default function SuperuserUsers() {
   }
 
   function openEditModal(id) {
-    const user = Store.getUserById(id);
+    const user = userById(id);
     if (!user) return;
     setEditingUserId(id);
     setModalText({ title: 'Edit User', sub: 'Update details for ' + user.name, button: 'Save Changes' });
@@ -84,7 +85,7 @@ export default function SuperuserUsers() {
     clearAllErrors();
   }
 
-  function saveUser() {
+  async function saveUser() {
     const name = form.name.trim();
     const email = form.email.trim();
     const { password, role, status } = form;
@@ -101,7 +102,7 @@ export default function SuperuserUsers() {
     if (!valid) return;
 
     // Check email uniqueness
-    const existing = Store.getUserByEmail(email);
+    const existing = users.find(u => (u.email || '').toLowerCase() === email.toLowerCase()) || null;
     if (existing && existing.id !== editingUserId) {
       showError('mEmail', 'This email is already in use.');
       return;
@@ -110,11 +111,11 @@ export default function SuperuserUsers() {
     try {
       if (editingUserId) {
         // A role is fixed when the account is made; everything else here is saved.
-        Store.updateUser(editingUserId, { name, email, status });
+        await dispatch(updateUser({ id: editingUserId, updates: { name, email, status } })).unwrap();
         Validate.toast('User updated.', 'success');
       } else {
-        const created = Store.createUser({ name, email, password, role, avatarColor: ROLE_COLORS[role] || '' });
-        if (status === 'suspended') Store.updateUser(created.id, { status });
+        const created = await dispatch(createUser({ name, email, password, role, avatarColor: ROLE_COLORS[role] || '' })).unwrap();
+        if (status === 'suspended') await dispatch(updateUser({ id: created.id, updates: { status } })).unwrap();
         Validate.toast('Account created. Give its owner the temporary password — they must choose their own when they first sign in.', 'success');
       }
     } catch (e) {
@@ -122,39 +123,37 @@ export default function SuperuserUsers() {
       return;
     }
     closeModal();
-    rerender();
   }
 
   function toggleSuspend(id) {
-    const user = Store.getUserById(id);
+    const user = userById(id);
     if (!user) return;
     const newStatus = user.status === 'active' ? 'suspended' : 'active';
     Validate.confirm(
       `Are you sure you want to ${newStatus === 'suspended' ? 'suspend' : 'activate'} ${user.name}?`,
-      () => {
+      async () => {
         try {
-          Store.updateUser(id, { status: newStatus });
+          await dispatch(updateUser({ id, updates: { status: newStatus } })).unwrap();
         } catch (e) {
           Validate.toast((e.message), 'error');
           return;
         }
-        rerender();
         Validate.toast(`User ${newStatus === 'suspended' ? 'suspended' : 'activated'}.`, newStatus === 'suspended' ? 'warning' : 'success');
       }
     );
   }
 
-  function deleteUser(id) {
-    const user = Store.getUserById(id);
+  function handleDelete(id) {
+    const user = userById(id);
     if (!user) return;
-    const session = Auth.getCurrentUser();
+    const session = currentUser;
     if (session && session.userId === id) { Validate.toast('You cannot delete your own account.', 'error'); return; }
 
     Validate.confirm(
       `Permanently delete ${user.name}? This action cannot be undone.`,
-      () => {
+      async () => {
         try {
-          Store.deleteUser(id);
+          await dispatch(deleteUser(id)).unwrap();
         } catch (e) {
           Validate.toast((e.message), 'error');
           return;
@@ -226,7 +225,7 @@ export default function SuperuserUsers() {
                       {/* Operations accounts (including your own) cannot be suspended or deleted. */}
                       {u.role !== 'superuser' && <>
                         <button className="btn-suspend" onClick={() => toggleSuspend(u.id)}>{u.status === 'active' ? 'Suspend' : 'Activate'}</button>
-                        <button className="btn-delete" onClick={() => deleteUser(u.id)}>Delete</button>
+                        <button className="btn-delete" onClick={() => handleDelete(u.id)}>Delete</button>
                       </>}
                     </div>
                   </td>

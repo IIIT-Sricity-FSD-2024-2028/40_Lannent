@@ -6,12 +6,18 @@
  * totals (all read live from the API), quick actions, and the five most
  * recent users and tasks.
  */
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import StatCard from '../components/StatCard';
-import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectAllDisputes } from '../store/slices/disputesSlice';
+import { selectAllTasks } from '../store/slices/tasksSlice';
+import { selectAllTransactions } from '../store/slices/transactionsSlice';
+import { selectAllUsers } from '../store/slices/usersSlice';
+import { fetchLedgerSummary, selectLedgerSummary } from '../store/slices/ledgerSlice';
 
 const TASK_STATUS_BADGES = { 'draft': 'badge-gray', 'open': 'badge-orange', 'in-progress': 'badge-blue', 'completed': 'badge-green', 'cancelled': 'badge-red' };
 const STAFF_ROLES = ['superuser', 'revenue-admin', 'intake-admin', 'compliance-admin'];
@@ -27,18 +33,23 @@ function roleBadge(role) {
 }
 
 export default function SuperuserDashboard() {
-  const Store = useStore();
+  const disputes = useSelector(selectAllDisputes);
+  const tasks = useSelector(selectAllTasks);
+  const transactions = useSelector(selectAllTransactions);
+  const users = useSelector(selectAllUsers);
+  const ledger = useSelector(selectLedgerSummary);
+  const dispatch = useDispatch();
   usePageTitle('Super User Dashboard — Lannent');
 
-  const users = Store.getUsers();
-  const tasks = Store.getTasks();
-  const transactions = Store.getTransactions();
+  // Escrow totals come from the ledger, read when the page opens.
+  useEffect(() => { dispatch(fetchLedgerSummary()); }, [dispatch]);
+
 
   const totalUsers = users.length;
   const activeTasks = tasks.filter(t => t.status === 'in-progress').length;
   // What is held right now comes from the ledger; summing lock rows minus
   // net release rows over-counted it by every fee and refund.
-  const escrowBalance = Store.getLedgerSummary().totalHeld || 0;
+  const escrowBalance = (ledger && ledger.totalHeld) || 0;
   // What workers actually received: release rows record the net after the service fee.
   const paidToWorkers = transactions.filter(t => t.type === 'milestone-release').reduce((s, t) => s + (t.netAmount != null ? t.netAmount : t.amount), 0);
 
@@ -48,7 +59,6 @@ export default function SuperuserDashboard() {
   const experts = users.filter(u => u.role === 'expert').length;
   const staff = users.filter(u => STAFF_ROLES.includes(u.role)).length;
   const suspended = users.filter(u => u.status === 'suspended').length;
-  const disputes = Store.getDisputes();
   const openDisputes = disputes.filter(d => d.status === 'open').length;
   // Withdrawn and expired disputes ended without a verdict; they are not "resolved".
   const resolvedDisputes = disputes.filter(d => d.status === 'resolved').length;
