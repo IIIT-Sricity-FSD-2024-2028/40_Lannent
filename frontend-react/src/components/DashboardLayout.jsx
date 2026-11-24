@@ -12,10 +12,11 @@ import { useState } from 'react';
 import Sidebar from './Sidebar';
 import TopNavbar from './TopNavbar';
 import OfflineBanner from './OfflineBanner';
-import { useAuth } from '../context/AuthContext';
+import { useSelector } from 'react-redux';
+import { selectCurrentUser } from '../store/slices/authSlice';
 
 /** Name / initials / email shown in the top bar — always the signed-in user's. */
-function getDisplayUser(Auth, role) {
+function getDisplayUser(session, role) {
   // Every dashboard route is behind a sign-in guard, so the session is there.
   // The old fallback invented people ("James Client", "Dr. Jane S.").
   const ROLE_NAMES = {
@@ -28,7 +29,6 @@ function getDisplayUser(Auth, role) {
   let avatarColor = '';
   let id = '';
 
-  const session = Auth.getCurrentUser();
   if (session) {
     name = session.name || name;
     initials = session.avatar || initials;
@@ -40,11 +40,11 @@ function getDisplayUser(Auth, role) {
 }
 
 export default function DashboardLayout({ role = 'client', activePath = '', pageTitle = 'Dashboard', pageSubtitle = '', children }) {
-  const Auth = useAuth();
+  const session = useSelector(selectCurrentUser);
   const [collapsed, setCollapsed] = useState(false);
   // Read once when the page opens: like the original shell, the top bar keeps
   // showing the same name until the next page load (even after a profile save).
-  const [user] = useState(() => getDisplayUser(Auth, role));
+  const [user] = useState(() => getDisplayUser(session, role));
 
   return (
     <div className="dashboard-layout">

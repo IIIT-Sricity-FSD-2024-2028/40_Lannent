@@ -6,13 +6,13 @@
  */
 import { useState } from 'react';
 import PasswordInput from './PasswordInput';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
+import { useDispatch, useSelector } from 'react-redux';
+import { changePassword, selectCurrentUserId } from '../store/slices/authSlice';
 import { useValidation } from '../context/ValidationContext';
 
 export default function ChangePasswordCard({ onChanged } = {}) {
-  const Store = useStore();
-  const Auth = useAuth();
+  const dispatch = useDispatch();
+  const userId = useSelector(selectCurrentUserId);
   const Validate = useValidation();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -20,7 +20,7 @@ export default function ChangePasswordCard({ onChanged } = {}) {
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
-  function save() {
+  async function save() {
     const e = {};
     if (!current) e.current = 'Enter your current password.';
     const strength = Validate.password(next);
@@ -32,7 +32,7 @@ export default function ChangePasswordCard({ onChanged } = {}) {
 
     setSaving(true);
     try {
-      Store.changePassword(Auth.getCurrentUser().userId, current, next);
+      await dispatch(changePassword({ userId, currentPassword: current, newPassword: next })).unwrap();
     } catch (err) {
       setSaving(false);
       if (/current password/i.test(err.message)) setErrors({ current: err.message });
