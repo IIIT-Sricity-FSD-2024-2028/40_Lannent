@@ -9,14 +9,18 @@
  *
  * Open a specific conversation with /messages?taskId=<id>&with=<userId>.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useValidation } from '../context/ValidationContext';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchMessages, selectAllMessages, sendMessage } from '../store/slices/messagesSlice';
+import { fileUrl, uploadFile } from '../store/slices/filesSlice';
+import { selectAllAuditRequests } from '../store/slices/auditRequestsSlice';
+import { selectAllTasks } from '../store/slices/tasksSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './Messages.css?raw';
 
@@ -28,17 +32,17 @@ const ACCEPT = '.zip,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,
 const keyOf = (taskId, otherId) => `${taskId}::${otherId}`;
 
 /** Everyone the signed-in user can talk to, per project. */
-function buildConversations(Store, me) {
+function buildConversations({ auditRequests, tasks, messages, userById, taskById }, me) {
   const pairs = new Map();
   const add = (task, otherId) => {
     if (!task || !otherId || otherId === me.userId) return;
     pairs.set(keyOf(task.id, otherId), { task, otherId });
   };
-  const reviewersOf = taskId => Store.getAuditRequests()
+  const reviewersOf = taskId => auditRequests
     .filter(a => a.taskId === taskId && a.expertId && !['declined', 'cancelled'].includes(a.status))
     .map(a => a.expertId);
 
-  for (const t of Store.getTasks()) {
+  for (const t of tasks) {
     if (me.role === 'client' && t.clientId === me.userId) {
       add(t, t.workerId);
       reviewersOf(t.id).forEach(id => add(t, id));
@@ -51,16 +55,17 @@ function buildConversations(Store, me) {
     }
   }
   // Anyone who has already written to you keeps their conversation.
-  for (const m of Store.getMessagesByUser(me.userId)) {
+  for (const m of messages.filter(x => x.senderId === me.userId || x.receiverId === me.userId)) {
     const otherId = m.senderId === me.userId ? m.receiverId : m.senderId;
-    const task = Store.getTaskById(m.taskId);
+    const task = taskById(m.taskId);
     if (task) add(task, otherId);
   }
 
   return [...pairs.values()].map(({ task, otherId }) => {
-    const other = Store.getUserById(otherId) || { name: 'Unknown user', avatar: '??', avatarColor: FALLBACK_COLOR };
-    const msgs = Store.getMessagesByTask(task.id)
-      .filter(m => (m.senderId === me.userId && m.receiverId === otherId) || (m.senderId === otherId && m.receiverId === me.userId))
+    const other = userById(otherId) || { name: 'Unknown user', avatar: '??', avatarColor: FALLBACK_COLOR };
+    const msgs = messages
+      .filter(m => m.taskId === task.id
+        && ((m.senderId === me.userId && m.receiverId === otherId) || (m.senderId === otherId && m.receiverId === me.userId)))
       .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
     const last = msgs[msgs.length - 1];
     return {
@@ -88,18 +93,26 @@ function fmtTime(iso) {
 }
 
 export default function Messages() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById, taskById } = useLookups();
+  const auditRequests = useSelector(selectAllAuditRequests);
+  const tasks = useSelector(selectAllTasks);
+  const messages = useSelector(selectAllMessages);
+  const dispatch = useDispatch();
+  const currentUser = useCurrentUser();
   const Validate = useValidation();
   usePageTitle('Messages — Lannent');
-  const session = Auth.getCurrentUser();
+  const session = currentUser;
   const [searchParams] = useSearchParams();
   const wanted = searchParams.get('taskId') && searchParams.get('with') ? keyOf(searchParams.get('taskId'), searchParams.get('with')) : null;
   const wantedTask = searchParams.get('taskId');
 
-  const [conversations, setConversations] = useState(() => buildConversations(Store, session));
+  // Conversations are derived from the store, so a sent or polled message shows straight away.
+  const conversations = useMemo(
+    () => buildConversations({ auditRequests, tasks, messages, userById, taskById }, session),
+    [auditRequests, tasks, messages, userById, taskById, session],
+  );
   const [activeKey, setActiveKey] = useState(() => {
-    const list = buildConversations(Store, session);
+    const list = conversations;
     return (wanted && list.find(c => c.key === wanted)?.key)
       || (wantedTask && list.find(c => c.taskId === wantedTask)?.key)
       || list[0]?.key || null;
@@ -113,12 +126,9 @@ export default function Messages() {
 
   // Pick up new messages while the page is open.
   useEffect(() => {
-    const timer = setInterval(() => {
-      Store.refreshMessages();
-      setConversations(buildConversations(Store, session));
-    }, POLL_MS);
+    const timer = setInterval(() => { dispatch(fetchMessages()); }, POLL_MS);
     return () => clearInterval(timer);
-  }, [Store, session.userId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dispatch, session.userId]);
 
   const convo = conversations.find(c => c.key === activeKey) || null;
   const messageCount = convo ? convo.messages.length : 0;
@@ -151,18 +161,17 @@ export default function Messages() {
   const listed = conversations.filter(c => !q || c.name.toLowerCase().includes(q) || c.project.toLowerCase().includes(q)
     || c.messages.some(m => (m.content || '').toLowerCase().includes(q)));
 
-  function send(attachment) {
+  async function send(attachment) {
     const text = draft.trim();
     if (!convo || (!text && !attachment)) return;
     try {
-      Store.sendMessage({ taskId: convo.taskId, receiverId: convo.otherId, content: text, attachment });
+      await dispatch(sendMessage({ taskId: convo.taskId, receiverId: convo.otherId, content: text, attachment })).unwrap();
     } catch (e) {
       Validate.toast(e.message, 'error');
       return;
     }
     setDraft('');
     if (inputRef.current) inputRef.current.style.height = 'auto';
-    setConversations(buildConversations(Store, session));
   }
 
   async function attach(e) {
@@ -171,8 +180,8 @@ export default function Messages() {
     if (!file || !convo) return;
     setUploading(true);
     try {
-      const ref = await Store.uploadFile(file, { taskId: convo.taskId, purpose: 'message' });
-      send(ref);
+      const ref = await dispatch(uploadFile({ file, meta: { taskId: convo.taskId, purpose: 'message' } })).unwrap();
+      await send(ref);
     } catch (err) {
       Validate.toast(err.message || 'The file could not be uploaded.', 'error');
     } finally {
@@ -256,7 +265,7 @@ export default function Messages() {
                         <div className={`bubble ${mine ? 'bubble-sent' : 'bubble-received'}`}>
                           {m.content}
                           {m.attachment ? (
-                            <a href={Store.fileUrl(m.attachment)} download={m.attachment.name}
+                            <a href={fileUrl(m.attachment)} download={m.attachment.name}
                                style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: m.content ? 6 : 0, color: mine ? '#fff' : '#4f46e5', textDecoration: 'underline', fontSize: 13 }}>
                               <Icon name="paperclip" style={{ width: 13, height: 13 }} />{m.attachment.name}
                             </a>

@@ -7,10 +7,13 @@
  * list is re-read every few seconds while the page is open, and clicking one
  * opens the page it is about and marks it read.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
 import Icon from './Icon';
-import { useStore } from '../context/StoreContext';
+import {
+  fetchNotifications, markAllNotificationsRead, markNotificationRead, selectNotificationsByUser,
+} from '../store/slices/notificationsSlice';
 import { newestFirst } from '../utils/helpers';
 
 const PREVIEW_COUNT = 8;
@@ -59,36 +62,32 @@ function timeAgo(iso) {
  * @param {Function} onToggle - bell button click
  */
 export default function NotificationDropdown({ userId, open, onToggle }) {
-  const Store = useStore();
+  const dispatch = useDispatch();
   const navigate = useNavigate();
-  const [notifications, setNotifications] = useState(() => (userId ? newestFirst(Store.getNotifications(userId) || []) : []));
+  const mine = useSelector(s => selectNotificationsByUser(s, userId));
+  const notifications = useMemo(() => (userId ? newestFirst(mine) : []), [mine, userId]);
   const [showAll, setShowAll] = useState(false);
 
   // Keep the list current while the page is open.
   useEffect(() => {
     if (!userId) return undefined;
-    let alive = true;
-    const pull = () => Store.refreshNotifications().then(list => {
-      if (alive) setNotifications(newestFirst((list || []).filter(n => n.userId === userId)));
-    });
+    const pull = () => dispatch(fetchNotifications());
     pull();
     const timer = setInterval(pull, POLL_MS);
-    return () => { alive = false; clearInterval(timer); };
-  }, [Store, userId]);
+    return () => clearInterval(timer);
+  }, [dispatch, userId]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
   const shown = showAll ? notifications : notifications.slice(0, PREVIEW_COUNT);
 
   function markAllRead(e) {
     e.stopPropagation();
-    if (userId) Store.markNotificationsRead(userId);
-    setNotifications(list => list.map(n => ({ ...n, read: true })));
+    if (userId) dispatch(markAllNotificationsRead(userId));
   }
 
   function openNotification(n) {
     if (!n.read) {
-      Store.markNotificationRead(n.id);
-      setNotifications(list => list.map(x => (x.id === n.id ? { ...x, read: true } : x)));
+      dispatch(markNotificationRead(n.id));
     }
     if (n.link) {
       onToggle();
