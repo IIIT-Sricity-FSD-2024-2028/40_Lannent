@@ -12,15 +12,16 @@ import DashboardLayout from '../components/DashboardLayout';
 import FieldError from '../components/FieldError';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import { useValidation } from '../context/ValidationContext';
 import useFieldErrors from '../hooks/useFieldErrors';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './WorkerSettings.css?raw';
 import AvatarColorPicker from '../components/AvatarColorPicker';
 import ChangePasswordCard from '../components/ChangePasswordCard';
-import { syncSessionFromUser, splitPhone, safeHref } from '../utils/helpers';
+import { splitPhone, safeHref } from '../utils/helpers';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch } from 'react-redux';
+import { updateUser } from '../store/slices/usersSlice';
 
 const EXPERIENCE_LEVELS = ['Junior', 'Mid-Level', 'Senior', 'Expert'];
 const AVAILABILITY = ['Full-time', 'Part-time', 'Contract', 'Not Available'];
@@ -88,13 +89,14 @@ function PortfolioGrid({ projects, onAdd, onRemove }) {
 }
 
 export default function WorkerSettings() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById } = useLookups();
+  const currentUser = useCurrentUser();
+  const dispatch = useDispatch();
   const Validate = useValidation();
   const PHONE_COUNTRIES = Validate.getPhoneCountries();
   usePageTitle('Account Settings — Lannent');
-  const [session] = useState(() => Auth.getCurrentUser());
-  const [user] = useState(() => Store.getUserById(session.userId) || {});
+  const [session] = useState(() => currentUser);
+  const [user] = useState(() => userById(session.userId) || {});
 
   const [profileData] = useState(() => ({
     fullName: user.name || 'Unknown', email: user.email || '',
@@ -138,7 +140,7 @@ export default function WorkerSettings() {
   const modalField = id => modalRef.current?.querySelector('#' + id);
 
   // ── Profile ──
-  function wsValidateAndSaveProfile() {
+  async function wsValidateAndSaveProfile() {
     const name = field('wsFullName')?.value.trim() || '';
     const email = field('wsEmail')?.value.trim() || '';
     const phoneVal = phone.trim();
@@ -162,18 +164,17 @@ export default function WorkerSettings() {
 
     let saved;
     try {
-      saved = Store.updateUser(session.userId, { name, email, phone: fullPhone, phoneCountryCode: phoneVal ? countryCode : '', location, bio, avatarColor });
+      saved = await dispatch(updateUser({ id: session.userId, syncSession: true, updates: { name, email, phone: fullPhone, phoneCountryCode: phoneVal ? countryCode : '', location, bio, avatarColor } })).unwrap();
     } catch (e) {
       Validate.toast(e.message, 'error');
       return;
     }
-    syncSessionFromUser(saved);
     setInitials(saved.avatar);
     Validate.toast('Profile saved.', 'success');
   }
 
   // ── Professional ──
-  function wsSaveProfessional() {
+  async function wsSaveProfessional() {
     const jobTitle = field('wsJobTitle')?.value.trim() || '';
     const experienceLevel = field('wsExpLevel')?.value || '';
     const hourlyRate = field('wsHourlyRate')?.value || 0;
@@ -182,7 +183,7 @@ export default function WorkerSettings() {
     const rate = parseFloat(hourlyRate);
     if (!Number.isFinite(rate) || rate < 0) { Validate.toast('Enter an hourly rate of zero or more.', 'error'); return; }
     try {
-      Store.updateUser(session.userId, { jobTitle, experienceLevel, hourlyRate: rate, availability, skills, languages });
+      await dispatch(updateUser({ id: session.userId, updates: { jobTitle, experienceLevel, hourlyRate: rate, availability, skills, languages } })).unwrap();
     } catch (e) {
       Validate.toast(e.message, 'error');
       return;
@@ -210,9 +211,9 @@ export default function WorkerSettings() {
   }
 
   // ── Portfolio ──
-  function savePortfolio(next) {
+  async function savePortfolio(next) {
     try {
-      Store.updateUser(session.userId, { portfolioProjects: next });
+      await dispatch(updateUser({ id: session.userId, updates: { portfolioProjects: next } })).unwrap();
     } catch (e) {
       Validate.toast(e.message, 'error');
       return false;
@@ -225,7 +226,7 @@ export default function WorkerSettings() {
     savePortfolio(portfolioProjects.filter(p => p.id !== id));
   }
 
-  function wsAddPortfolioProject() {
+  async function wsAddPortfolioProject() {
     const titleEl = modalField('wsPortTitle');
     const descEl = modalField('wsPortDesc');
     const urlEl = modalField('wsPortUrl');
@@ -245,7 +246,7 @@ export default function WorkerSettings() {
     // A stock photo picked at random used to stand in here "so new cards look
     // real" — it made every portfolio entry claim an image of work nobody did.
     // Entries carry no thumbnail until there is a real one to carry.
-    const ok = savePortfolio([...portfolioProjects, {
+    const ok = await savePortfolio([...portfolioProjects, {
       id: Date.now().toString(),
       title,
       description: desc || '',
