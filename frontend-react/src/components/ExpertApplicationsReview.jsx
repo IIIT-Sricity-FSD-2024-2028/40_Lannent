@@ -9,12 +9,15 @@
  * Lists applications with counts, search and status filters; each one can be
  * opened in a details dialog and approved or rejected (after confirmation).
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import DashboardLayout from './DashboardLayout';
 import Icon from './Icon';
-import { useStore } from '../context/StoreContext';
 import { useValidation } from '../context/ValidationContext';
-import useRerender from '../hooks/useRerender';
+import {
+  selectAllExpertApplications, selectExpertApplicationById, updateExpertApplicationStatus,
+} from '../store/slices/expertApplicationsSlice';
+import { fileUrl } from '../store/slices/filesSlice';
 
 const AVATAR_COLORS = [
   'linear-gradient(135deg,#6366f1,#4f46e5)',
@@ -27,9 +30,9 @@ const FILTERS = [['all', 'All'], ['pending', 'Pending'], ['approved', 'Approved'
 
 const getInitials = name => name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 
-/** All applications, newest first. */
-function getApps(Store) {
-  return Store.getExpertApplications().sort((a, b) => (b.appliedAt || '').localeCompare(a.appliedAt || ''));
+/** All applications, newest first (copied: store state is immutable). */
+function sortApps(apps) {
+  return [...apps].sort((a, b) => (b.appliedAt || '').localeCompare(a.appliedAt || ''));
 }
 
 function StatusBadge({ status }) {
@@ -74,10 +77,9 @@ function MetaItem({ icon, prefix, value }) {
  * before the store existed, when only the name was kept.
  */
 function DocRow({ label, fileRef, name }) {
-  const Store = useStore();
   const shown = (fileRef && fileRef.name) || name;
   if (!shown) return null;
-  const href = fileRef ? Store.fileUrl(fileRef) : '';
+  const href = fileRef ? fileUrl(fileRef) : '';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
       <span style={{ color: 'var(--muted-foreground)', minWidth: 78 }}>{label}</span>
@@ -161,17 +163,19 @@ function ApplicationDetails({ app, showDocuments, onClose, onAction }) {
 export default function ExpertApplicationsReview({ role, activePath, showDocuments }) {
   // Only the intake desk decides; compliance reads the queue but cannot act on it.
   const canDecide = role === 'intake-admin';
-  const Store = useStore();
+  const dispatch = useDispatch();
   const Validate = useValidation();
-  const rerender = useRerender();
+  const apps = useSelector(selectAllExpertApplications);
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingAction, setPendingAction] = useState(null);   // { appId, status } while confirming
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [detailApp, setDetailApp] = useState(null);           // last application opened in the details dialog
+  const [detailAppId, setDetailAppId] = useState(null);       // last application opened in the details dialog
   const [detailOpen, setDetailOpen] = useState(false);
+  const detailApp = useSelector(s => selectExpertApplicationById(s, detailAppId));
 
-  const all = getApps(Store);
+  const all = useMemo(() => sortApps(apps), [apps]);
+  const byId = id => apps.find(a => a.id === id) || null;
   const q = searchQuery.toLowerCase();
   const list = all.filter(a => {
     const matchesSearch = !q || a.name.toLowerCase().includes(q) || a.email.toLowerCase().includes(q) || (a.expertise || '').toLowerCase().includes(q);
@@ -181,7 +185,7 @@ export default function ExpertApplicationsReview({ role, activePath, showDocumen
 
   // ── Confirm / Execute ──
   function confirmAction(appId, status) {
-    setPendingAction({ appId, status, name: Store.getExpertApplicationById(appId)?.name });
+    setPendingAction({ appId, status, name: byId(appId)?.name });
     setConfirmOpen(true);
   }
 
@@ -189,19 +193,18 @@ export default function ExpertApplicationsReview({ role, activePath, showDocumen
     setConfirmOpen(false);
   }
 
-  function executeAction() {
+  async function executeAction() {
     if (!pendingAction) return;
     const { appId, status } = pendingAction;
+    let app;
     try {
-      Store.updateExpertApplicationStatus(appId, status);
+      app = await dispatch(updateExpertApplicationStatus({ id: appId, status })).unwrap();
     } catch (e) {
       closeConfirm();
       Validate.toast((e.message), 'error');
       return;
     }
     closeConfirm();
-    rerender();
-    const app = Store.getExpertApplicationById(appId);
     const msg = status === 'approved'
       ? `✓ ${(app?.name)}'s application approved. Expert account created.`
       : `✗ ${(app?.name)}'s application rejected.`;
@@ -209,9 +212,8 @@ export default function ExpertApplicationsReview({ role, activePath, showDocumen
   }
 
   function showDetails(appId) {
-    const app = Store.getExpertApplicationById(appId);
-    if (!app) return;
-    setDetailApp(app);
+    if (!byId(appId)) return;
+    setDetailAppId(appId);
     setDetailOpen(true);
   }
 
