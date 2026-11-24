@@ -11,10 +11,13 @@ import DashboardLayout from './DashboardLayout';
 import FilterTabs from './FilterTabs';
 import Icon from './Icon';
 import StatCard from './StatCard';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
+import { useDispatch, useSelector } from 'react-redux';
 import { useValidation } from '../context/ValidationContext';
-import useRerender from '../hooks/useRerender';
+import { selectCurrentUser } from '../store/slices/authSlice';
+import { selectUserById, withdrawFromWallet } from '../store/slices/usersSlice';
+import { selectTaskEntities } from '../store/slices/tasksSlice';
+import { selectTransactionsByUser } from '../store/slices/transactionsSlice';
+import { selectFees } from '../store/slices/feesSlice';
 import { newestFirst } from '../utils/helpers';
 import { describeTx, TONE_STYLE, money } from '../utils/transactions';
 
@@ -23,10 +26,10 @@ const FILTER_BAR_STYLE = { display: 'flex', gap: 4, background: 'var(--input-bg)
 const FILTER_BUTTON_STYLE = { padding: '5px 12px', borderRadius: 9, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', border: 'none' };
 const MIN_WITHDRAWAL = 50;
 
-function TxRow({ t, viewerId, Store }) {
+function TxRow({ t, viewerId, tasksById }) {
   const d = describeTx(t, viewerId);
   const s = TONE_STYLE[d.tone] || TONE_STYLE.other;
-  const task = t.taskId ? Store.getTaskById(t.taskId) : null;
+  const task = t.taskId ? tasksById[t.taskId] : null;
   return (
     <div className="tx-row">
       <div style={{ width: 40, height: 40, borderRadius: 12, background: `${s.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -49,23 +52,25 @@ function TxRow({ t, viewerId, Store }) {
 
 /**
  * @param {string} role, activePath, title, subtitle
- * @param {(Store, userId) => Array<{value,label,icon,color}>} stats - the role's own summary tiles
+ * @param {(userId) => Array<{value,label,icon,color}>} useStats - a hook returning the role's own summary tiles
  */
-export default function EarningsWallet({ role, activePath, title, subtitle, stats }) {
-  const Store = useStore();
-  const Auth = useAuth();
+export default function EarningsWallet({ role, activePath, title, subtitle, useStats }) {
+  const dispatch = useDispatch();
   const Validate = useValidation();
-  const session = Auth.getCurrentUser();
-  const rerender = useRerender();
+  const session = useSelector(selectCurrentUser);
+  const user = useSelector(s => selectUserById(s, session.userId));
+  const tasksById = useSelector(selectTaskEntities);
+  const myTxs = useSelector(s => selectTransactionsByUser(s, session.userId));
+  const Fees = useSelector(selectFees);
+  const tiles = useStats(session.userId);
   const [filter, setFilter] = useState('all');
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [amountError, setAmountError] = useState('');
 
-  const user = Store.getUserById(session.userId);
   const available = user ? user.walletBalance || 0 : 0;
   // Only rows that moved this person's own money.
-  const mine = newestFirst(Store.getTransactions().filter(t => t.toId === session.userId || t.fromId === session.userId));
+  const mine = newestFirst(myTxs);
   const rows = mine.filter(t => {
     if (filter === 'all') return true;
     const sign = describeTx(t, session.userId).sign;
@@ -73,8 +78,8 @@ export default function EarningsWallet({ role, activePath, title, subtitle, stat
   });
 
   const amt = parseFloat(amount) || 0;
-  const quote = Store.Fees.withdrawal(amt);
-  const w = Store.Fees.rates().withdrawal;
+  const quote = Fees.withdrawal(amt);
+  const w = Fees.rates().withdrawal;
 
   function openWithdraw() {
     setAmount('');
@@ -82,23 +87,21 @@ export default function EarningsWallet({ role, activePath, title, subtitle, stat
     setWithdrawOpen(true);
   }
 
-  function confirmWithdraw() {
+  async function confirmWithdraw() {
     setAmountError('');
     if (!(amt >= MIN_WITHDRAWAL)) { setAmountError(`The minimum withdrawal is ₹${MIN_WITHDRAWAL}.`); return; }
     if (amt > available) { setAmountError(`That is more than your available balance of ${money(available)}.`); return; }
     let result;
     try {
-      result = Store.withdrawFromWallet(session.userId, amt);
+      result = await dispatch(withdrawFromWallet({ userId: session.userId, amount: amt })).unwrap();
     } catch (e) {
       setAmountError(e.message);
       return;
     }
     setWithdrawOpen(false);
-    rerender();
     Validate.toast(`Withdrew ${money(result.gross)} — ${money(result.net)} paid out after a ${money(result.fee)} payout fee.`, 'success');
   }
 
-  const tiles = stats(Store, session.userId);
 
   return (
     <DashboardLayout role={role} activePath={activePath} pageTitle={title} pageSubtitle={subtitle}>
@@ -134,7 +137,7 @@ export default function EarningsWallet({ role, activePath, title, subtitle, stat
               <Icon name="wallet" style={{ width: 40, height: 40, opacity: 0.3, margin: '0 auto 12px', display: 'block' }} />
               <div>No transactions yet.</div>
             </div>
-          ) : rows.map(t => <TxRow key={t.id} t={t} viewerId={session.userId} Store={Store} />)}
+          ) : rows.map(t => <TxRow key={t.id} t={t} viewerId={session.userId} tasksById={tasksById} />)}
         </div>
       </div>
 

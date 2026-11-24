@@ -7,19 +7,23 @@
  * Transactions. The dialogs stay mounted and are shown with display:flex,
  * exactly like the original.
  */
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { flushSync } from 'react-dom';
+import { useValidation } from '../context/ValidationContext';
+import { newestFirst } from '../utils/helpers';
+import { describeTx, TONE_STYLE, money } from '../utils/transactions';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { addToWallet, withdrawFromWallet } from '../store/slices/usersSlice';
+import { fetchMyEscrow, selectMyEscrow, EMPTY_MY_ESCROW } from '../store/slices/ledgerSlice';
+import { selectAllTasks } from '../store/slices/tasksSlice';
+import { selectAllTransactions } from '../store/slices/transactionsSlice';
+import { selectFees } from '../store/slices/feesSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
-import useRerender from '../hooks/useRerender';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ClientWallet.css?raw';
-import { newestFirst } from '../utils/helpers';
-import { describeTx, TONE_STYLE, money } from '../utils/transactions';
 
 const ADD_AMOUNTS = ['₹500', '₹1,000', '₹2,000', '₹5,000', '₹10,000', 'Custom'];
 const WITHDRAW_AMOUNTS = ['₹100', '₹500', '₹1000', '₹2500'];
@@ -47,10 +51,9 @@ const cancelHover = {
 };
 
 /** Balances, escrow per project and the transaction list for a client. */
-function computeWalletData(Store, userId) {
-  const user = Store.getUserById(userId);
-  const allTxs = Store.getTransactions();
-  const clientTasks = Store.getTasksByClient(userId);
+function computeWalletData({ tasks, transactions: allTxs, escrow, userById, taskById }, userId) {
+  const user = userById(userId);
+  const clientTasks = tasks.filter(t => t.clientId === userId);
   const clientTaskIds = new Set(clientTasks.map(t => t.id));
   const sum = (rows, pick) => rows.reduce((s, t) => s + (pick(t) || 0), 0);
 
@@ -72,7 +75,6 @@ function computeWalletData(Store, userId) {
   // What is actually held right now — read from the server's escrow, bucket
   // by bucket. It used to be estimated from milestone budgets, which missed
   // the audit and dispute fees entirely.
-  const escrow = Store.getMyEscrow();
   const escrowProjects = escrow.projects
     .filter(p => clientTaskIds.has(p.taskId))
     .map(p => {
@@ -85,7 +87,7 @@ function computeWalletData(Store, userId) {
         ...p,
         lastActivity,
         name: p.title,
-        worker: (t && Store.getUserById(t.workerId)?.name) || 'Not hired yet',
+        worker: (t && userById(t.workerId)?.name) || 'Not hired yet',
         paidOut,
         progress: t && t.budget ? Math.min(100, Math.round((paidOut / t.budget) * 100)) : 0,
       };
@@ -97,7 +99,7 @@ function computeWalletData(Store, userId) {
   const transactions = rows.map(tx => {
     const d = describeTx(tx, userId);
     const tone = TONE_STYLE[d.tone] || TONE_STYLE.other;
-    const task = tx.taskId ? Store.getTaskById(tx.taskId) : null;
+    const task = tx.taskId ? taskById(tx.taskId) : null;
     return {
       id: tx.id,
       label: d.label,
@@ -203,15 +205,22 @@ function PreviewRow({ label, labelStyle, valueStyle, id, value, marginBottom }) 
 }
 
 export default function ClientWallet() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById, taskById } = useLookups();
+  const tasks = useSelector(selectAllTasks);
+  const transactions = useSelector(selectAllTransactions);
+  const currentUser = useCurrentUser();
   const Validate = useValidation();
   usePageTitle('Wallet & Escrow — Lannent');
-  const [session] = useState(() => Auth.getCurrentUser());
+  const [session] = useState(() => currentUser);
   const walletUserId = session.userId;
-  const refreshWallet = useRerender();
+  const dispatch = useDispatch();
+  const escrow = useSelector(selectMyEscrow) || EMPTY_MY_ESCROW;
+  const Fees = useSelector(selectFees);
 
-  const d = computeWalletData(Store, walletUserId);
+  // What is held in escrow right now, from the server's ledger.
+  useEffect(() => { dispatch(fetchMyEscrow()); }, [dispatch]);
+
+  const d = computeWalletData({ tasks, transactions, escrow, userById, taskById }, walletUserId);
   const availableBalance = d.walletBalance;
 
   // ── Add Funds dialog ──
@@ -237,10 +246,10 @@ export default function ClientWallet() {
     : selectedAmount === 'Custom' ? (parseFloat(customAmount) || 0)
     : (parseFloat(selectedAmount.replace(/[₹,]/g, '')) || 0);
   // Matches the server: one processing fee, and the wallet is credited the net.
-  const depositQuote = Store.Fees.deposit(addAmount);
+  const depositQuote = Fees.deposit(addAmount);
 
   const withdrawValue = parseFloat(withdrawAmount) || 0;
-  const withdrawQuote = Store.Fees.withdrawal(withdrawValue);
+  const withdrawQuote = Fees.withdrawal(withdrawValue);
 
   // ── Add Funds ──
   function showAddFunds() {
@@ -269,7 +278,7 @@ export default function ClientWallet() {
     setSelectedMethod(methodId);
   }
 
-  function processAddFunds() {
+  async function processAddFunds() {
     if (addAmount <= 0) {
       Validate.toast('Please select or enter a valid amount greater than 0.', 'error');
       return;
@@ -287,22 +296,21 @@ export default function ClientWallet() {
     // the ledger row together.
     let deposit;
     try {
-      deposit = Store.addToWallet(walletUserId, addAmount);
+      deposit = await dispatch(addToWallet({ userId: walletUserId, amount: addAmount })).unwrap();
     } catch (e) {
       Validate.toast((e.message), 'error');
       return;
     }
 
-    // Close modal and refresh all wallet data
+    // Close the modal; the wallet re-renders from the refreshed store
     setAddOpen(false);
-    refreshWallet();
     Validate.toast('✓ ₹' + deposit.net.toFixed(2) + ' credited to your wallet (₹'
       + deposit.fee.toFixed(2) + ' processing fee).', 'success');
   }
 
   // ── All transactions ──
   function showAllTransactions() {
-    setAllTx(computeWalletData(Store, walletUserId).transactions);
+    setAllTx(d.transactions);
     setAllOpen(true);
   }
 
@@ -318,7 +326,7 @@ export default function ClientWallet() {
     if (amount <= availableBalance) setWithdrawAmountValue(String(amount));
   }
 
-  function processWithdraw() {
+  async function processWithdraw() {
     const amount = withdrawValue;
     if (amount <= 0) { showNotification('Please enter a valid amount', 'error'); return; }
     if (amount < 50) { showNotification('Minimum withdrawal amount is ₹50', 'error'); return; }
@@ -328,15 +336,14 @@ export default function ClientWallet() {
     // the ledger row together.
     let result;
     try {
-      result = Store.withdrawFromWallet(walletUserId, amount);
+      result = await dispatch(withdrawFromWallet({ userId: walletUserId, amount })).unwrap();
     } catch (e) {
       showNotification(e.message, 'error');
       return;
     }
 
-    // Close modal and refresh all wallet data
+    // Close the modal; the wallet re-renders from the refreshed store
     setWithdrawOpen(false);
-    refreshWallet();
     showNotification(`✓ Withdrew ${money(result.gross)} — ${money(result.net)} paid out after a ${money(result.fee)} payout fee.`, 'success');
   }
 
@@ -482,7 +489,7 @@ export default function ClientWallet() {
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>{method.name}</div>
-                        <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{`Processing fee ${Store.Fees.rates().deposit.percent}% + ₹${Store.Fees.rates().deposit.fixed}`}</div>
+                        <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{`Processing fee ${Fees.rates().deposit.percent}% + ₹${Fees.rates().deposit.fixed}`}</div>
                       </div>
                       <div style={{ width: 20, height: 20, border: '2px solid #d1d5db', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} className="method-radio">
                         <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#6366f1', opacity: selectedMethod === method.id ? 1 : 0, transition: 'opacity 0.2s' }} className="method-radio-dot"></div>
@@ -496,7 +503,7 @@ export default function ClientWallet() {
             {/* Amount Preview */}
             <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 16, padding: 20, margin: '0 32px', marginBottom: 24 }}>
               <PreviewRow label="You pay" labelStyle={{ fontSize: 14, color: '#6b7280' }} valueStyle={{ fontWeight: 700, color: '#111827', fontSize: 15 }} id="previewAddAmount" value={money(depositQuote.gross)} marginBottom={12} />
-              <PreviewRow label={`Processing fee (${Store.Fees.rates().deposit.percent}% + ₹${Store.Fees.rates().deposit.fixed})`} labelStyle={{ fontSize: 14, color: '#6b7280' }} valueStyle={{ fontWeight: 600, color: '#ef4444', fontSize: 14 }} id="previewFee" value={addAmount > 0 ? money(depositQuote.fee) : '₹0.00'} marginBottom={12} />
+              <PreviewRow label={`Processing fee (${Fees.rates().deposit.percent}% + ₹${Fees.rates().deposit.fixed})`} labelStyle={{ fontSize: 14, color: '#6b7280' }} valueStyle={{ fontWeight: 600, color: '#ef4444', fontSize: 14 }} id="previewFee" value={addAmount > 0 ? money(depositQuote.fee) : '₹0.00'} marginBottom={12} />
               <div style={{ height: 1, background: '#e5e7eb', margin: '12px 0' }}></div>
               <PreviewRow label="Credited to your wallet" labelStyle={{ fontSize: 16, fontWeight: 700, color: '#111827' }} valueStyle={{ fontSize: 20, fontWeight: 900, background: 'linear-gradient(135deg,#6366f1,#a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }} id="previewTotal" value={addAmount > 0 ? money(depositQuote.net) : '₹0.00'} />
             </div>
@@ -562,7 +569,7 @@ export default function ClientWallet() {
             {/* Withdrawal Preview */}
             <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 14, padding: 18, marginBottom: 24 }}>
               <PreviewRow label="Amount to Withdraw" labelStyle={{ fontSize: 13, color: '#6b7280' }} valueStyle={{ fontWeight: 600, color: '#111827', fontSize: 13 }} id="previewAmount" value={money(withdrawValue)} marginBottom={10} />
-              <PreviewRow label={`Payout fee (${Store.Fees.rates().withdrawal.percent}% + ₹${Store.Fees.rates().withdrawal.fixed})`} labelStyle={{ fontSize: 13, color: '#6b7280' }} valueStyle={{ fontWeight: 600, color: '#ef4444', fontSize: 13 }} id="withdrawPreviewFee" value={withdrawValue > 0 ? money(withdrawQuote.fee) : '₹0.00'} marginBottom={10} />
+              <PreviewRow label={`Payout fee (${Fees.rates().withdrawal.percent}% + ₹${Fees.rates().withdrawal.fixed})`} labelStyle={{ fontSize: 13, color: '#6b7280' }} valueStyle={{ fontWeight: 600, color: '#ef4444', fontSize: 13 }} id="withdrawPreviewFee" value={withdrawValue > 0 ? money(withdrawQuote.fee) : '₹0.00'} marginBottom={10} />
               <div style={{ height: 1, background: '#e5e7eb', margin: '10px 0' }}></div>
               <PreviewRow label="You'll Receive" labelStyle={{ fontSize: 14, fontWeight: 700, color: '#111827' }} valueStyle={{ fontSize: 18, fontWeight: 900, background: 'linear-gradient(135deg,#10b981,#059669)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }} id="previewReceive" value={withdrawValue > 0 ? money(withdrawQuote.net) : '₹0.00'} />
             </div>
