@@ -6,14 +6,15 @@
  */
 import { Navigate, useNavigate } from 'react-router-dom';
 import ChangePasswordCard from '../components/ChangePasswordCard';
-import { useAuth } from '../context/AuthContext';
+import { useDispatch, useSelector } from 'react-redux';
+import { getDashboardUrl, logout, selectCurrentUser } from '../store/slices/authSlice';
 import usePageTitle from '../hooks/usePageTitle';
 
 export default function ChangePassword() {
-  const Auth = useAuth();
+  const dispatch = useDispatch();
   const navigate = useNavigate();
   usePageTitle('Choose your password — Lannent');
-  const user = Auth.getCurrentUser();
+  const user = useSelector(selectCurrentUser);
   if (!user) return <Navigate to="/login" replace />;
 
   return (
@@ -25,8 +26,8 @@ export default function ChangePassword() {
             ? 'This account was set up for you with a temporary password. Enter it below as your current password, then choose one only you know. You can use the account once this is done.'
             : 'Change the password for your account.'}
         </p>
-        <ChangePasswordCard onChanged={() => navigate(Auth.getDashboardUrl(user.role), { replace: true })} />
-        <button type="button" className="btn-outline" style={{ marginTop: 16, padding: '8px 16px', borderRadius: 10 }} onClick={() => Auth.logout()}>
+        <ChangePasswordCard onChanged={() => navigate(getDashboardUrl(user.role), { replace: true })} />
+        <button type="button" className="btn-outline" style={{ marginTop: 16, padding: '8px 16px', borderRadius: 10 }} onClick={() => dispatch(logout())}>
           Sign out
         </button>
       </div>

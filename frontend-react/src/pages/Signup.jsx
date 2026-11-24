@@ -12,8 +12,9 @@ import Icon from '../components/Icon';
 import AuthBranding from '../components/AuthBranding';
 import PasswordInput from '../components/PasswordInput';
 import FieldError from '../components/FieldError';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
+import { useDispatch, useSelector } from 'react-redux';
+import { getDashboardUrl, login, selectCurrentUser } from '../store/slices/authSlice';
+import { createUser, selectAllUsers } from '../store/slices/usersSlice';
 import { useValidation } from '../context/ValidationContext';
 import useFieldErrors from '../hooks/useFieldErrors';
 import usePageTitle from '../hooks/usePageTitle';
@@ -36,8 +37,9 @@ function stateClass(state) {
 }
 
 export default function Signup() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const dispatch = useDispatch();
+  const session = useSelector(selectCurrentUser);
+  const users = useSelector(selectAllUsers);
   const Validate = useValidation();
   usePageTitle('Sign Up — Lannent');
   const navigate = useNavigate();
@@ -61,8 +63,8 @@ export default function Signup() {
   const { errors, showError, clearError, validateForm, errorStyle } = useFieldErrors();
 
   // If already logged in, redirect
-  if (Auth.isLoggedIn()) {
-    return <Navigate to={Auth.getDashboardUrl(Auth.getCurrentUser().role)} replace />;
+  if (session && !submitting) {
+    return <Navigate to={getDashboardUrl(session.role)} replace />;
   }
 
   const setState = (id, state) => setFieldState(prev => ({ ...prev, [id]: state }));
@@ -139,16 +141,16 @@ export default function Signup() {
     if (!valid || !selectedRole) return;
 
     // Check if email already exists
-    if (Store.getUserByEmail(emailVal)) { showError('signupEmail', 'An account with this email already exists.'); return; }
+    if (users.some(u => (u.email || '').toLowerCase() === emailVal.toLowerCase())) { showError('signupEmail', 'An account with this email already exists.'); return; }
 
     setSubmitting(true);
-    setTimeout(() => {
+    setTimeout(async () => {
       const initials = nameVal.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
       try {
-        Store.createUser({
+        await dispatch(createUser({
           name: nameVal, email: emailVal, phone: countryCode + phone.trim(), phoneCountryCode: countryCode,
           password: pw, role: selectedRole, avatar: initials, avatarColor: ROLE_COLORS[selectedRole] || '',
-        });
+        })).unwrap();
       } catch (e) {
         // e.g. the email is taken. A refused signup used to create a
         // local-only account and then fail to sign in with no explanation.
@@ -156,10 +158,10 @@ export default function Signup() {
         setSubmitting(false);
         return;
       }
-      const result = Auth.login(emailVal, pw);
-      if (result.success) {
-        navigate(Auth.getDashboardUrl(selectedRole));
-      } else {
+      try {
+        await dispatch(login({ identifier: emailVal, password: pw })).unwrap();
+        navigate(getDashboardUrl(selectedRole));
+      } catch {
         setSubmitting(false);
       }
     }, 400);
