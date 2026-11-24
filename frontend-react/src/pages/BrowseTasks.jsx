@@ -6,29 +6,31 @@
  * range, required skills, technical audit) and a search box / sort above the
  * task cards. Every filter is live.
  */
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { CATEGORIES } from '../utils/categories';
+import { useSelector } from 'react-redux';
+import { useCurrentUser } from '../store/hooks';
+import { selectOpenTasks } from '../store/slices/tasksSlice';
+import { milestonesOf, selectMilestonesGroupedByTask } from '../store/slices/milestonesSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
-import { CATEGORIES } from '../utils/categories';
 
 // Shared serif label / input styles of the filter sidebar
 const LABEL_STYLE = { display: 'block', fontFamily: 'serif', fontSize: 15, marginBottom: 12, color: '#000' };
 const RANGE_INPUT_STYLE = { flex: 1, minWidth: 0, padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: 8, fontFamily: 'serif', fontSize: 14, color: '#4A5568' };
 
-/** Open tasks from the store, shaped for the cards. */
-function getAllBrowseTasks(Store) {
-  return Store.getOpenTasks().map(t => ({
+/** Open tasks from the Redux store, shaped for the cards. */
+function toBrowseTasks(openTasks, milestonesGrouped) {
+  return openTasks.map(t => ({
     id: t.id,
     title: t.title,
     desc: t.description || '',
     budgetValue: Number(t.budget) || 0,
     budget: '₹' + (Number(t.budget) || 0).toLocaleString('en-IN'),
     tags: t.skills || [],
-    milestones: Store.getMilestonesByTask(t.id).length,
+    milestones: milestonesOf(milestonesGrouped, t.id).length,
     deadline: t.deadline || 'TBD',
     audit: !!t.auditEnabled,
     badge: t.auditEnabled ? 'Audit' : 'New',
@@ -80,11 +82,12 @@ function TaskCard({ task: t }) {
 }
 
 export default function BrowseTasks() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const currentUser = useCurrentUser();
   usePageTitle('Browse Tasks — Lannent');
-  const session = Auth.getCurrentUser();
-  const [tasks] = useState(() => getAllBrowseTasks(Store));
+  const session = currentUser;
+  const openTasks = useSelector(selectOpenTasks);
+  const milestonesGrouped = useSelector(selectMilestonesGroupedByTask);
+  const tasks = useMemo(() => toBrowseTasks(openTasks, milestonesGrouped), [openTasks, milestonesGrouped]);
 
   // Live filtering
   const [search, setSearch] = useState('');
