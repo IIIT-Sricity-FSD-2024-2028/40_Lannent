@@ -8,21 +8,23 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useValidation } from '../context/ValidationContext';
+import { CATEGORIES } from '../utils/categories';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { createTaskWithMilestones } from '../store/slices/tasksSlice';
+import { selectFees } from '../store/slices/feesSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import ExpertPicker from '../components/ExpertPicker';
 import FieldError from '../components/FieldError';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
 import useFieldErrors from '../hooks/useFieldErrors';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './PostTask.css?raw';
 
 const skillSuggestions = ['React','TypeScript','Node.js','Web Design','JavaScript','Vue.js','Angular','Python','Django','FastAPI','Express.js','MongoDB','PostgreSQL','MySQL','AWS','Google Cloud','Azure','Docker','Kubernetes','Jenkins','CI/CD','Figma','Sketch','Adobe XD','UI Design','UX Design','Responsive Design','CSS','HTML','SASS','Tailwind','Bootstrap','Flutter','Dart','Swift','Kotlin','Java','C#','PHP','Laravel','Symfony','Ruby','Rails','GraphQL','REST API','OAuth','JWT','Authentication','Database Design','System Design','Machine Learning','TensorFlow','PyTorch','NLP','Computer Vision','Data Analysis','Pandas','NumPy','Matplotlib','Tableau','Power BI','Analytics','Git','GitHub','GitLab','Bitbucket','SVN','Linux','Unix','Windows','MacOS','Bash','Shell','PowerShell','Python Scripting','Automation','Testing','Jest','Mocha','Pytest','Selenium','QA','Manual Testing','Load Testing','Performance Testing','Security','Penetration Testing','Cybersecurity','SSL/TLS','Encryption','OWASP','API Security','Web Security','SEO','SEM','PPC','Content Marketing','Email Marketing','Social Media','Facebook Ads','Google Ads','Analytics','Google Analytics','Mixpanel','Amplitude','Product Management','Agile','Scrum','Kanban','Project Management','JIRA','Asana','Monday.com','Notion','Slack','Communication','Leadership','Team Management','Training','Documentation','Technical Writing','Copywriting','Content Strategy','Brand Strategy','User Research','Usability Testing','A/B Testing','Conversion Rate Optimization','Customer Support','Customer Success','Sales','Negotiation','Contract Negotiation','Legal','Compliance','GDPR','HIPAA','SOC 2','ISO','Quality Assurance','Code Review','Refactoring','Optimization','Performance Tuning','Caching','CDN','Load Balancing','Microservices','Serverless','Lambda','Cloud Functions','Firebase','Supabase','Sanity','Contentful','Headless CMS','Static Site Generation','Next.js','Gatsby','Hugo','Jekyll','WordPress','Shopify','WooCommerce','Magento','BigCommerce','E-commerce','Payment Processing','Stripe','PayPal','Square','Blockchain','Crypto','Web3','Smart Contracts','Solidity','Ethereum','Bitcoin','NFT','Virtual Reality','Augmented Reality','3D Modeling','Blender','Unity','Unreal Engine','Game Development','Level Design','Game Art','Sound Design','Music Production','Video Production','Video Editing','Adobe Creative Suite','Premiere','After Effects','Lighting','Photography','Motion Graphics','Animation','2D Animation','3D Animation','Rigging','Modeling','Texturing','Rendering','Visualization','Data Visualization','Infographics','Illustration','Vector Art','Iconography','Logo Design','Branding','Package Design','Print Design','Layout Design','Typography','Color Theory','Design Systems','Component Libraries','Accessibility','WCAG','Inclusive Design','Mobile First','Progressive Web Apps','Service Workers','Offline Support','Caching Strategies','State Management','Redux','MobX','Vuex','Context API','Hooks','Composition API','Async/Await','Promises','Callbacks','Error Handling','Logging','Monitoring','Sentry','Datadog','New Relic','APM','Observability','Telemetry','Event Tracking','User Tracking','Privacy','Analytics Privacy','GDPR Compliance','Data Privacy','Security Audit','Vulnerability Assessment','Bug Bounty','Incident Response','Disaster Recovery','Backup Strategy','Data Recovery','Version Control','Branching Strategies','Code Owners','Pull Requests','Code Reviews','Pair Programming','Mob Programming','Test-Driven Development','Behavior-Driven Development','Acceptance Testing','Integration Testing','Unit Testing','End-to-End Testing','Contract Testing','Snapshot Testing','Visual Regression Testing','Performance Testing','Load Testing','Stress Testing','Chaos Engineering','Infrastructure as Code','Terraform','Ansible','Puppet','Chef','Containers','Docker Compose','Orchestration','Kubernetes','OpenShift','AWS ECS','Cloud Deployment','CI/CD Pipeline','GitHub Actions','GitLab CI','CircleCI','Travis CI','Jenkins','Monitoring','Alerting','Logging','Log Aggregation','ELK Stack','Splunk','Cloudwatch','Metrics','Prometheus','Grafana','Cost Optimization','Resource Management','Scaling','Horizontal Scaling','Vertical Scaling','Caching Strategies','Database Optimization','Query Optimization','Index Optimization','Sharding','Partitioning','Replication','Backup','Disaster Recovery','Business Continuity','Incident Management','Change Management','Release Management','Deployment Strategy','Blue-Green Deployment','Canary Deployment','Rolling Deployment','Feature Flags','A/B Testing'];
 
-import { CATEGORIES } from '../utils/categories';
 const EMPTY_MILESTONE = { title: '', description: '', budget: '', deadline: '' };
 /** Today as YYYY-MM-DD, the earliest date a deadline may take. */
 const TODAY = () => new Date().toISOString().slice(0, 10);
@@ -66,12 +68,14 @@ function SummaryItem({ kind, path, label, id, value }) {
 }
 
 export default function PostTask() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById } = useLookups();
+  const currentUser = useCurrentUser();
   const Validate = useValidation();
   usePageTitle('Post New Task — Lannent');
   const navigate = useNavigate();
-  const [session] = useState(() => Auth.getCurrentUser());
+  const dispatch = useDispatch();
+  const Fees = useSelector(selectFees);
+  const [session] = useState(() => currentUser);
   const { errors, showError, clearError, errorStyle } = useFieldErrors();
 
   // ── Form state ──
@@ -272,15 +276,15 @@ export default function PostTask() {
 
   let auditSummary = 'Disabled';
   if (auditEnabled) {
-    const rev = auditExpertId ? Store.getUserById(auditExpertId) : null;
+    const rev = auditExpertId ? userById(auditExpertId) : null;
     auditSummary = rev ? `${rev.name.split(' ')[0]} · ₹${(auditFee || 0).toLocaleString('en-IN')}` : 'Select a reviewer';
   }
 
-  const walletUser = Store.getUserById(session.userId);
+  const walletUser = userById(session.userId);
   const walletBalance = walletUser?.walletBalance || 0;
   // Posting moves the budget into escrow; the contract fees come at hire.
   const insufficient = totalBudget > walletBalance;
-  const hireFees = totalBudget > 0 ? Store.Fees.projectFunding(totalBudget) : null;
+  const hireFees = totalBudget > 0 ? Fees.projectFunding(totalBudget) : null;
 
   // Enable/disable Publish in real time. An audited project cannot be
   // published without a named reviewer.
@@ -315,7 +319,7 @@ export default function PostTask() {
     return valid;
   }
 
-  function publishTask() {
+  async function publishTask() {
     if (!validateTaskForm()) return;
 
     const amount = parseFloat(budget);
@@ -331,7 +335,7 @@ export default function PostTask() {
     // The project and its milestones are created together: if a milestone is
     // refused, the project is removed again and its budget returned.
     try {
-      Store.createTaskWithMilestones({
+      await dispatch(createTaskWithMilestones({ task: {
         title: title.trim(),
         category,
         description: description.trim(),
@@ -342,7 +346,7 @@ export default function PostTask() {
         auditEnabled,
         auditFee: auditEnabled ? auditFee : undefined,
         auditExpertId: auditEnabled ? auditExpertId : undefined,
-      }, milestones.map(m => ({ title: m.title, description: m.description, budget: parseFloat(m.budget), dueDate: m.deadline || undefined })));
+      }, milestones: milestones.map(m => ({ title: m.title, description: m.description, budget: parseFloat(m.budget), dueDate: m.deadline || undefined })) })).unwrap();
     } catch (e) {
       Validate.toast(e.message, 'error');
       return;

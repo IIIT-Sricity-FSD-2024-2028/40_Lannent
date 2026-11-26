@@ -8,12 +8,14 @@
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useSelector } from 'react-redux';
+import { selectAllAuditRequests } from '../store/slices/auditRequestsSlice';
+import { selectAllDisputes } from '../store/slices/disputesSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
 import StatCard from '../components/StatCard';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ExpertDisputeCases.css?raw';
 
@@ -21,26 +23,25 @@ const SEVERITY_ICON_CLASS = { high: 'severity-icon-high', medium: 'severity-icon
 const FILTERS = [['all', 'All'], ['Open', 'Open'], ['Under Investigation', 'Investigating'], ['Resolved', 'Resolved']];
 
 /** "Open" until the fee is funded and accepted, then "Under Investigation". */
-function statusOf(Store, d) {
-  const eng = (Store.getAuditRequests() || []).filter(a => a.disputeId === d.id && !a.replacedBy).pop();
+function statusOf(auditRequests, d) {
+  const eng = (auditRequests || []).filter(a => a.disputeId === d.id && !a.replacedBy).pop();
   return eng && eng.status === 'in-progress' ? 'Under Investigation' : 'Open';
 }
 
 /** Disputes visible to this expert, shaped for the cards. */
-function loadDisputes(Store, Auth) {
-  const session = Auth.getCurrentUser();
-  return Store.getDisputes()
+function toDisputeCards({ session, disputes, auditRequests, taskById, userById }) {
+  return disputes
     .filter(d => d.expertId === session.userId || d.resolvedBy === session.userId)
     .map(d => {
-      const task = Store.getTaskById(d.taskId);
-      const raiser = Store.getUserById(d.raisedBy);
+      const task = taskById(d.taskId);
+      const raiser = userById(d.raisedBy);
       return {
         id: d.id,
         project: d.project || (task ? task.title : 'Unknown Project'),
         milestone: d.milestone || 'Milestone',
         issue: [d.reason, d.details].filter(Boolean).join(' — ').slice(0, 120) + ([d.reason, d.details].filter(Boolean).join(' — ').length > 120 ? '…' : '') || 'Dispute raised',
         raisedBy: (raiser ? raiser.name : d.raisedByName || 'Unknown') + ' (' + (raiser ? raiser.role : 'user') + ')',
-        status: d.status === 'resolved' ? 'Resolved' : d.status === 'withdrawn' ? 'Withdrawn by client' : d.status === 'expired' ? 'Expired — no verdict' : statusOf(Store, d),
+        status: d.status === 'resolved' ? 'Resolved' : d.status === 'withdrawn' ? 'Withdrawn by client' : d.status === 'expired' ? 'Expired — no verdict' : statusOf(auditRequests, d),
         rawStatus: d.status,
         severity: d.severity || 'medium',
         date: d.createdAt ? new Date(d.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently',
@@ -54,7 +55,7 @@ function loadDisputes(Store, Auth) {
  * priced engagement: preview the claim, agree a fee, and only then resolve it.
  */
 function CardAction({ d }) {
-  const Store = useStore();
+  const auditRequests = useSelector(selectAllAuditRequests);
   // Withdrawn by the client, or expired without a verdict: nothing left to do.
   if (d.rawStatus === 'withdrawn' || d.rawStatus === 'expired') {
     return <span className="btn-resolve" style={{ opacity: 0.6, cursor: 'default' }}>{d.rawStatus === 'withdrawn' ? 'Withdrawn — fee returned to the client' : 'Expired — fee returned to the client'}</span>;
@@ -68,7 +69,7 @@ function CardAction({ d }) {
     );
   }
   // The current engagement for this dispute (a declined one may have been replaced).
-  const eng = (Store.getAuditRequests() || []).filter(a => a.disputeId === d.id && !a.replacedBy).pop();
+  const eng = (auditRequests || []).filter(a => a.disputeId === d.id && !a.replacedBy).pop();
   if (!eng || eng.status === 'declined' || eng.status === 'cancelled') {
     return <span className="btn-resolve" style={{ opacity: 0.6, cursor: 'default' }}>Waiting for a new reviewer</span>;
   }
@@ -120,13 +121,15 @@ function DisputeCard({ d }) {
 }
 
 export default function ExpertDisputeCases() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const currentUser = useCurrentUser();
   usePageTitle('Dispute Cases — Lannent');
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const all = loadDisputes(Store, Auth);
+  const { taskById, userById } = useLookups();
+  const disputes = useSelector(selectAllDisputes);
+  const auditRequests = useSelector(selectAllAuditRequests);
+  const all = toDisputeCards({ session: currentUser, disputes, auditRequests, taskById, userById });
   const q = searchQuery.toLowerCase();
   const list = all.filter(d => {
     const ok = !q || d.project.toLowerCase().includes(q) || d.issue.toLowerCase().includes(q);

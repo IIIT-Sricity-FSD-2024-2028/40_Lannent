@@ -11,8 +11,6 @@ import EmptyState from '../components/EmptyState';
 import FieldError from '../components/FieldError';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import { useValidation } from '../context/ValidationContext';
 import useFieldErrors from '../hooks/useFieldErrors';
 import usePageTitle from '../hooks/usePageTitle';
@@ -20,7 +18,9 @@ import pageCss from './ExpertSettings.css?raw';
 import AvatarColorPicker from '../components/AvatarColorPicker';
 import ChangePasswordCard from '../components/ChangePasswordCard';
 import { CATEGORIES, CATEGORY_INFO } from '../utils/categories';
-import { syncSessionFromUser } from '../utils/helpers';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch } from 'react-redux';
+import { updateUser } from '../store/slices/usersSlice';
 
 const DOMAINS = CATEGORIES.map(c => ({ id: c, label: c, ...CATEGORY_INFO[c] }));
 const SECTIONS = [
@@ -32,12 +32,13 @@ const SECTIONS = [
 const SAVE_ICON = { width: 13, height: 13 };
 
 export default function ExpertSettings() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById } = useLookups();
+  const currentUser = useCurrentUser();
+  const dispatch = useDispatch();
   const Validate = useValidation();
   usePageTitle('Expert Settings — Lannent');
-  const session = Auth.getCurrentUser();
-  const [user] = useState(() => (session ? Store.getUserById(session.userId) : null));
+  const session = currentUser;
+  const [user] = useState(() => (session ? userById(session.userId) : null));
 
   const profile = {
     name: user?.name || '',
@@ -85,7 +86,7 @@ export default function ExpertSettings() {
     setSelectedDomains(list => (list.includes(id) ? list.filter(d => d !== id) : [...list, id]));
   }
 
-  function saveExpertProfile() {
+  async function saveExpertProfile() {
     const f = fname.trim(), l = lname.trim(), em = email.trim(), b = bio.trim();
     const { valid } = validateForm([
       { fieldId: 'es-fname', value: f, checks: [v => Validate.required(v, 'First name')] },
@@ -98,23 +99,22 @@ export default function ExpertSettings() {
     if (!Number.isFinite(rate) || rate < 0) { Validate.toast('Enter an hourly rate of zero or more.', 'error'); return; }
     let saved;
     try {
-      saved = Store.updateUser(session.userId, {
+      saved = await dispatch(updateUser({ id: session.userId, syncSession: true, updates: {
         name: f + ' ' + l, email: em, bio: b, avatarColor, specialization: specialization.trim(), hourlyRate: rate,
-      });
+      } })).unwrap();
     } catch (e) {
       Validate.toast(e.message, 'error');
       return;
     }
-    syncSessionFromUser(saved);
     setInitials(saved.avatar);
     Validate.toast('Profile saved.', 'success');
   }
 
-  function saveAvailability() {
+  async function saveAvailability() {
     try {
-      Store.updateUser(session.userId, {
+      await dispatch(updateUser({ id: session.userId, updates: {
         availability: { status: availStatus, maxCases: parseInt(availMax, 10) || 0, type: availType },
-      });
+      } })).unwrap();
     } catch (e) {
       Validate.toast(e.message, 'error');
       return;
@@ -122,7 +122,7 @@ export default function ExpertSettings() {
     Validate.toast('Availability saved.', 'success');
   }
 
-  function saveDomains() {
+  async function saveDomains() {
     if (!selectedDomains.length) {
       Validate.toast('Choose at least one domain — clients only see reviewers who cover their category.', 'error');
       return;
@@ -130,7 +130,7 @@ export default function ExpertSettings() {
     // Saved in the order they appear on screen.
     const ordered = DOMAINS.filter(d => selectedDomains.includes(d.id)).map(d => d.id);
     try {
-      Store.updateUser(session.userId, { domains: ordered });
+      await dispatch(updateUser({ id: session.userId, updates: { domains: ordered } })).unwrap();
     } catch (e) {
       Validate.toast(e.message, 'error');
       return;

@@ -30,7 +30,9 @@ export class PortfolioProjectDto {
  * details, portfolio and availability, every one of which this DTO did not
  * declare, so validation silently stripped them and the page said "saved".
  */
-export class UpdateUserDto extends PartialType(OmitType(CreateUserDto, ['role', 'password'] as const)) {
+// `phone` is declared again below with its own rule (an empty value clears
+// it), so the signup rule is left out rather than applied on top.
+export class UpdateUserDto extends PartialType(OmitType(CreateUserDto, ['role', 'password', 'phone', 'phoneCountryCode'] as const)) {
   @ApiPropertyOptional({ example: 'active', enum: ['active', 'suspended'] })
   @IsOptional() @IsIn(['active', 'suspended'])
   status?: string;

@@ -11,12 +11,13 @@
  */
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useStore } from '../context/StoreContext';
+import { useSelector } from 'react-redux';
+import { selectExperts, selectUserEntities } from '../store/slices/usersSlice';
 
 /** Active experts who review the given category (all of them when no category). */
-export function matchingExperts(Store, category) {
+export function matchingExperts(allExperts, category) {
   // A reviewer who has marked themselves unavailable is not offered for new cases.
-  const experts = ((Store.getExperts && Store.getExperts()) || [])
+  const experts = (allExperts || [])
     .filter(e => !(e.availability && typeof e.availability === 'object' && e.availability.status === 'Unavailable'));
   if (!category) return experts;
   return experts.filter(e => Array.isArray(e.domains) && e.domains.includes(category));
@@ -27,13 +28,14 @@ export function matchingExperts(Store, category) {
  * a dispute on a project whose client already chose its reviewer.
  */
 export default function ExpertPicker({ category, selectedId, onChange, lockedId, excludeIds = [] }) {
-  const Store = useStore();
+  const experts = useSelector(selectExperts);
+  const usersById = useSelector(selectUserEntities);
   const [profileId, setProfileId] = useState(null);       // last profile shown (the modal stays in the DOM once opened)
   const [profileOpen, setProfileOpen] = useState(false);
 
   const list = lockedId
-    ? matchingExperts(Store, null).filter(e => e.id === lockedId)
-    : matchingExperts(Store, category).filter(e => !excludeIds.includes(e.id));
+    ? matchingExperts(experts, null).filter(e => e.id === lockedId)
+    : matchingExperts(experts, category).filter(e => !excludeIds.includes(e.id));
 
   // A reviewer selected for a different category is no longer valid.
   useEffect(() => {
@@ -50,7 +52,7 @@ export default function ExpertPicker({ category, selectedId, onChange, lockedId,
   }
 
   function openProfile(id) {
-    if (!Store.getUserById(id)) return;
+    if (!usersById[id]) return;
     setProfileId(id);
     setProfileOpen(true);
   }
@@ -91,7 +93,7 @@ export default function ExpertPicker({ category, selectedId, onChange, lockedId,
 
       {profileId && createPortal(
         <ExpertProfileModal
-          expert={Store.getUserById(profileId)}
+          expert={usersById[profileId]}
           open={profileOpen}
           onClose={() => setProfileOpen(false)}
           onSelect={id => { select(id); setProfileOpen(false); }}

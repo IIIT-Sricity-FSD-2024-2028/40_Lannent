@@ -5,13 +5,14 @@
  * Every rate the platform charges, editable by the revenue admin. A worked
  * example on the right recalculates as you type, before anything is saved.
  */
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
+import { useValidation } from '../context/ValidationContext';
+import { useCurrentUser } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchFeeConfig, selectFeeConfig, updateFeeConfig } from '../store/slices/revenueSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import EmptyState from '../components/EmptyState';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './AdminFeeConfig.css?raw';
 
@@ -121,15 +122,33 @@ function WorkedExample({ draft }) {
 }
 
 export default function AdminFeeConfig() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const currentUser = useCurrentUser();
   const Validate = useValidation();
   usePageTitle('Fee Configuration — Lannent');
-  const role = (Auth.getCurrentUser() || {}).role;
+  const role = (currentUser || {}).role;
 
-  const [cfg, setCfg] = useState(() => Store.getFeeConfig());   // what the server currently has
-  const [values, setValues] = useState(() => (cfg ? formValuesFrom(cfg) : {}));
+  const dispatch = useDispatch();
+  const cfg = useSelector(selectFeeConfig);   // what the server currently has
+  const [loaded, setLoaded] = useState(false);
+  const [values, setValues] = useState({});
   const dirtyNote = useRef('');
+
+  // Read the current rates when the page opens, and fill the form with them.
+  useEffect(() => {
+    dispatch(fetchFeeConfig()).unwrap()
+      .then(c => { if (c) setValues(formValuesFrom(c)); })
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, [dispatch]);
+
+  if (!loaded) {
+    return (
+      <>
+        <PageStyle css={pageCss} />
+        <EmptyState role={role} activePath="/admin-fee-config" pageTitle="Fee Configuration" message="Loading fee rates…" />
+      </>
+    );
+  }
 
   if (!cfg) {
     return (
@@ -170,18 +189,17 @@ export default function AdminFeeConfig() {
 
   const setValue = (id, value) => setValues(v => ({ ...v, [id]: value }));
 
-  function saveConfig() {
+  async function saveConfig() {
     if (bad) { Validate.toast('Every rate must be zero or greater.', 'error'); return; }
     if (percentTooHigh) { Validate.toast('Percentages cannot exceed 100% (cancellation fees: 50%).', 'error'); return; }
     if (windowWrong) { Validate.toast('The early-cancellation window must end after the free window.', 'error'); return; }
-    let result;
     try {
-      result = Store.updateFeeConfig(draft);
+      // The saved config replaces the one in the store (and the preview rates are re-read).
+      await dispatch(updateFeeConfig(draft)).unwrap();
     } catch (e) {
       Validate.toast(e.message, 'error');
       return;
     }
-    setCfg(result);
     Validate.toast('Fee rates saved. They apply to future charges only.', 'success');
   }
 

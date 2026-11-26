@@ -8,11 +8,11 @@
  *   signed out → login
  */
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useSelector } from 'react-redux';
+import { getDashboardUrl, selectCurrentUser } from '../store/slices/authSlice';
 
 export default function AdminDashboard() {
-  const Auth = useAuth();
-  const u = Auth.getCurrentUser();
+  const u = useSelector(selectCurrentUser);
   if (!u) return <Navigate to="/login" replace />;
-  return <Navigate to={Auth.getDashboardUrl(u.role)} replace />;
+  return <Navigate to={getDashboardUrl(u.role)} replace />;
 }

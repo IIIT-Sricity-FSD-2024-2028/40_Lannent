@@ -6,13 +6,16 @@
  * performance, milestone velocity, client feedback and invitations,
  * with three Chart.js charts.
  */
-import { useState } from 'react';
+import { useMemo } from 'react';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useSelector } from 'react-redux';
+import { selectAllProposals } from '../store/slices/proposalsSlice';
+import { selectAllTasks } from '../store/slices/tasksSlice';
+import { selectAllTransactions } from '../store/slices/transactionsSlice';
 import ChartCanvas from '../components/ChartCanvas';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './PerformanceAnalytics.css?raw';
 
@@ -26,14 +29,14 @@ function monthKey(d) {
   return isNaN(dt) ? null : `${dt.getFullYear()}-${dt.getMonth()}`;
 }
 
-/** Everything on the page, derived from the Store — not hardcoded. */
-function buildPerformance(Store, workerId) {
-  const myTasks = Store.getTasksByWorker(workerId);
+/** Everything on the page, derived from the Redux store — not hardcoded. */
+function buildPerformance({ proposals, tasks, transactions, userById, milestonesByTask }, workerId) {
+  const myTasks = tasks.filter(t => t.workerId === workerId);
   let myMilestones = [];
   myTasks.forEach(t => {
-    myMilestones = myMilestones.concat(Store.getMilestonesByTask(t.id).filter(m => !m.workerId || m.workerId === workerId));
+    myMilestones = myMilestones.concat(milestonesByTask(t.id).filter(m => !m.workerId || m.workerId === workerId));
   });
-  const myReleases = Store.getTransactions().filter(t => t.type === 'milestone-release' && t.toId === workerId);
+  const myReleases = transactions.filter(t => t.type === 'milestone-release' && t.toId === workerId);
 
   // Trailing twelve months, oldest first.
   const months12 = [];
@@ -58,8 +61,8 @@ function buildPerformance(Store, workerId) {
   }));
 
   const projectPerformance = myTasks.map(t => {
-    const ms = Store.getMilestonesByTask(t.id);
-    const client = t.clientId ? Store.getUserById(t.clientId) : null;
+    const ms = milestonesByTask(t.id);
+    const client = t.clientId ? userById(t.clientId) : null;
     return {
       id: t.id,
       project: t.title,
@@ -91,7 +94,7 @@ function buildPerformance(Store, workerId) {
   };
 
   // Applications the worker sent, at the clients' posted budgets (there is no bidding).
-  const invitations = Store.getApplicationsByWorker(workerId);
+  const invitations = proposals.filter(p => p.workerId === workerId && p.type === 'application');
   const accepted = invitations.filter(p => p.status === 'hired').length;
   const rejected = invitations.filter(p => ['rejected', 'withdrawn', 'closed'].includes(p.status)).length;
   const pending = invitations.filter(p => p.status === 'pending').length;
@@ -254,11 +257,14 @@ function MiniCard({ icon, iconColor, label, value, valueColor }) {
 }
 
 export default function PerformanceAnalytics() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById, milestonesByTask } = useLookups();
+  const proposals = useSelector(selectAllProposals);
+  const tasks = useSelector(selectAllTasks);
+  const transactions = useSelector(selectAllTransactions);
+  const currentUser = useCurrentUser();
   usePageTitle('Performance Analytics — Lannent');
-  const session = Auth.getCurrentUser();
-  const [data] = useState(() => buildPerformance(Store, session.userId));
+  const session = currentUser;
+  const data = useMemo(() => buildPerformance({ proposals, tasks, transactions, userById, milestonesByTask }, session.userId), [milestonesByTask, proposals, session.userId, tasks, transactions, userById]);
   const { overviewStats, velocityStats, proposalStats } = data;
   const share = n => (proposalStats.sent ? Math.round((n / proposalStats.sent) * 100) : 0);
   const avgMonthly = Math.round(data.earningsData.reduce((s, d) => s + d.earnings, 0) / data.earningsData.length);

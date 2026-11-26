@@ -7,13 +7,16 @@
  */
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useValidation } from '../context/ValidationContext';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectAllAuditRequests } from '../store/slices/auditRequestsSlice';
+import { selectAllDisputes, resolveDispute } from '../store/slices/disputesSlice';
+import { fileUrl } from '../store/slices/filesSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import EmptyState from '../components/EmptyState';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ResolveDispute.css?raw';
 
@@ -26,15 +29,15 @@ const SMALL_LABEL = { fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
 const MUTED_P = { fontSize: 13.5, color: 'var(--muted-foreground)' };
 
 /** Builds the `d` object the page renders from the stored dispute. */
-function buildCase(Store, raw) {
-  const task = Store.getTaskById(raw.taskId);
-  const raiser = Store.getUserById(raw.raisedBy);
-  const respondent = Store.getUserById(raw.againstId);
+function buildCase({ userById, taskById, milestoneById }, raw) {
+  const task = taskById(raw.taskId);
+  const raiser = userById(raw.raisedBy);
+  const respondent = userById(raw.againstId);
 
   // The work under dispute. A reviewer was being asked to decide the case
   // without ever seeing what the worker actually delivered — the files,
   // the repository, the notes — none of it reached this page.
-  const disputedMilestone = raw.milestoneId ? Store.getMilestoneById(raw.milestoneId) : null;
+  const disputedMilestone = raw.milestoneId ? milestoneById(raw.milestoneId) : null;
   const disputedWork = disputedMilestone ? disputedMilestone.deliverable : null;
   const raised = raw.createdAt ? fmtDate(raw.createdAt) : null;
 
@@ -120,7 +123,6 @@ function VerdictOption({ id, value, selected, onSelect, title, desc }) {
 
 /** Body of the "Submitted Deliverable" card. */
 function DeliverableBody({ milestone, work }) {
-  const Store = useStore();
   if (!milestone) return <p style={MUTED_P}>This dispute is not tied to a specific milestone, so there is no single submission to review.</p>;
   if (!work) return <p style={MUTED_P}>The worker has not submitted a deliverable for <strong>{milestone.title}</strong> yet.</p>;
   return (
@@ -140,7 +142,7 @@ function DeliverableBody({ milestone, work }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {work.files.map((f, i) => {
             const name = typeof f === 'string' ? f : (f && f.name) || 'File';
-            const href = typeof f === 'object' ? Store.fileUrl(f) : '';
+            const href = typeof f === 'object' ? fileUrl(f) : '';
             return (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10 }}>
                 <Icon name="file" style={{ width: 16, height: 16, color: '#6366f1', flex: 'none' }} />
@@ -159,23 +161,26 @@ function DeliverableBody({ milestone, work }) {
 }
 
 export default function ResolveDispute() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById, taskById, milestoneById } = useLookups();
+  const auditRequests = useSelector(selectAllAuditRequests);
+  const disputes = useSelector(selectAllDisputes);
+  const currentUser = useCurrentUser();
   const Validate = useValidation();
   usePageTitle('Resolve Dispute — Lannent');
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const [searchParams] = useSearchParams();
   const disputeId = searchParams.get('id') || searchParams.get('disputeId');
 
-  // Load real dispute from Store
+  // Load the dispute from the Redux store
   // Only the dispute named in the link. Falling back to "the first open
   // dispute" showed one case while the verdict form did nothing.
   const [d] = useState(() => {
-    const raw = disputeId ? Store.getDisputeById(disputeId) : null;
-    return raw ? buildCase(Store, raw) : null;
+    const raw = disputeId ? (disputes.find(x => x.id === disputeId) || null) : null;
+    return raw ? buildCase({ userById, taskById, milestoneById }, raw) : null;
   });
-  const engagement = d ? Store.getAuditRequests().find(a => a.id === d.raw.auditRequestId) : null;
-  const session = Auth.getCurrentUser();
+  const engagement = d ? auditRequests.find(a => a.id === d.raw.auditRequestId) : null;
+  const session = currentUser;
   const isOpen = d && d.raw.status === 'open';
   const isMine = d && d.raw.expertId === session.userId;
   const ready = engagement && engagement.status === 'in-progress';
@@ -194,7 +199,7 @@ export default function ResolveDispute() {
   const { disputedMilestone, disputedWork } = d;
 
   /* submit */
-  const submitVerdict = () => {
+  const submitVerdict = async () => {
     const trimmed = note.trim();
     let valid = true;
 
@@ -221,7 +226,7 @@ export default function ResolveDispute() {
 
     let result;
     try {
-      result = Store.resolveDispute(disputeId, { verdict: storeVerdict, resolution: trimmed });
+      result = await dispatch(resolveDispute({ id: disputeId, verdict: storeVerdict, resolution: trimmed })).unwrap();
     } catch (e) {
       Validate.toast(e.message, 'error');
       return;

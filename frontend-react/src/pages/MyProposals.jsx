@@ -10,24 +10,25 @@
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useValidation } from '../context/ValidationContext';
+import { hoverBackground } from '../utils/helpers';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectAllProposals, withdrawProposal } from '../store/slices/proposalsSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import FilterTabs from '../components/FilterTabs';
 import Icon from '../components/Icon';
 import StatCard from '../components/StatCard';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
-import { hoverBackground } from '../utils/helpers';
 import usePageTitle from '../hooks/usePageTitle';
 
 const FILTERS = [['all', 'All'], ['pending', 'Pending'], ['accepted', 'Accepted'], ['rejected', 'Rejected']];
 const STATUS_BADGES = { 'Pending': 'badge-orange', 'Accepted': 'badge-green', 'Rejected': 'badge-red', 'Withdrawn': 'badge-gray', 'Closed': 'badge-gray' };
 
 /** The worker's proposals, shaped for display. */
-function loadProposals(Store, userId) {
-  return Store.getApplicationsByWorker(userId).map(p => {
-    const task = Store.getTaskById(p.taskId);
-    const client = task && task.clientId ? Store.getUserById(task.clientId) : null;
+function loadProposals({ proposals, userById, taskById }, userId) {
+  return proposals.filter(p => p.workerId === userId && p.type === 'application').map(p => {
+    const task = taskById(p.taskId);
+    const client = task && task.clientId ? userById(task.clientId) : null;
     return {
       id: p.id,
       projectName: task ? task.title : 'Unknown Task',
@@ -44,15 +45,17 @@ function loadProposals(Store, userId) {
 }
 
 export default function MyProposals() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById, taskById } = useLookups();
+  const allProposals = useSelector(selectAllProposals);
+  const dispatch = useDispatch();
+  const currentUser = useCurrentUser();
   const Validate = useValidation();
   usePageTitle('My Proposals — Lannent');
-  const session = Auth.getCurrentUser();
+  const session = currentUser;
 
   // Counts are taken once, when the page loads (as in the original).
   const [counts] = useState(() => {
-    const all = loadProposals(Store, session.userId);
+    const all = loadProposals({ proposals: allProposals, userById, taskById }, session.userId);
     return {
       all: all.length,
       pending: all.filter(p => p.status === 'Pending').length,
@@ -65,7 +68,7 @@ export default function MyProposals() {
   const [fading, setFading] = useState([]);
   const [removed, setRemoved] = useState([]);
 
-  const proposals = loadProposals(Store, session.userId);
+  const proposals = loadProposals({ proposals: allProposals, userById, taskById }, session.userId);
   const list = (filter === 'all' ? proposals : proposals.filter(p => p.status.toLowerCase() === filter))
     .filter(p => !removed.includes(p.id));
 
@@ -75,10 +78,10 @@ export default function MyProposals() {
     setRemoved([]);
   }
 
-  function withdrawProposal(id) {
-    Validate.confirm('Withdraw this proposal? You can apply to the project again later.', () => {
+  function handleWithdraw(id) {
+    Validate.confirm('Withdraw this proposal? You can apply to the project again later.', async () => {
       try {
-        Store.withdrawProposal(id);
+        await dispatch(withdrawProposal(id)).unwrap();
       } catch (e) {
         Validate.toast((e.message), 'error');
         return;
@@ -146,7 +149,7 @@ export default function MyProposals() {
                   <Link to={`/worker-workroom?id=${p.taskId}`} className="btn-primary" style={{ display: 'inline-block', fontSize: 13, padding: '6px 14px', borderRadius: 10, textDecoration: 'none' }}>Open Workroom</Link>
                 )}
                 {p.status === 'Pending' && (
-                  <button className="btn-outline" style={{ fontSize: 13, padding: '6px 14px', borderRadius: 10, color: '#ef4444', borderColor: '#fecaca' }} onClick={() => withdrawProposal(p.id)}>Withdraw</button>
+                  <button className="btn-outline" style={{ fontSize: 13, padding: '6px 14px', borderRadius: 10, color: '#ef4444', borderColor: '#fecaca' }} onClick={() => handleWithdraw(p.id)}>Withdraw</button>
                 )}
               </div>
             </div>

@@ -7,14 +7,17 @@
  * then hire or reject. There is no bidding: every application is at the
  * project's posted budget, and hiring starts the project.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { useValidation } from '../context/ValidationContext';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { acceptProposal, declineProposal, selectAllProposals } from '../store/slices/proposalsSlice';
+import { selectAllTasks } from '../store/slices/tasksSlice';
+import { selectFees } from '../store/slices/feesSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './WorkerApplications.css?raw';
 
@@ -23,10 +26,9 @@ const formatDate = d => new Date(d).toLocaleDateString('en-US', { month: 'short'
 const money = n => '₹' + (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /** The client's open projects — only open tasks can still hire. */
-function loadProjects(Store, Auth) {
-  const session = Auth.getCurrentUser();
+function loadProjects({ proposals, tasks }, session) {
   if (!session) return [];
-  return Store.getTasksByClient(session.userId)
+  return tasks.filter(t => t.clientId === session.userId)
     .filter(t => t.status === 'open')
     .map(t => ({
       id: t.id,
@@ -35,19 +37,18 @@ function loadProjects(Store, Auth) {
       budget: '₹' + (t.budget || 0).toLocaleString('en-IN'),
       deadline: t.deadline ? formatDate(t.deadline) : 'No deadline',
       posted: t.createdAt ? formatDate(t.createdAt) : 'Recent',
-      proposalCount: Store.getProposalsByTask(t.id).filter(p => p.type === 'application').length,
+      proposalCount: proposals.filter(p => p.taskId === t.id).filter(p => p.type === 'application').length,
     }));
 }
 
 /** Every application on the client's tasks, with worker details filled in. */
-function buildAllProposals(Store, Auth) {
-  const session = Auth.getCurrentUser();
+function buildAllProposals({ proposals, tasks, userById }, session) {
   if (!session) return [];
-  const clientTaskIds = Store.getTasksByClient(session.userId).map(t => t.id);
-  return Store.getProposals()
+  const clientTaskIds = tasks.filter(t => t.clientId === session.userId).map(t => t.id);
+  return proposals
     .filter(p => clientTaskIds.includes(p.taskId) && p.type === 'application')
     .map(p => {
-      const worker = Store.getUserById(p.workerId);
+      const worker = userById(p.workerId);
       return {
         id: p.id, projectId: p.taskId, taskId: p.taskId,
         workerName: p.workerName || worker?.name || 'Worker',
@@ -152,12 +153,23 @@ function ProposalDetail({ p, budget, onHire, onReject }) {
 }
 
 export default function WorkerApplications() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const storeProposals = useSelector(selectAllProposals);
+  const tasks = useSelector(selectAllTasks);
+  const Fees = useSelector(selectFees);
+  const { taskById, milestonesByTask, userById } = useLookups();
+  const currentUser = useCurrentUser();
+  const dispatch = useDispatch();
   const Validate = useValidation();
   usePageTitle('Worker Applications — Lannent');
-  const [projects] = useState(() => loadProjects(Store, Auth));
-  const [allProposals, setAllProposals] = useState(() => buildAllProposals(Store, Auth));
+  // The projects are the ones open when the page opened (a hire closes one,
+  // and it stays on screen until the next visit, as before).
+  const [projects] = useState(() => loadProjects({ proposals: storeProposals, tasks }, currentUser));
+  // Applications come straight from the store, so a hire or rejection shows
+  // the status the server recorded.
+  const allProposals = useMemo(
+    () => buildAllProposals({ proposals: storeProposals, tasks, userById }, currentUser),
+    [storeProposals, tasks, userById, currentUser],
+  );
   const [selectedProjectId, setSelectedProjectId] = useState(() => projects[0]?.id || '');
   const [selectedProposalId, setSelectedProposalId] = useState(null);
   const [search, setSearch] = useState('');            // what is typed in the search box
@@ -222,9 +234,9 @@ export default function WorkerApplications() {
     setHireOpen(true);
   }
 
-  function confirmHire() {
+  async function confirmHire() {
     // Guard: verify the task is still open before hiring
-    const task = Store.getTaskById(selectedProjectId);
+    const task = taskById(selectedProjectId);
     if (task && task.status !== 'open') {
       setHireOpen(false);
       Validate.toast('This project is no longer open — cannot hire.', 'error');
@@ -234,7 +246,7 @@ export default function WorkerApplications() {
 
     try {
       // Accepting the application hires the worker and starts the project.
-      Store.acceptProposal(selectedProposalId);
+      await dispatch(acceptProposal(selectedProposalId)).unwrap();
     } catch (e) {
       // Usually the milestones do not add up to the budget, or the wallet
       // cannot cover the contract fees.
@@ -242,21 +254,19 @@ export default function WorkerApplications() {
       return;
     }
 
-    // Update UI — mark hired; the other pending applications on the project close
-    setAllProposals(list => list.map(p => (p.taskId === selectedProjectId && (p.id === selectedProposalId || p.status === 'pending') ? { ...p, status: p.id === selectedProposalId ? 'hired' : 'closed' } : p)));
+    // The store now has the hired application and the others closed.
     Validate.toast(`✓ Worker hired. ${money(hireQuote ? hireQuote.fees : 0)} in contract fees charged; the budget stays in escrow.`, 'success');
     switchProject(selectedProjectId);
   }
 
   function rejectProposal(proposalId) {
-    Validate.confirm('Are you sure you want to reject this application?', () => {
+    Validate.confirm('Are you sure you want to reject this application?', async () => {
       try {
-        Store.declineProposal(proposalId);
+        await dispatch(declineProposal(proposalId)).unwrap();
       } catch (e) {
         Validate.toast((e.message), 'error');
         return;
       }
-      setAllProposals(list => list.map(p => (p.id === proposalId ? { ...p, status: 'rejected' } : p)));
       Validate.toast('Application rejected.', 'success');
       switchProject(selectedProjectId);
     });
@@ -267,10 +277,10 @@ export default function WorkerApplications() {
   // server will actually charge, using the same fee table it uses.
   let hireQuote = null;
   if (hireProposal) {
-    const task = Store.getTaskById(hireProposal.taskId);
+    const task = taskById(hireProposal.taskId);
     const price = task ? Number(task.budget) || 0 : 0;
-    const planned = task ? Store.getMilestonesByTask(task.id).reduce((a, m) => a + (Number(m.budget) || 0), 0) : 0;
-    hireQuote = { ...Store.Fees.projectFunding(price), price, planned };
+    const planned = task ? milestonesByTask(task.id).reduce((a, m) => a + (Number(m.budget) || 0), 0) : 0;
+    hireQuote = { ...Fees.projectFunding(price), price, planned };
   }
 
   return (
@@ -382,7 +392,7 @@ export default function WorkerApplications() {
                 <span style={{ fontWeight: 700 }} id="hireBidAmount">{hireQuote ? money(hireQuote.price) : ''}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13 }}>
-                <span style={{ color: '#374151' }}>{`Marketplace fee (${Store.Fees.rates().clientMarketplace.percent}%)`}</span>
+                <span style={{ color: '#374151' }}>{`Marketplace fee (${Fees.rates().clientMarketplace.percent}%)`}</span>
                 <span style={{ fontWeight: 600, color: '#dc2626' }} id="hireFee">{hireQuote ? money(hireQuote.marketplace) : ''}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13 }}>

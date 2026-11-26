@@ -8,15 +8,15 @@
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useValidation } from '../context/ValidationContext';
+import { hoverBackground } from '../utils/helpers';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { acceptProposal, declineProposal, selectAllProposals } from '../store/slices/proposalsSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import FilterTabs from '../components/FilterTabs';
 import Icon from '../components/Icon';
 import StatCard from '../components/StatCard';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
-import { hoverBackground } from '../utils/helpers';
-import useRerender from '../hooks/useRerender';
 import usePageTitle from '../hooks/usePageTitle';
 
 const FILTERS = [['all', 'All'], ['pending', 'Pending'], ['accepted', 'Accepted'], ['declined', 'Declined']];
@@ -24,10 +24,10 @@ const STATUS_BADGES = { 'Pending': 'badge-orange', 'Accepted': 'badge-green', 'D
 const STATUS_LABELS = { pending: 'Pending', hired: 'Accepted', declined: 'Declined', withdrawn: 'Withdrawn', closed: 'Closed' };
 
 /** The worker's invitations, shaped for display. */
-function loadInvitations(Store, userId) {
-  return Store.getInvitationsByWorker(userId).map(p => {
-    const task = Store.getTaskById(p.taskId);
-    const client = task && task.clientId ? Store.getUserById(task.clientId) : null;
+function loadInvitations({ proposals, userById, taskById }, userId) {
+  return proposals.filter(p => p.workerId === userId && p.type === 'invitation').map(p => {
+    const task = taskById(p.taskId);
+    const client = task && task.clientId ? userById(task.clientId) : null;
     const status = (p.status || '').toLowerCase();
     return {
       id: p.id,
@@ -45,15 +45,16 @@ function loadInvitations(Store, userId) {
 }
 
 export default function WorkerInvitations() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById, taskById } = useLookups();
+  const proposals = useSelector(selectAllProposals);
+  const currentUser = useCurrentUser();
   const Validate = useValidation();
   usePageTitle('Invitations — Lannent');
-  const session = Auth.getCurrentUser();
-  const rerender = useRerender();
+  const session = currentUser;
+  const dispatch = useDispatch();
   const [filter, setFilter] = useState('all');
 
-  const invitations = loadInvitations(Store, session.userId);
+  const invitations = loadInvitations({ proposals, userById, taskById }, session.userId);
   const counts = {
     all: invitations.length,
     pending: invitations.filter(p => p.status === 'Pending').length,
@@ -62,16 +63,15 @@ export default function WorkerInvitations() {
   };
   const list = filter === 'all' ? invitations : invitations.filter(p => p.status.toLowerCase() === filter);
 
-  // After accepting / rejecting, the whole page is rebuilt with the "All" filter.
+  // After accepting / rejecting, the list (read from the store) shows the "All" filter.
   function refreshPage() {
     setFilter('all');
-    rerender();
   }
 
   function acceptInvite(id) {
-    Validate.confirm('Accept this invitation at the posted budget? You are hired straight away and the project moves to My Projects.', () => {
+    Validate.confirm('Accept this invitation at the posted budget? You are hired straight away and the project moves to My Projects.', async () => {
       try {
-        Store.acceptProposal(id);
+        await dispatch(acceptProposal(id)).unwrap();
       } catch (e) {
         Validate.toast((e.message), 'error');
         return;
@@ -82,9 +82,9 @@ export default function WorkerInvitations() {
   }
 
   function declineInvite(id) {
-    Validate.confirm('Reject this invitation? The client will be notified.', () => {
+    Validate.confirm('Reject this invitation? The client will be notified.', async () => {
       try {
-        Store.declineProposal(id);
+        await dispatch(declineProposal(id)).unwrap();
       } catch (e) {
         Validate.toast((e.message), 'error');
         return;

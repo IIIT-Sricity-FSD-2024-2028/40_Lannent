@@ -1,16 +1,14 @@
 /**
  * LANNENT — OfflineBanner
- * When the API is unreachable every Store read returns an empty array, so the
+ * When the API is unreachable every collection in the store is empty, so the
  * page renders as a blank shell with no explanation. Say so instead.
  */
-import { useState } from 'react';
+import { useSelector } from 'react-redux';
 import Icon from './Icon';
-import { useStore } from '../context/StoreContext';
+import { selectIsOnline } from '../store/slices/appSlice';
 
 export default function OfflineBanner() {
-  const Store = useStore();
-  // Decided once per page load, as before.
-  const [online] = useState(() => Store.isOnline());
+  const online = useSelector(selectIsOnline);
   if (online) return null;
   return (
     <div className="offline-banner" role="alert">

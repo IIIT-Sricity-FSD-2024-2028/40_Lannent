@@ -11,10 +11,13 @@ import { Link, useSearchParams } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import EmptyState from '../components/EmptyState';
 import Icon from '../components/Icon';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
 import { safeHref } from '../utils/helpers';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useEffect, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchUser } from '../store/slices/usersSlice';
+import { selectAllTasks } from '../store/slices/tasksSlice';
 
 const ROLE_LABEL = {
   client: 'Client', worker: 'Gig Worker', expert: 'Expert Reviewer', superuser: 'Operations',
@@ -48,14 +51,27 @@ function Field({ label, children }) {
 }
 
 export default function Profile() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById } = useLookups();
+  const currentUser = useCurrentUser();
+  const dispatch = useDispatch();
+  const tasks = useSelector(selectAllTasks);
   const [searchParams] = useSearchParams();
-  const session = Auth.getCurrentUser();
+  const session = currentUser;
   const id = searchParams.get('id') || session.userId;
   const isMe = id === session.userId;
-  const user = Store.getUserById(id) || (isMe ? Store.refreshUser(id) : null);
+  const user = userById(id);
+  const [triedOwn, setTriedOwn] = useState(false);
   usePageTitle(`${user ? user.name : 'Profile'} — Lannent`);
+
+  // Your own record may be missing from the list your role can read: fetch it.
+  const needOwn = !user && isMe;
+  useEffect(() => {
+    if (needOwn) dispatch(fetchUser(id)).finally(() => setTriedOwn(true));
+  }, [dispatch, needOwn, id]);
+
+  if (needOwn && !triedOwn) {
+    return <EmptyState role={session.role} activePath="/profile" pageTitle="Profile" message="Loading your profile…" />;
+  }
 
   if (!user) {
     return <EmptyState role={session.role} activePath="/profile" pageTitle="Profile" message="This profile could not be found." />;
@@ -65,7 +81,6 @@ export default function Profile() {
   const money = n => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   // Projects this client posted (for the client stats).
-  const tasks = Store.getTasks();
   const asClient = tasks.filter(t => t.clientId === user.id);
 
   return (

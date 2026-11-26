@@ -5,7 +5,8 @@
  */
 import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
-import { useAuth } from '../context/AuthContext';
+import { useDispatch } from 'react-redux';
+import { logout } from '../store/slices/authSlice';
 
 const STAFF_ROLES = ['superuser', 'revenue-admin', 'intake-admin', 'compliance-admin'];
 
@@ -23,7 +24,7 @@ function getSettingsPage(role) {
  * @param {Function} onToggle, onClose
  */
 export default function UserMenu({ role, user, open, onToggle, onClose }) {
-  const Auth = useAuth();
+  const dispatch = useDispatch();
   const navigate = useNavigate();
 
   function handleAction(action) {
@@ -35,7 +36,7 @@ export default function UserMenu({ role, user, open, onToggle, onClose }) {
         navigate(getSettingsPage(role));
         break;
       case 'signout':
-        Auth.logout();
+        dispatch(logout());
         break;
     }
     onClose();

@@ -6,17 +6,22 @@
  */
 import EarningsWallet from '../components/EarningsWallet';
 import PageStyle from '../components/PageStyle';
+import { useSelector } from 'react-redux';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './WorkerWallet.css?raw';
 import { money } from '../utils/transactions';
+import { selectAllTransactions } from '../store/slices/transactionsSlice';
+import { selectAllAuditRequests } from '../store/slices/auditRequestsSlice';
 
-function expertStats(Store, userId) {
-  const txs = Store.getTransactions();
+/** Summary tiles, from the transactions and audit-requests slices. */
+function useExpertStats(userId) {
+  const txs = useSelector(selectAllTransactions);
+  const auditRequests = useSelector(selectAllAuditRequests);
   const sumNet = rows => rows.reduce((s, t) => s + (t.netAmount != null ? t.netAmount : t.amount || 0), 0);
   const audits = txs.filter(t => t.type === 'audit-release' && t.toId === userId);
   const disputes = txs.filter(t => t.type === 'dispute-fee-release' && t.toId === userId);
   // Agreed fees already funded into escrow for work this reviewer is doing.
-  const pending = Store.getAuditRequests()
+  const pending = auditRequests
     .filter(a => a.expertId === userId && ['escrow-funded', 'in-progress'].includes(a.status) && !a.feePaid)
     .reduce((s, a) => s + (a.agreedAmount || 0), 0);
   return [
@@ -32,7 +37,7 @@ export default function ExpertWallet() {
     <>
       <PageStyle css={pageCss} />
       <EarningsWallet role="expert" activePath="/expert-wallet" title="Wallet"
-                      subtitle="Your audit and dispute earnings, and withdrawals" stats={expertStats} />
+                      subtitle="Your audit and dispute earnings, and withdrawals" useStats={useExpertStats} />
     </>
   );
 }

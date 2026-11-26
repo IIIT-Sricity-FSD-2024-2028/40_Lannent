@@ -14,7 +14,9 @@ import Icon from '../components/Icon';
 import AuthBranding from '../components/AuthBranding';
 import PasswordInput from '../components/PasswordInput';
 import PageStyle from '../components/PageStyle';
-import { useStore } from '../context/StoreContext';
+import { useDispatch } from 'react-redux';
+import { uploadFile } from '../store/slices/filesSlice';
+import { saveExpertApplication } from '../store/slices/expertApplicationsSlice';
 import { useValidation } from '../context/ValidationContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ExpertSignup.css?raw';
@@ -175,7 +177,7 @@ function optionLabel(options, value) {
 }
 
 export default function ExpertSignup() {
-  const Store = useStore();
+  const dispatch = useDispatch();
   const Validate = useValidation();
   const PHONE_COUNTRIES = Validate.getPhoneCountries();
   const fieldValidators = useMemo(() => createFieldValidators(Validate), [Validate]);
@@ -395,12 +397,12 @@ export default function ExpertSignup() {
     // résumé the applicant attached would be judged on less than they sent.
     const uploads = [];
     if (v.expResume) {
-      uploads.push(Store.uploadFile(v.expResume, { purpose: 'expert-application' })
+      uploads.push(dispatch(uploadFile({ file: v.expResume, meta: { purpose: 'expert-application' } })).unwrap()
         .then(ref => { appData.resumeFile = ref; })
         .catch(err => { throw new Error('Your résumé could not be uploaded: ' + err.message); }));
     }
     if (v.expCert) {
-      uploads.push(Store.uploadFile(v.expCert, { purpose: 'expert-application' })
+      uploads.push(dispatch(uploadFile({ file: v.expCert, meta: { purpose: 'expert-application' } })).unwrap()
         .then(ref => { appData.certificateFile = ref; })
         .catch(err => { throw new Error('Your certificate could not be uploaded: ' + err.message); }));
     }
@@ -410,17 +412,19 @@ export default function ExpertSignup() {
       setSubmitEnabled(true);
       Validate.toast(err.message, 'error');
       return 'failed';
-    }).then(outcome => {
+    }).then(async outcome => {
       if (outcome === 'failed') return;
-      const result = Store.saveExpertApplication(appData);
-      setSubmitting(false);
-      if (!result.success) {
+      try {
+        await dispatch(saveExpertApplication(appData)).unwrap();
+      } catch (err) {
+        setSubmitting(false);
         // Only an email problem belongs under the email field.
-        if (/email/i.test(result.error || '')) showFieldError('expEmail', result.error);
-        else Validate.toast(result.error, 'error');
+        if (/email/i.test(err.message || '')) showFieldError('expEmail', err.message);
+        else Validate.toast(err.message, 'error');
         setSubmitEnabled(true);
         return;
       }
+      setSubmitting(false);
       setShowSuccess(true);
     });
   }

@@ -26,11 +26,15 @@ export class AuthService {
    * Delegates the credential check to `UsersService.login`, so the rules that
    * refuse a suspended account or a wrong password live in one place.
    */
-  login(email: string, password: string) {
+  /** `identifier` is an email or a phone number. */
+  login(identifier: string, password: string) {
     let found: ReturnType<UsersService['login']>;
     try {
-      found = this.users.login(email, password);
+      found = this.users.login(identifier, password);
     } catch (e) {
+      // Applications are made with an email, so only an email can have one.
+      if (!identifier.includes('@')) throw e;
+      const email = identifier;
       // No account yet: an Expert Reviewer applicant is told where their
       // application stands — but only after proving it is theirs with the
       // password they applied with. A public "does this email have an

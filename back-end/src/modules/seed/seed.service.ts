@@ -12,6 +12,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { FilesService } from '../files/files.service';
 import { MessagesService } from '../messages/messages.service';
+import { PasswordResetService } from '../auth/password-reset.service';
 
 @Injectable()
 export class SeedService {
@@ -29,6 +30,7 @@ export class SeedService {
     @Inject(forwardRef(() => LedgerService)) private ledgerService: LedgerService,
     @Inject(forwardRef(() => FilesService)) private filesService: FilesService,
     @Inject(forwardRef(() => MessagesService)) private messagesService: MessagesService,
+    @Inject(forwardRef(() => PasswordResetService)) private passwordResetService: PasswordResetService,
   ) {}
 
   resetAll() {
@@ -43,6 +45,8 @@ export class SeedService {
     this.expertApplicationsService.resetToSeed();
     this.notificationsService.resetToSeed();
     this.messagesService.resetToSeed();
+    // Reset links were issued for accounts that have just been replaced.
+    this.passwordResetService.resetToSeed();
     // Last: rebuilds escrow and billings from the freshly reset transaction ledger.
     this.ledgerService.resetToSeed();
     // Clears the metadata and deletes the bytes those records pointed at.

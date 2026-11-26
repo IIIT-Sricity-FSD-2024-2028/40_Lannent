@@ -6,13 +6,16 @@
  * ledger and the transaction log, and a searchable, filterable ledger of
  * every transaction (newest first).
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useStore } from '../context/StoreContext';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './SuperuserEscrow.css?raw';
+import { useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectAllTransactions } from '../store/slices/transactionsSlice';
+import { EMPTY_SUMMARY, fetchLedgerSummary, selectLedgerSummary } from '../store/slices/ledgerSlice';
 
 // Icon + colours + label for each transaction type
 const TYPE_CONFIG = {
@@ -46,10 +49,10 @@ function FinanceCard({ label, value, color, sub }) {
 
 /** One ledger row. */
 function TransactionRow({ tx }) {
-  const Store = useStore();
-  const from = Store.getUserById(tx.fromId);
-  const to = Store.getUserById(tx.toId);
-  const task = Store.getTaskById(tx.taskId);
+  const { userById, taskById } = useLookups();
+  const from = userById(tx.fromId);
+  const to = userById(tx.toId);
+  const task = taskById(tx.taskId);
   const tc = TYPE_CONFIG[tx.type] || { bg: '#f1f5f9', color: '#64748b', icon: 'circle', label: tx.type };
   const nameOf = (u, id) => u?.name || ACCOUNT_NAMES[id] || id || '—';
   // Payout rows record what the recipient netted; show the gross and the fee too.
@@ -82,17 +85,20 @@ function TransactionRow({ tx }) {
 }
 
 export default function SuperuserEscrow() {
-  const Store = useStore();
+  const { userById, taskById } = useLookups();
+  const dispatch = useDispatch();
+  const transactions = useSelector(selectAllTransactions);
   usePageTitle('Escrow & Finance — Lannent');
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
 
-  const allTx = Store.getTransactions();
+  const allTx = transactions;
 
   // Escrow and revenue come from the ledger, which is authoritative. Deriving
   // escrow from transaction rows under-counts: a milestone-release row records
   // the NET paid to the worker, while the full gross left escrow.
-  const [ledger] = useState(() => Store.getLedgerSummary());
+  const ledger = useSelector(selectLedgerSummary) || EMPTY_SUMMARY;
+  useEffect(() => { dispatch(fetchLedgerSummary()); }, [dispatch]);
   const escrowBalance = ledger.totalHeld;
   const platformRevenue = ledger.totalRevenue;
 
@@ -109,9 +115,9 @@ export default function SuperuserEscrow() {
   // Search + type filter
   const q = search.toLowerCase();
   const filtered = [...allTx].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).filter(tx => {
-    const from = Store.getUserById(tx.fromId);
-    const to = Store.getUserById(tx.toId);
-    const task = Store.getTaskById(tx.taskId);
+    const from = userById(tx.fromId);
+    const to = userById(tx.toId);
+    const task = taskById(tx.taskId);
     const matchSearch = !q ||
       String(from?.name || tx.fromId || '').toLowerCase().includes(q) ||
       String(to?.name || tx.toId || '').toLowerCase().includes(q) ||

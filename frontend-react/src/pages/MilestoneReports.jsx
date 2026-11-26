@@ -6,16 +6,18 @@
  * (?taskId=<id>&role=client|worker), or for everything when no task is given.
  * Filter by report type or milestone and open any report.
  */
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { escapeHtml } from '../utils/helpers';
+import { downloadPdf } from '../utils/pdf';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useSelector } from 'react-redux';
+import { selectAllAuditReports } from '../store/slices/auditReportsSlice';
+import { selectAllDisputes } from '../store/slices/disputesSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useStore } from '../context/StoreContext';
-import { useAuth } from '../context/AuthContext';
-import { escapeHtml } from '../utils/helpers';
 import usePageTitle from '../hooks/usePageTitle';
-import { downloadPdf } from '../utils/pdf';
 import pageCss from './MilestoneReports.css?raw';
 
 const NBSP_DOT = ' ·  ';   // "&nbsp;·&nbsp; " separator
@@ -33,9 +35,9 @@ const VERDICTS = {
 };
 
 /** Audit reports + disputes (optionally only those belonging to one task). */
-function getReports(Store, taskId) {
-  const reviewerOf = id => Store.getUserById(id);
-  let storeReports = Store.getAuditReports()
+function buildReports({ auditReports, disputes, userById, milestonesByTask }, taskId) {
+  const reviewerOf = id => userById(id);
+  let storeReports = auditReports
     .filter(r => r.createdAt) // only submitted reports
     .map(r => ({
       id: r.id,
@@ -56,7 +58,7 @@ function getReports(Store, taskId) {
       raw: r,
     }));
 
-  let storeDisputes = Store.getDisputes().map(d => ({
+  let storeDisputes = disputes.map(d => ({
     id: d.id,
     milestoneName: d.milestone || 'Project Dispute',
     milestoneId: d.milestoneId,
@@ -77,7 +79,7 @@ function getReports(Store, taskId) {
 
   // ── PROJECT-LEVEL FILTERING ──
   if (taskId) {
-    const milestoneIds = new Set(Store.getMilestonesByTask(taskId).map(m => m.id));
+    const milestoneIds = new Set(milestonesByTask(taskId).map(m => m.id));
     storeReports = storeReports.filter(r => r.taskId === taskId || milestoneIds.has(r.milestoneId));
     storeDisputes = storeDisputes.filter(d => d.taskId === taskId || milestoneIds.has(d.milestoneId));
   }
@@ -248,8 +250,10 @@ function SummaryCard({ id, icon, iconBg, iconColor, value, valueColor, label }) 
 }
 
 export default function MilestoneReports() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { taskById, userById, milestonesByTask } = useLookups();
+  const auditReports = useSelector(selectAllAuditReports);
+  const disputes = useSelector(selectAllDisputes);
+  const currentUser = useCurrentUser();
   usePageTitle('Milestone Reports — Lannent');
   const [searchParams] = useSearchParams();
   const taskId = searchParams.get('taskId') || null;
@@ -257,16 +261,19 @@ export default function MilestoneReports() {
   // to client, so a link without the parameter (the worker sidebar's "Reports")
   // drew another role's sidebar — whose Settings link then bounced the user
   // to their dashboard.
-  const role = Auth.getCurrentUser()?.role || searchParams.get('role') || 'client';
+  const role = currentUser?.role || searchParams.get('role') || 'client';
 
-  const [reports] = useState(() => getReports(Store, taskId));
+  const reports = useMemo(
+    () => buildReports({ auditReports, disputes, userById, milestonesByTask }, taskId),
+    [auditReports, disputes, userById, milestonesByTask, taskId],
+  );
   const [typeFilter, setTypeFilter] = useState('all');
   const [milestoneFilter, setMilestoneFilter] = useState('all');
 
   // Resolve project name for subtitle
   let projectName = 'All Projects';
   if (taskId) {
-    const task = Store.getTaskById(taskId);
+    const task = taskById(taskId);
     if (task) projectName = task.title;
   }
   const backUrl = role === 'expert' ? '/expert-reports'

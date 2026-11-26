@@ -9,14 +9,17 @@
  */
 import { Fragment, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useValidation } from '../context/ValidationContext';
+import { downloadPdf } from '../utils/pdf';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch, useSelector } from 'react-redux';
+import { fileUrl } from '../store/slices/filesSlice';
+import { findAuditReport, saveAuditReport, selectAllAuditReports } from '../store/slices/auditReportsSlice';
+import { selectAllAuditRequests } from '../store/slices/auditRequestsSlice';
 import DashboardLayout from '../components/DashboardLayout';
 import EmptyState from '../components/EmptyState';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
-import { downloadPdf } from '../utils/pdf';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ExpertReportAudit.css?raw';
 
@@ -65,9 +68,8 @@ function FieldLabel({ children }) {
  * control says so rather than pretending to be a working button.
  */
 function FileRow({ f }) {
-  const Store = useStore();
   const name = typeof f === 'string' ? f : (f && f.name) || 'File';
-  const url = typeof f === 'object' ? Store.fileUrl(f) : '';
+  const url = typeof f === 'object' ? fileUrl(f) : '';
   const size = typeof f === 'object' && f.size ? ` · ${(Number(f.size) / 1024).toFixed(0)} KB` : '';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10 }}>
@@ -158,7 +160,7 @@ function InfoCell({ label, children }) {
 
 /** Read-only view of a filed report. */
 function ReportView({ report, req, isReviewer }) {
-  const Store = useStore();
+  const { userById } = useLookups();
   const vPass = report.verdict === 'pass' || report.verdict === 'conditional';
   const verdictWord = report.verdict === 'pass' ? 'PASS' : report.verdict === 'conditional' ? 'PASS WITH CONDITIONS' : 'FAIL';
 
@@ -184,7 +186,7 @@ function ReportView({ report, req, isReviewer }) {
       ],
     });
   }
-  const expertUser = Store.getUserById(report.expertId);
+  const expertUser = userById(report.expertId);
   const expertName = expertUser ? expertUser.name : 'Expert Reviewer';
   const expertInitials = expertName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
   const average = (((report.codequality || 0) + (report.security || 0) + (report.performance || 0) + (report.documentation || 0)) / 4).toFixed(1);
@@ -284,12 +286,12 @@ function ReportView({ report, req, isReviewer }) {
 }
 
 /** Loads the engagement, its milestone and any report already filed for it. */
-function loadAudit(Store, searchParams, session) {
+function loadAudit({ auditRequests, auditReports, userById, taskById, milestoneById }, searchParams) {
   const auditId = searchParams.get('id') || searchParams.get('reportId');
 
   // Only the engagement in the link — a fallback to "the first one" opened
   // somebody else's audit under this page's title.
-  const req = auditId ? Store.getAuditRequestById(auditId) : null;
+  const req = auditId ? (auditRequests.find(x => x.id === auditId) || null) : null;
   if (!req) return null;
 
   // One engagement covers every milestone on the project, so the milestone
@@ -298,32 +300,37 @@ function loadAudit(Store, searchParams, session) {
   // two showed milestone one's answers already filled in, and locked the
   // form for a milestone that had never been audited.
   const milestoneId = searchParams.get('milestoneId') || req.milestoneId || null;
-  const milestone = milestoneId ? Store.getMilestoneById(milestoneId) : null;
+  const milestone = milestoneId ? milestoneById(milestoneId) : null;
   return {
     req,
-    task: Store.getTaskById(req.taskId),
-    worker: Store.getUserById(req.workerId),
+    task: taskById(req.taskId),
+    worker: userById(req.workerId),
     milestoneId,
     milestone,
-    existingReport: Store.getAuditReportByRequest(req.id, milestoneId),
+    existingReport: findAuditReport(auditReports, req.id, milestoneId),
     work: milestone ? milestone.deliverable : null,
   };
 }
 
 export default function ExpertReportAudit() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById, taskById, milestoneById } = useLookups();
+  const auditRequests = useSelector(selectAllAuditRequests);
+  const auditReports = useSelector(selectAllAuditReports);
+  const dispatch = useDispatch();
+  const currentUser = useCurrentUser();
   const Validate = useValidation();
   usePageTitle('Technical Audit Report — Lannent');
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [session] = useState(() => Auth.getCurrentUser());
+  const [session] = useState(() => currentUser);
   // The layout follows who is signed in. It preferred `?role=` over the
   // session, so a link with the wrong value without the parameter (the worker sidebar's "Reports")
   // drew another role's sidebar — whose Settings link then bounced the user
   // to their dashboard.
   const role = session?.role || searchParams.get('role') || 'expert';
-  const [data] = useState(() => loadAudit(Store, searchParams, session));
+  // Read once when the page opens: filing the report changes the engagement,
+  // and the form stays on screen until the redirect.
+  const [data] = useState(() => loadAudit({ auditRequests, auditReports, userById, taskById, milestoneById }, searchParams));
 
   // ── Form state (only used by the assigned expert's scoring form) ──
   const [checklist, setChecklist] = useState(INITIAL_CHECKLIST);
@@ -398,7 +405,7 @@ export default function ExpertReportAudit() {
     return { ...base, background: on ? onBg : 'white', color: on ? onColor : 'var(--foreground)', borderColor: on ? onBorder : 'var(--border)' };
   };
 
-  const submitAuditReport = () => {
+  const submitAuditReport = async () => {
     const findings = findingsRef.current?.value?.trim() || '';
     let valid = true;
 
@@ -430,9 +437,9 @@ export default function ExpertReportAudit() {
 
     if (!valid) return;
 
-    // Save to Store
+    // Save through the store
     try {
-      Store.saveAuditReport({
+      await dispatch(saveAuditReport({
         auditRequestId: req.id,
         taskId: req.taskId,
         milestoneId: milestoneId,
@@ -448,7 +455,7 @@ export default function ExpertReportAudit() {
         milestoneTitle: milestone ? milestone.title : req.milestone,
         projectTitle: req.project || (task ? task.title : ''),
         workerName: req.worker || (worker ? worker.name : ''),
-      });
+      })).unwrap();
 
       // Filing the report is what moves the engagement on (and pays the
       // reviewer). The PATCH that followed set `expertId` from the browser —

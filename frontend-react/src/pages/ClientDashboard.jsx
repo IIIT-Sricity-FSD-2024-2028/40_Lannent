@@ -9,8 +9,10 @@ import { Link } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import Icon from '../components/Icon';
 import StatCard from '../components/StatCard';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
+import { useSelector } from 'react-redux';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { selectTasksByClient } from '../store/slices/tasksSlice';
+import { selectAllProposals } from '../store/slices/proposalsSlice';
 import usePageTitle from '../hooks/usePageTitle';
 
 // Milestone statuses that count as "done" for the progress bar.
@@ -19,14 +21,14 @@ const STATUS_BADGES = { 'in-progress': 'badge-blue', 'review': 'badge-purple', '
 
 /** One row of the "Active Projects" table. */
 function ProjectRow({ task: t }) {
-  const Store = useStore();
-  const worker = Store.getUserById(t.workerId);
+  const { userById, milestonesByTask } = useLookups();
+  const worker = userById(t.workerId);
   const avatar = worker ? worker.avatar : '?';
   const name = worker ? worker.name : 'Not Assigned';
   const bg = worker ? worker.avatarColor : '#e5e7eb';
   const color = worker ? 'white' : '#6b7280';
 
-  const ms = Store.getMilestonesByTask(t.id);
+  const ms = milestonesByTask(t.id);
   const msCount = ms.length;
   const msDone = ms.filter(m => DONE_STATUSES.includes(m.status)).length;
   const prog = msCount ? Math.round((msDone / msCount) * 100) : 0;
@@ -65,17 +67,17 @@ function ProjectRow({ task: t }) {
 }
 
 export default function ClientDashboard() {
-  const Store = useStore();
-  const Auth = useAuth();
   usePageTitle('Client Dashboard — Lannent');
+  const { userById } = useLookups();
 
-  // Live stats from store
-  const session = Auth.getCurrentUser();
+  // Live stats from the Redux store
+  const session = useCurrentUser();
   const userId = session.userId;
-  const myTasks = Store.getTasksByClient(userId);
+  const myTasks = useSelector(s => selectTasksByClient(s, userId));
+  const proposals = useSelector(selectAllProposals);
   const activeTasks = myTasks.filter(t => t.status === 'in-progress').length;
-  const pendingApps = Store.getProposals().filter(p => p.type === 'application' && p.status === 'pending' && myTasks.some(t => t.id === p.taskId)).length;
-  const user = Store.getUserById(userId);
+  const pendingApps = proposals.filter(p => p.type === 'application' && p.status === 'pending' && myTasks.some(t => t.id === p.taskId)).length;
+  const user = userById(userId);
   const walletBal = user?.walletBalance || 0;
   const completedTasks = myTasks.filter(t => t.status === 'completed').length;
   const openProjects = myTasks.filter(t => !['completed', 'cancelled'].includes(t.status)).slice(0, 4);

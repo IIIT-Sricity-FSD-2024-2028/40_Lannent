@@ -3,7 +3,7 @@
  * Converted from front-end/pages/profile-settings.html.
  *
  * Two tabs: Profile Information (name, email, country-aware phone, location,
- * bio) and Company Details. Both save straight to the Store.
+ * bio) and Company Details. Both save through the Redux store.
  */
 import { useRef, useState } from 'react';
 import DashboardLayout from '../components/DashboardLayout';
@@ -11,15 +11,16 @@ import EmptyState from '../components/EmptyState';
 import FieldError from '../components/FieldError';
 import Icon from '../components/Icon';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
 import { useValidation } from '../context/ValidationContext';
 import useFieldErrors from '../hooks/useFieldErrors';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ProfileSettings.css?raw';
 import AvatarColorPicker from '../components/AvatarColorPicker';
 import ChangePasswordCard from '../components/ChangePasswordCard';
-import { syncSessionFromUser, splitPhone } from '../utils/helpers';
+import { splitPhone } from '../utils/helpers';
+import { useCurrentUser, useLookups } from '../store/hooks';
+import { useDispatch } from 'react-redux';
+import { updateUser } from '../store/slices/usersSlice';
 
 const INDUSTRIES = ['Technology', 'Finance', 'Healthcare', 'Education', 'E-commerce', 'Other'];
 const COMPANY_SIZES = ['1–10 employees', '11–50 employees', '50–200 employees', '200–500 employees', '500+ employees'];
@@ -46,13 +47,14 @@ function IconField({ icon, children }) {
 
 
 export default function ProfileSettings() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const { userById } = useLookups();
+  const currentUser = useCurrentUser();
+  const dispatch = useDispatch();
   const Validate = useValidation();
   const PHONE_COUNTRIES = Validate.getPhoneCountries();
   usePageTitle('Account Settings — Lannent');
-  const [session] = useState(() => Auth.getCurrentUser());
-  const [user] = useState(() => (session ? Store.getUserById(session.userId) : null));
+  const [session] = useState(() => currentUser);
+  const [user] = useState(() => (session ? userById(session.userId) : null));
   const role = session?.role || 'client';
 
   const profile = user ? {
@@ -115,7 +117,7 @@ export default function ProfileSettings() {
     if (!/[0-9]/.test(e.key)) e.preventDefault();
   }
 
-  function saveProfileChanges() {
+  async function saveProfileChanges() {
     const name = field('p-fullname')?.value.trim() || '';
     const email = field('p-email')?.value.trim() || '';
     const phoneVal = phone.trim();
@@ -140,19 +142,18 @@ export default function ProfileSettings() {
     setSaving(true);
     let saved;
     try {
-      saved = Store.updateUser(user.id, { name, email, phone: fullPhone, phoneCountryCode: phoneVal ? countryCode : '', location, bio, avatarColor });
+      saved = await dispatch(updateUser({ id: user.id, syncSession: true, updates: { name, email, phone: fullPhone, phoneCountryCode: phoneVal ? countryCode : '', location, bio, avatarColor } })).unwrap();
     } catch (e) {
       setSaving(false);
       Validate.toast(e.message, 'error');
       return;
     }
     setSaving(false);
-    syncSessionFromUser(saved);
     setInitials(saved.avatar);
     Validate.toast('Profile saved.', 'success');
   }
 
-  function saveCompanyChanges() {
+  async function saveCompanyChanges() {
     const name = field('c-name')?.value.trim() || '';
     const industry = field('c-industry')?.value || '';
     const website = field('c-website')?.value.trim() || '';
@@ -164,7 +165,7 @@ export default function ProfileSettings() {
       return;
     }
     try {
-      Store.updateUser(user.id, { companyDetails: { name, industry, website, size, location } });
+      await dispatch(updateUser({ id: user.id, updates: { companyDetails: { name, industry, website, size, location } } })).unwrap();
     } catch (e) {
       Validate.toast(e.message, 'error');
       return;

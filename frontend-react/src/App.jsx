@@ -11,7 +11,8 @@
  */
 import { Fragment, Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom';
-import { useStore } from './context/StoreContext';
+import { useDispatch } from 'react-redux';
+import { loadAppData } from './store';
 import RequireRole from './components/RequireRole';
 
 // ── Public pages ──
@@ -21,6 +22,8 @@ const Signup = lazy(() => import('./pages/Signup'));
 const ExpertLanding = lazy(() => import('./pages/ExpertLanding'));
 const ExpertLogin = lazy(() => import('./pages/ExpertLogin'));
 const ExpertSignup = lazy(() => import('./pages/ExpertSignup'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // ── Client pages ──
@@ -90,15 +93,13 @@ const ALL_SIGNED_IN = ['client', 'worker', 'expert', 'superuser', 'revenue-admin
 /**
  * PageLoader — makes every navigation behave like the full page load it used
  * to be in the static site:
- *   1. the data cache is refilled from the API (the old store.js ran this at
- *      the top of every page) — now with every read in parallel and without
- *      blocking the browser; the page waits behind a loading state instead of
- *      the whole UI freezing for a dozen synchronous requests in a row;
+ *   1. loadAppData() refills the Redux store from the API (every read in
+ *      parallel); the page waits behind a loading state meanwhile;
  *   2. the page is re-mounted (keyed by the navigation), so it starts fresh.
  * A change of only the "#hash" (e.g. an href="#" link) is not a new page.
  */
 function PageLoader() {
-  const Store = useStore();
+  const dispatch = useDispatch();
   const location = useLocation();
   // Which navigation is on screen. A new location gets a new key — except a
   // change of only the #hash, which keeps the current page. Derived during
@@ -115,11 +116,11 @@ function PageLoader() {
 
   useEffect(() => {
     let live = true;
-    Store.initAsync()
-      .catch(e => console.error('[Store] init failed:', e))
+    dispatch(loadAppData())
+      .catch(e => console.error('[store] load failed:', e))
       .finally(() => { if (live) setLoadedKey(key); });
     return () => { live = false; };
-  }, [Store, key]);
+  }, [dispatch, key]);
 
   if (loadedKey !== key) return <PageLoading />;
   return (
@@ -157,6 +158,8 @@ export default function App() {
           <Route path="/expert-landing" element={<ExpertLanding />} />
           <Route path="/expert-login" element={<ExpertLogin />} />
           <Route path="/expert-signup" element={<ExpertSignup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* ── CLIENT ── */}
           <Route path="/client-dashboard" element={guard(['client'], <ClientDashboard />)} />

@@ -8,12 +8,19 @@
  * Shows the project summary, the project chat, the milestones awaiting
  * action, quick actions for the selected milestone, and the escrow status.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
 import DashboardLayout from './DashboardLayout';
 import Icon from './Icon';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
+import { selectCurrentUser } from '../store/slices/authSlice';
+import { selectTaskById } from '../store/slices/tasksSlice';
+import { selectMilestonesByTask } from '../store/slices/milestonesSlice';
+import { selectUserEntities } from '../store/slices/usersSlice';
+import { selectAllTransactions } from '../store/slices/transactionsSlice';
+import { selectMessagesByTask, sendMessage } from '../store/slices/messagesSlice';
+import { fetchEscrowForTask, selectEscrowForTask } from '../store/slices/ledgerSlice';
+import { uploadFile, fileUrl } from '../store/slices/filesSlice';
 
 const VARIANTS = {
   client: {
@@ -95,8 +102,8 @@ function showToast(msg, type = 'success') {
 }
 
 /** The project's milestones, as the server has them. */
-function loadMilestones(Store, task) {
-  return Store.getMilestonesByTask(task.id).map(m => ({
+function toMilestoneRows(taskMilestones) {
+  return taskMilestones.map(m => ({
     id: m.id,
     title: m.title || 'Untitled Milestone',
     amount: formatAmount(m.budget || 0),
@@ -107,10 +114,9 @@ function loadMilestones(Store, task) {
 
 /** A file shared in the chat. Clicking it downloads with the viewer's credentials. */
 function Attachment({ a, light }) {
-  const Store = useStore();
   if (!a) return null;
   return (
-    <a href={Store.fileUrl(a)} download={a.name}
+    <a href={fileUrl(a)} download={a.name}
        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 13, color: light ? '#fff' : '#4f46e5', textDecoration: 'underline' }}>
       <Icon name="paperclip" style={{ width: 13, height: 13 }} />{a.name}
     </a>
@@ -134,41 +140,22 @@ function ChatMessage({ m, meId }) {
   );
 }
 
-/** A message sent from this page (added below the history). */
-function SentMessage({ m }) {
-  const isClient = true;
-  return (
-    <div style={{ display: 'flex', flexDirection: isClient ? 'row-reverse' : 'row', gap: 10, maxWidth: '75%', ...(isClient ? { marginLeft: 'auto' } : {}) }}>
-      <div style={{ width: 32, height: 32, borderRadius: '50%', background: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{m.avatar}</div>
-      <div>
-        <div style={{ padding: '10px 14px', borderRadius: 16, ...(isClient ? { background: '#6366f1', color: 'white', borderBottomRightRadius: 4 } : { background: 'var(--card)', border: '1px solid var(--border)', borderBottomLeftRadius: 4 }), fontSize: 14, lineHeight: 1.5 }}>
-          {m.text}
-          <Attachment a={m.attachment} light />
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 4, ...(isClient ? { textAlign: 'right' } : {}) }}>Just now</div>
-      </div>
-    </div>
-  );
-}
-
 /**
- * Everything the workroom shows about the project, read once when the page
- * opens (the original rendered it once; only new chat lines are added later).
+ * Everything the workroom shows about the project, derived from the Redux
+ * store (task, users, milestones, messages, transactions, escrow).
  */
-function buildView(Store, task, noWorker) {
-  // Real escrow for this project. The card previously hardcoded
-  // ₹4,500 released / ₹3,500 remaining / 56% for every project.
-  const esc = Store.getEscrowForTask(task.id) || { projectHeld: 0 };
-  const released = (Store.getTransactions() || [])
+function buildView({ task, usersById, taskMilestones, taskMessages, transactions, escrow }, noWorker) {
+  // Real escrow for this project, from the ledger slice.
+  const esc = escrow || { projectHeld: 0 };
+  const released = (transactions || [])
     .filter(t => t.type === 'milestone-release' && t.taskId === task.id)
     .reduce((sum, t) => sum + (t.grossAmount != null ? t.grossAmount : (t.amount || 0)), 0);
   const fundedTotal = released + (esc.projectHeld || 0);
   const money = n => '₹' + Number(n || 0).toLocaleString('en-IN');
   const escrowView = { released: money(released), held: money(esc.projectHeld), pct: fundedTotal > 0 ? Math.round((released / fundedTotal) * 100) : 0 };
 
-  const client = Store.getUserById(task.clientId) || { name: 'Client', avatar: 'CL', avatarColor: 'linear-gradient(135deg,#94a3b8,#64748b)' };
-  const worker = Store.getUserById(task.workerId) || noWorker;
-  const taskMilestones = Store.getMilestonesByTask(task.id);
+  const client = usersById[task.clientId] || { name: 'Client', avatar: 'CL', avatarColor: 'linear-gradient(135deg,#94a3b8,#64748b)' };
+  const worker = usersById[task.workerId] || noWorker;
 
   const project = {
     name: task.title || 'Untitled Project',
@@ -186,7 +173,7 @@ function buildView(Store, task, noWorker) {
   // same project with invited workers or reviewers live in Messages; they used to
   // appear here drawn as if the hired worker had sent them.
   const pair = new Set([task.clientId, task.workerId]);
-  const initialMessages = Store.getMessagesByTask(task.id)
+  const initialMessages = taskMessages
     .filter(m => pair.has(m.senderId) && pair.has(m.receiverId))
     .slice()
     .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
@@ -208,32 +195,44 @@ function buildView(Store, task, noWorker) {
  * @param {'client'|'worker'} variant - which workroom this is
  */
 export default function Workroom({ variant }) {
-  const Store = useStore();
-  const Auth = useAuth();
+  const dispatch = useDispatch();
+  const session = useSelector(selectCurrentUser);
   const cfg = VARIANTS[variant];
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const taskId = searchParams.get('id');
 
   // The viewer's role, remembered for the chat (as the original did on load)
-  const [role] = useState(() => Auth.getCurrentUser()?.role || cfg.defaultRole);
+  const role = session?.role || cfg.defaultRole;
+  const meId = session?.userId;
 
-  const [task] = useState(() => (taskId ? Store.getTaskById(taskId) : null));
-  const [milestones] = useState(() => (task ? loadMilestones(Store, task) : []));
-  const [view] = useState(() => (task ? buildView(Store, task, cfg.noWorker) : null));
+  const task = useSelector(s => selectTaskById(s, taskId));
+  const taskMilestones = useSelector(s => selectMilestonesByTask(s, taskId));
+  const taskMessages = useSelector(s => selectMessagesByTask(s, taskId));
+  const usersById = useSelector(selectUserEntities);
+  const transactions = useSelector(selectAllTransactions);
+  const escrow = useSelector(s => selectEscrowForTask(s, taskId));
+
+  const milestones = useMemo(() => toMilestoneRows(taskMilestones), [taskMilestones]);
+  const view = useMemo(
+    () => (task ? buildView({ task, usersById, taskMilestones, taskMessages, transactions, escrow }, cfg.noWorker) : null),
+    [task, usersById, taskMilestones, taskMessages, transactions, escrow, cfg.noWorker],
+  );
   const [selectedMilestoneId, setSelectedMilestoneId] = useState(null);
   const [draft, setDraft] = useState('');
-  const [sent, setSent] = useState([]);   // messages sent from this page
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
-  const meId = Auth.getCurrentUser()?.userId;
   const chatRef = useRef(null);
   const inputRef = useRef(null);
 
+  // This project's escrow, from the ledger.
+  useEffect(() => { if (taskId) dispatch(fetchEscrowForTask(taskId)); }, [dispatch, taskId]);
+
   // Keep the chat scrolled to the newest message
+  const messageCount = view ? view.initialMessages.length : 0;
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
-  }, [sent]);
+  }, [messageCount]);
 
   if (!task) {
     // Keep the dashboard shell — replacing document.body strands the user with no nav.
@@ -281,26 +280,18 @@ export default function Workroom({ variant }) {
   /** The other party on the project: the worker for the client, the client for the worker. */
   const receiverId = meId === task.clientId ? task.workerId : task.clientId;
 
-  function sendWorkroomMsg(attachment) {
+  async function sendWorkroomMsg(attachment) {
     const text = draft.trim();
     if (!text && !attachment) return;
     if (!receiverId) { showToast('Nobody is hired on this project yet, so there is no one to message.', 'warn'); return; }
-    const senderUser = Store.getUserById(meId);
 
-    // Persist to backend + auto-notification
+    // Persist to backend + auto-notification; the message lands in the messages slice.
     try {
-      Store.sendMessage({ taskId: task.id, receiverId, content: text, attachment });
+      await dispatch(sendMessage({ taskId: task.id, receiverId, content: text, attachment })).unwrap();
     } catch (e) {
       showToast(e.message, 'error');
       return;
     }
-
-    setSent(list => [...list, {
-      text,
-      attachment,
-      avatar: senderUser?.avatar || '?',
-      color: senderUser?.avatarColor || CLIENT_COLOR,
-    }]);
     setDraft('');
     if (inputRef.current) inputRef.current.style.height = 'auto';
   }
@@ -314,8 +305,8 @@ export default function Workroom({ variant }) {
     if (!receiverId) { showToast('Nobody is hired on this project yet, so there is no one to send it to.', 'warn'); return; }
     setUploading(true);
     try {
-      const ref = await Store.uploadFile(file, { taskId: task.id, purpose: 'message' });
-      sendWorkroomMsg(ref);
+      const ref = await dispatch(uploadFile({ file, meta: { taskId: task.id, purpose: 'message' } })).unwrap();
+      await sendWorkroomMsg(ref);
     } catch (err) {
       showToast(err.message || 'The file could not be uploaded.', 'error');
     } finally {
@@ -377,13 +368,12 @@ export default function Workroom({ variant }) {
           </div>
 
           <div className="chat-msgs" id="chatMsgs" ref={chatRef}>
-            {!initialMessages.length && !sent.length ? (
+            {!initialMessages.length ? (
               <div style={{ textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 13, padding: 24 }}>
                 No messages yet. {receiverId ? 'Say hello to get the project started.' : 'You can message here once someone is hired.'}
               </div>
             ) : null}
             {initialMessages.map(m => <ChatMessage key={m.id} m={m} meId={meId} />)}
-            {sent.map((m, i) => <SentMessage key={'sent' + i} m={m} />)}
           </div>
 
           <div className="chat-footer-bar">

@@ -8,14 +8,14 @@
  */
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
+import { getDashboardUrl, login, selectCurrentUser, logout } from '../store/slices/authSlice';
+import { useValidation } from '../context/ValidationContext';
 import Icon from '../components/Icon';
 import AuthBranding from '../components/AuthBranding';
 import PasswordInput from '../components/PasswordInput';
 import FieldError from '../components/FieldError';
 import PageStyle from '../components/PageStyle';
-import { useAuth } from '../context/AuthContext';
-import { useStore } from '../context/StoreContext';
-import { useValidation } from '../context/ValidationContext';
 import useFieldErrors from '../hooks/useFieldErrors';
 import usePageTitle from '../hooks/usePageTitle';
 import pageCss from './ExpertLogin.css?raw';
@@ -27,8 +27,8 @@ const EXPERT_FEATURES = [
 ];
 
 export default function ExpertLogin() {
-  const Store = useStore();
-  const Auth = useAuth();
+  const dispatch = useDispatch();
+  const session = useSelector(selectCurrentUser);
   const Validate = useValidation();
   usePageTitle('Expert Reviewer Login — Lannent');
   const navigate = useNavigate();
@@ -37,8 +37,10 @@ export default function ExpertLogin() {
   const [submitting, setSubmitting] = useState(false);
   const { errors, showError, clearError, validateForm, errorStyle } = useFieldErrors();
 
-  if (Auth.isLoggedIn()) {
-    return <Navigate to={Auth.getDashboardUrl(Auth.getCurrentUser().role)} replace />;
+  // While a sign-in is being checked, a non-expert session must not redirect
+  // before the role check below has cleared it.
+  if (session && (session.role === 'expert' || !submitting)) {
+    return <Navigate to={getDashboardUrl(session.role)} replace />;
   }
 
   function handleSubmit(e) {
@@ -52,23 +54,25 @@ export default function ExpertLogin() {
     if (!valid) return;
 
     setSubmitting(true);
-    setTimeout(() => {
+    setTimeout(async () => {
       // A pending or rejected applicant is told so by the sign-in itself —
       // only after their password matches the one they applied with.
-      const result = Auth.login(emailVal, pw);
-      if (!result.success) {
-        showError('expertEmail', result.error);
+      let result;
+      try {
+        result = await dispatch(login({ identifier: emailVal, password: pw })).unwrap();
+      } catch (err) {
+        showError('expertEmail', err.message || 'Login failed. Please try again.');
         setSubmitting(false);
         return;
       }
       // Ensure only experts can login through this page
       if (result.user.role !== 'expert') {
         showError('expertEmail', 'This login page is only for Expert Reviewers. Please use the appropriate login page.');
-        Auth.logout();
+        dispatch(logout());
         setSubmitting(false);
         return;
       }
-      navigate(Auth.getDashboardUrl(result.user.role));
+      navigate(getDashboardUrl(result.user.role));
     }, 400);
   }
 
@@ -107,6 +111,7 @@ export default function ExpertLogin() {
               <div className="form-group">
                 <div className="form-label-row">
                   <label className="form-label" style={{ marginBottom: 0 }}>Password</label>
+                  <Link to="/forgot-password" style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Forgot password?</Link>
                 </div>
                 <PasswordInput
                   id="expertPw"
